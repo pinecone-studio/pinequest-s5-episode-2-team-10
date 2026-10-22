@@ -14,6 +14,7 @@ import {
   type FolderMeta,
 } from "@/lib/folderStore";
 import { openPdf, paintPage, readSlideText } from "@/lib/slidePdf";
+import { runBackendAnalysis } from "@/lib/backendAnalysis";
 import { streamModelReply } from "@/lib/modelStream";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
@@ -608,6 +609,20 @@ function FolderRoom({
         getFolderBlob(audioKey(folder.id)),
         getFolderBlob(slideKey(folder.id)),
       ]);
+      if (model === "backend") {
+        // The full FastAPI pipeline; it reports stages instead of streaming text.
+        const result = await runBackendAnalysis({
+          folder,
+          speech,
+          audio,
+          slide,
+          onStage: (stage) => setProbeNote(tr(stage === "connecting" ? "backendConnecting" : stage === "uploading" ? "backendUploading" : "backendAnalyzing")),
+          messages: { noAudio: tr("backendNoAudio"), slideSkipped: tr("backendSlideSkipped") },
+        });
+        setProbeNote(result.notes.length ? result.notes.join(" ") : null);
+        setProbeResult({ ...result, model, writing: false });
+        return;
+      }
       const slideText = pdfRef.current ? await readSlideText(pdfRef.current) : "";
       const slideImage = await new Promise<Blob | null>((resolve) => {
         const canvas = canvasRef.current;
@@ -933,7 +948,7 @@ function PlayMark() {
 
 function livePeaksFrom(analyser: AnalyserNode, data: Uint8Array<ArrayBuffer>) {
   analyser.getByteTimeDomainData(data);
-  const count = 96;
+  const count = 32;
   const block = Math.floor(data.length / count);
   const next: number[] = [];
   for (let i = 0; i < count; i++) {
@@ -1011,7 +1026,7 @@ function WaveAudio({
     let last = 0;
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
-      if (now - last < 70) return;
+      if (now - last < 180) return;
       last = now;
       setSpoken(livePeaksFrom(live, data));
     };

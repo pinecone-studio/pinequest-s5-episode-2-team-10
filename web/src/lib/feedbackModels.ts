@@ -1,13 +1,15 @@
 // Models the folder prototype can send a speech to. Shared by the browser and the server.
 
 // "ollama-think" is the same Gemma with its step-by-step thinking on: slower, more careful.
-export const PROTO_MODELS = ["rules", "ollama", "ollama-think", "claude"] as const;
+// "backend" runs the full FastAPI pipeline (as the project pages do); the browser calls it directly.
+export const PROTO_MODELS = ["rules", "ollama", "ollama-think", "claude", "backend"] as const;
 export type ProtoModel = (typeof PROTO_MODELS)[number];
 
 export interface ModelStatus {
   id: ProtoModel;
   name: string;
   local: boolean;
+  server?: boolean; // runs on the app's own backend, not on this PC or a cloud API
   available: boolean;
   reason: string | null;
 }
@@ -27,6 +29,7 @@ export function parseModelStatuses(raw: unknown): ModelStatus[] | null {
       id: m.id,
       name: m.name,
       local: m.local === true,
+      server: m.server === true,
       available: m.available,
       reason: typeof m.reason === "string" ? m.reason : null,
     });
