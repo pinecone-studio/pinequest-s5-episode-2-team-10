@@ -1,4 +1,4 @@
-"""SQLite tables (TDD data model) and session helpers."""
+"""Database tables (TDD data model plus users and projects) and helpers."""
 
 import shutil
 import uuid
@@ -15,17 +15,50 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def new_id() -> str:
+    return str(uuid.uuid4())
+
+
+class AppUser(SQLModel, table=True):
+    """Anonymous user: the browser keeps the token. Add email/login later without redesign."""
+
+    __tablename__ = "app_user"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    token_hash: str = Field(index=True, unique=True)
+    created_at: datetime = Field(default_factory=utcnow)
+
+
+class Project(SQLModel, table=True):
+    """A folder for one pitch. Each analysis is an attempt (session) inside it."""
+
+    __tablename__ = "project"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    user_id: str = Field(index=True, foreign_key="app_user.id")
+    name: str
+    goal: str = ""
+    audience: str = ""
+    planned_s: int = 180
+    pitch_type: str = "startup"
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
 class PitchSession(SQLModel, table=True):
+    """One attempt. Project details are copied in at analysis time so history stays accurate."""
+
     __tablename__ = "session"
 
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    access_token_hash: str
-    group_id: Optional[str] = Field(default=None, index=True)
+    id: str = Field(default_factory=new_id, primary_key=True)
+    project_id: str = Field(index=True, foreign_key="project.id")
     title: str
     goal: str = ""
     audience: str = ""
     planned_s: int
     pitch_type: str = "startup"
+    script: str = ""  # what the speaker planned to say (optional)
+    slides_filename: Optional[str] = None
     status: str = "created"  # created, uploaded, processing, completed, failed
     stage: Optional[str] = None  # transcribing, measuring, slides, feedback, scoring
     error: Optional[str] = None
@@ -37,7 +70,8 @@ class AudioAsset(SQLModel, table=True):
     __tablename__ = "audio_asset"
 
     session_id: str = Field(primary_key=True, foreign_key="session.id")
-    path: str
+    path: str  # converted 16 kHz WAV used by the pipeline
+    original_path: str  # the file as uploaded, for playback
     duration_s: float
     format: str
 
@@ -134,11 +168,20 @@ def delete_session(db: Session, session_id: str) -> None:
     shutil.rmtree(config.SESSIONS_DIR / session_id, ignore_errors=True)
 
 
+def delete_project(db: Session, project_id: str) -> None:
+    for sid in db.exec(select(PitchSession.id).where(PitchSession.project_id == project_id)).all():
+        delete_session(db, sid)
+    db.exec(delete(Project).where(Project.id == project_id))
+    db.commit()
+
+
 def cleanup_old(days: int) -> int:
-    """Delete sessions and files older than `days` (TDD privacy section)."""
+    """Delete projects untouched for `days`. 0 keeps everything until the user deletes it."""
+    if days <= 0:
+        return 0
     cutoff = utcnow() - timedelta(days=days)
     with Session(engine) as db:
-        old = db.exec(select(PitchSession.id).where(PitchSession.created_at < cutoff)).all()
-        for sid in old:
-            delete_session(db, sid)
+        old = db.exec(select(Project.id).where(Project.updated_at < cutoff)).all()
+        for pid in old:
+            delete_project(db, pid)
     return len(old)

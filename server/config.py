@@ -11,7 +11,8 @@ DB_URL = os.environ.get("PITCH_DB_URL", f"sqlite:///{DATA_DIR / 'pitchcoach.db'}
 
 CORS_ORIGINS = [o.strip() for o in os.environ.get("PITCH_CORS_ORIGINS", "http://localhost:3000").split(",") if o.strip()]
 DEFAULT_BACKEND = os.environ.get("PITCH_DEFAULT_BACKEND", "claude")
-RETENTION_DAYS = int(os.environ.get("PITCH_RETENTION_DAYS", "7"))
+# Projects untouched for this many days are deleted; 0 keeps them until the user deletes them.
+RETENTION_DAYS = int(os.environ.get("PITCH_RETENTION_DAYS", "0"))
 
 # Upload limits (TDD API table)
 AUDIO_MAX_BYTES = 25 * 1024 * 1024
