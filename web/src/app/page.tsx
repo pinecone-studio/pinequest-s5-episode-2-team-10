@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, USING_MOCK } from "@/lib/api";
@@ -12,21 +12,37 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const pdfInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.listProjects().then(setProjects, (e) => setError(errorMessage(e)));
   }, []);
 
-  async function createProject() {
+  function pickPdf() {
+    pdfInput.current?.click();
+  }
+
+  async function createProject(file: File | undefined) {
+    if (!file) return;
+    if (pdfInput.current) pdfInput.current.value = "";
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      setError("A Figma export has to be a PDF.");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setError("PDF is larger than 20 MB.");
+      return;
+    }
     setCreating(true);
     setError(null);
     try {
-      const p = await api.createProject();
-      router.push(`/projects/${p.id}`);
+      const name = file.name.replace(/\.pdf$/i, "") || "Untitled project";
+      const project = await api.createProject({ name });
+      const attempt = await api.createAttempt(project.id);
+      await api.uploadSlides(attempt.id, file);
+      router.push(`/projects/${project.id}`);
     } catch (e) {
       setError(errorMessage(e));
-    } finally {
-      // Next keeps this page alive in the background, so reset the button for when the user returns.
       setCreating(false);
     }
   }
@@ -45,12 +61,21 @@ export default function ProjectsPage() {
             figma tdd
           </Link>
           <button
-            onClick={createProject}
+            type="button"
+            onClick={pickPdf}
             disabled={creating}
+            title="Upload a Figma PDF"
             className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
           >
             {creating ? "Creating…" : "+ New project"}
           </button>
+          <input
+            ref={pdfInput}
+            type="file"
+            accept="application/pdf,.pdf"
+            className="sr-only"
+            onChange={(e) => createProject(e.target.files?.[0])}
+          />
         </div>
       </header>
 
@@ -73,7 +98,7 @@ export default function ProjectsPage() {
           <p className="mt-1 text-sm text-zinc-500">
             Create a project for your pitch, add your slides and a recording, and get scored feedback.
           </p>
-          <button onClick={createProject} disabled={creating} className="mt-4 text-sm font-medium underline">
+          <button onClick={pickPdf} disabled={creating} className="mt-4 text-sm font-medium underline">
             Create your first project
           </button>
         </div>
