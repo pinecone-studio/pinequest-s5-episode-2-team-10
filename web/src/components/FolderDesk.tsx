@@ -6,12 +6,14 @@ import {
   audioKey,
   getFolderBlob,
   loadFolders,
+  loadSpeech,
   putFolderBlob,
   saveFolders,
+  saveSpeech,
   slideKey,
   type FolderMeta,
 } from "@/lib/folderStore";
-import { openPdf, paintPage } from "@/lib/slidePdf";
+import { openPdf, paintPage, readSlideText } from "@/lib/slidePdf";
 
 interface SpeechResultLike {
   isFinal: boolean;
@@ -221,9 +223,18 @@ function FolderRoom({
   const [duration, setDuration] = useState(0);
   const [finalText, setFinalText] = useState("");
   const [interim, setInterim] = useState("");
+  const textRef = useRef("");
+  const interimRef = useRef("");
   const [sttNote, setSttNote] = useState<string | null>(null);
   const [slideNote, setSlideNote] = useState<string | null>(null);
   const [full, setFull] = useState(false);
+  const [probing, setProbing] = useState(false);
+  const [probeNote, setProbeNote] = useState<string | null>(null);
+  const [probeResult, setProbeResult] = useState<{
+    summary: string;
+    points: { title: string; detail: string }[];
+    received: { text: boolean; audio: string | null; slide: string | null };
+  } | null>(null);
 
   function rememberUrl(next: string | null) {
     if (slideUrlRef.current) URL.revokeObjectURL(slideUrlRef.current);
@@ -311,6 +322,14 @@ function FolderRoom({
   }, [folder.id]);
 
   useEffect(() => {
+    const saved = loadSpeech(folder.id);
+    textRef.current = saved ? `${saved} ` : "";
+    setFinalText(textRef.current);
+    interimRef.current = "";
+    setInterim("");
+  }, [folder.id]);
+
+  useEffect(() => {
     if (!slidePdf) return;
     const doc = pdfRef.current;
     const canvas = canvasRef.current;
@@ -387,14 +406,24 @@ function FolderRoom({
     setAnalyser(null);
   }
 
+  function writeSpeech(next: string) {
+    const cleaned = next.replace(/\s+/g, " ").trim();
+    textRef.current = cleaned ? `${cleaned} ` : "";
+    saveSpeech(folder.id, cleaned);
+    setFinalText(textRef.current);
+  }
+
   function stopStt() {
+    const pending = interimRef.current.trim();
     sttGen.current += 1;
     playingRef.current = false;
     recRef.current?.stop();
     recRef.current = null;
     releaseMic();
     setListening(false);
+    interimRef.current = "";
     setInterim("");
+    if (pending) writeSpeech(`${textRef.current} ${pending}`);
   }
 
   function beginStt() {
@@ -439,7 +468,8 @@ function FolderRoom({
         if (ev.results[i].isFinal) done += piece + " ";
         else live += piece;
       }
-      if (done) setFinalText((prev) => (prev + done).replace(/\s+/g, " ").trim() + " ");
+      if (done) writeSpeech(`${textRef.current} ${done}`);
+      interimRef.current = live;
       setInterim(live);
     };
     rec.onerror = (ev) => {
@@ -490,13 +520,55 @@ function FolderRoom({
       return URL.createObjectURL(file);
     });
     setTime(0);
-    setFinalText("");
-    setInterim("");
   }
 
   function toggleSpeak() {
     if (playingRef.current) stopStt();
     else beginStt();
+  }
+
+  async function sendToModel() {
+    const speech = `${textRef.current}${interimRef.current}`.trim();
+    setProbing(true);
+    setProbeNote(null);
+    setProbeResult(null);
+    try {
+      const [audio, slide] = await Promise.all([
+        getFolderBlob(audioKey(folder.id)),
+        getFolderBlob(slideKey(folder.id)),
+      ]);
+      const slideText = pdfRef.current ? await readSlideText(pdfRef.current) : "";
+      const slideImage = await new Promise<Blob | null>((resolve) => {
+        const canvas = canvasRef.current;
+        if (!canvas) {
+          resolve(null);
+          return;
+        }
+        canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.72);
+      });
+      const body = new FormData();
+      body.set("text", speech);
+      body.set("slideText", slideText);
+      if (audio) body.set("audio", audio, folder.audioName ?? "audio");
+      if (slide) body.set("slide", slide, folder.slideName ?? "slide");
+      if (slideImage) body.set("slideImage", slideImage, "current-slide.jpg");
+      const res = await fetch("/api/prototype", { method: "POST", body });
+      const payload = (await res.json()) as {
+        error?: string;
+        summary?: string;
+        points?: { title: string; detail: string }[];
+        received?: { text: boolean; audio: string | null; slide: string | null };
+      };
+      if (!res.ok || !payload.summary || !payload.points || !payload.received) {
+        setProbeNote(payload.error || "LLM рүү илгээж чадсангүй.");
+        return;
+      }
+      setProbeResult({ summary: payload.summary, points: payload.points, received: payload.received });
+    } catch {
+      setProbeNote("LLM рүү илгээж чадсангүй.");
+    } finally {
+      setProbing(false);
+    }
   }
 
   function toggleAudio() {
@@ -615,11 +687,44 @@ function FolderRoom({
           </div>
           <aside className="desk-speech">
             <h2>Ярианы текст</h2>
-            <p className="desk-sub">{listening ? "Сонсож байна" : "Ярих дээр дараад ярь"}</p>
+            <p className="desk-sub">
+              {listening ? "Сонсож байна" : spoken ? "Яриа хадгалагдсан" : "Ярих дээр дараад ярь"}
+            </p>
             <p>
               {spoken || <span className="desk-missing">Хоосон</span>}
             </p>
             {sttNote && <p className="desk-note">{sttNote}</p>}
+            <div className="desk-probe">
+              <button
+                type="button"
+                className="desk-ghost"
+                disabled={probing || (!spoken && !folder.audioName && !hasSlide)}
+                onClick={() => void sendToModel()}
+              >
+                {probing ? "Илгээж байна" : "LLM рүү илгээх"}
+              </button>
+              {probeNote && <p className="desk-note">{probeNote}</p>}
+              {probeResult && (
+                <>
+                  <p>
+                    {probeResult.received.text ? "Текст" : "Текст алга"}
+                    {probeResult.received.audio ? ` · Аудио ${probeResult.received.audio}` : ""}
+                    {probeResult.received.slide ? ` · Слайд ${probeResult.received.slide}` : ""}
+                  </p>
+                  <h3>{probeResult.summary}</h3>
+                  {probeResult.points.length > 0 && (
+                    <ul>
+                      {probeResult.points.map((point) => (
+                        <li key={point.title}>
+                          <strong>{point.title}</strong>
+                          {point.detail}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
           </aside>
         </div>
 

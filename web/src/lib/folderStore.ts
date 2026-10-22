@@ -70,3 +70,24 @@ export async function getFolderBlob(key: string): Promise<Blob | null> {
 
 export const slideKey = (id: string) => `${id}:slide`;
 export const audioKey = (id: string) => `${id}:audio`;
+const speechKey = (id: string) => `pitchcoach:speech:${id}`;
+
+export function loadSpeech(id: string): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return localStorage.getItem(speechKey(id)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveSpeech(id: string, text: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const trimmed = text.replace(/\s+/g, " ").trim();
+    if (!trimmed) localStorage.removeItem(speechKey(id));
+    else localStorage.setItem(speechKey(id), trimmed);
+  } catch {
+    /* private mode or a full quota */
+  }
+}
