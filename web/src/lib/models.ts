@@ -33,5 +33,10 @@ export const MODEL_OPTIONS: ModelOption[] = [
 export const DEFAULT_MODEL: FeedbackBackend = "claude";
 
 export function modelName(id: FeedbackBackend): string {
+  if (id === "rules") return "Measurements only";
   return MODEL_OPTIONS.find((m) => m.id === id)?.name ?? id;
+}
+
+export function sendsDataToCloud(id: FeedbackBackend): boolean {
+  return MODEL_OPTIONS.find((m) => m.id === id)?.runsLocally === false;
 }

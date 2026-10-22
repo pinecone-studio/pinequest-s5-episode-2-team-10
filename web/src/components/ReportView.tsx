@@ -1,5 +1,5 @@
 import { formatTime } from "@/lib/format";
-import { MODEL_OPTIONS, modelName } from "@/lib/models";
+import { modelName, sendsDataToCloud } from "@/lib/models";
 import type { Recommendation, Report, SlideFeedback } from "@/lib/types";
 
 const CATEGORIES = [
@@ -20,7 +20,7 @@ const CRITERIA: Record<string, string> = {
 
 export default function ReportView({ report }: { report: Report }) {
   const used = CATEGORIES.filter((c) => report[c.key] !== null).length;
-  const cloud = !MODEL_OPTIONS.find((m) => m.id === report.backend)?.runsLocally;
+  const cloud = sendsDataToCloud(report.backend);
   const { feedback, metrics } = report;
 
   return (
@@ -89,23 +89,25 @@ export default function ReportView({ report }: { report: Report }) {
         </dl>
       </section>
 
-      <section>
-        <h2 className="mb-3 font-medium">Content</h2>
-        <div className="space-y-3">
-          {feedback.content_scores.map((c) => (
-            <div key={c.criterion} className="text-sm">
-              <div className="flex justify-between">
-                <span>{CRITERIA[c.criterion] ?? c.criterion}</span>
-                <span className="tabular-nums text-zinc-500">{c.score}</span>
+      {feedback.content_scores.length > 0 && (
+        <section>
+          <h2 className="mb-3 font-medium">Content</h2>
+          <div className="space-y-3">
+            {feedback.content_scores.map((c) => (
+              <div key={c.criterion} className="text-sm">
+                <div className="flex justify-between">
+                  <span>{CRITERIA[c.criterion] ?? c.criterion}</span>
+                  <span className="tabular-nums text-zinc-500">{c.score}</span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+                  <div className="h-full rounded-full bg-zinc-900 dark:bg-zinc-100" style={{ width: `${c.score}%` }} />
+                </div>
+                {c.recommendation && <p className="mt-1 text-zinc-500">{c.recommendation}</p>}
               </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-                <div className="h-full rounded-full bg-zinc-900 dark:bg-zinc-100" style={{ width: `${c.score}%` }} />
-              </div>
-              {c.recommendation && <p className="mt-1 text-zinc-500">{c.recommendation}</p>}
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
 
       {feedback.slide_feedback.length > 0 && (
         <section>
