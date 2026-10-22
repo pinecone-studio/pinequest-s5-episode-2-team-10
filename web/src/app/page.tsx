@@ -40,13 +40,18 @@ export default function ProjectsPage() {
             One project per pitch. Practice as many times as you like and watch your score improve.
           </p>
         </div>
-        <button
-          onClick={createProject}
-          disabled={creating}
-          className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          {creating ? "Creating…" : "+ New project"}
-        </button>
+        <div className="flex items-center gap-4">
+          <Link href="/figma" className="text-sm text-zinc-500 underline">
+            figma tdd
+          </Link>
+          <button
+            onClick={createProject}
+            disabled={creating}
+            className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            {creating ? "Creating…" : "+ New project"}
+          </button>
+        </div>
       </header>
 
       {USING_MOCK && (
