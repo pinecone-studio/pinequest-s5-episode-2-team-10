@@ -1,42 +1,26 @@
 """Wording checks: fillers, repeated words, sentence length."""
 
-import re
-from functools import lru_cache
-from pathlib import Path
+from collections import Counter
 
+from .fillers import find_candidates
 from .segments import Sentence
+from .tokens import tokens
 
-FILLERS_FILE = Path(__file__).with_name("fillers_mn.txt")
+__all__ = ["check", "tokens"]
+
 LONG_SENTENCE_WORDS = 25
-WORD_RE = re.compile(r"\w+")
-
-
-@lru_cache
-def load_fillers() -> tuple[str, ...]:
-    lines = FILLERS_FILE.read_text(encoding="utf-8").splitlines()
-    items = [ln.strip().lower() for ln in lines if ln.strip() and not ln.startswith("#")]
-    # Longest first so "тэгээд тэгээд" is counted before shorter matches.
-    return tuple(sorted(set(items), key=len, reverse=True))
-
-
-def tokens(text: str) -> list[str]:
-    return WORD_RE.findall(text.lower())
 
 
 def check(sentences: list[Sentence]) -> dict:
+    """List-based counts. The feedback step later replaces the filler numbers with
+    occurrences confirmed in context (see fillers.py)."""
     text = " ".join(s["text"] for s in sentences)
     words = tokens(text)
     n_words = len(words)
 
-    filler_counts: dict[str, int] = {}
-    joined = " " + " ".join(words) + " "
-    for f in load_fillers():
-        pattern = " " + f + " "
-        count = joined.count(pattern)
-        if count:
-            filler_counts[f] = count
-            joined = joined.replace(pattern, " ")
-    filler_total = sum(filler_counts.values())
+    candidates = find_candidates(sentences)
+    filler_counts = dict(Counter(c["word"] for c in candidates))
+    filler_total = len(candidates)
 
     repeats = [words[i] for i in range(1, n_words) if words[i] == words[i - 1] and len(words[i]) > 1]
 

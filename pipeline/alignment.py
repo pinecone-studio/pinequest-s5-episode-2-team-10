@@ -14,7 +14,7 @@ import numpy as np
 from . import config
 from .segments import Sentence
 from .slides import SlideText
-from .text_checks import tokens
+from .tokens import tokens
 
 PREFIX = 5  # match words on the first 5 letters to survive Mongolian suffixes
 NUMBER_WINDOW_S = 10.0

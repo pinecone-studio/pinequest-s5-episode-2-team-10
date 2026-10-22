@@ -89,10 +89,23 @@ def _load():
     return _pipe
 
 
+def _read_wav(wav: Path) -> dict:
+    """Samples from our 16 kHz mono 16-bit WAV. Passing a path would make transformers
+    call ffmpeg itself, which fails when ffmpeg is not on PATH."""
+    import wave
+
+    import numpy as np
+
+    with wave.open(str(wav), "rb") as w:
+        rate = w.getframerate()
+        samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+    return {"raw": samples.astype(np.float32) / 32768.0, "sampling_rate": rate}
+
+
 def _whisper_words(wav: Path) -> list[Word]:
     pipe = _load()
     out = pipe(
-        str(wav),
+        _read_wav(wav),
         return_timestamps="word",
         generate_kwargs={"language": "mongolian", "task": "transcribe"},
     )

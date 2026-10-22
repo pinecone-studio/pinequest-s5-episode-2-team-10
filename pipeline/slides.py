@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 from typing import TypedDict
 
-from .text_checks import tokens
+from .tokens import tokens
 
 MIN_WORDS = 5  # fewer words than this: image-only slide, left out of the score
 MAX_KEY_TERMS = 8

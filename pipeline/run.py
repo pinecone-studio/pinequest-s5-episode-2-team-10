@@ -43,6 +43,18 @@ def analyze(
     fb = feedback.generate(backend, data)
 
     on_stage("scoring")
+    # Score fillers on the occurrences confirmed in context, not the raw word-list matches.
+    # The list numbers stay alongside for evaluation.
+    fill = fb["fillers"]
+    wording = {
+        **wording,
+        "list_fillers": wording["fillers"],
+        "list_filler_total": wording["filler_total"],
+        "fillers": {w["word"]: w["count"] for w in fill["words"]},
+        "filler_total": fill["total"],
+        "fillers_per_100": fill["per_100"],
+        "filler_method": fill["method"],
+    }
     confirmed = sum(1 for n in fb["number_checks"] if n["inconsistent"])
     scores = scoring.compute(
         fb["content_scores"], measured, wording, aligned["coverage"], confirmed, session.get("planned_s")
@@ -58,4 +70,5 @@ def analyze(
         "sentences": sentences,
         "asr_backend": asr_backend,
         "notes": notes,
+        "prompt_version": feedback.PROMPT_VERSION,
     }

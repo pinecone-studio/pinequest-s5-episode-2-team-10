@@ -1,5 +1,32 @@
 # Saylo Testing and Evaluation
 
+## 0. Running the checks
+
+```bash
+python -m pytest tests                      # Python: filler detection, verification, scoring
+cd web && npm run lint && npx tsc --noEmit && npm run build
+```
+
+For a full run without a GPU, start the API with `PITCH_ASR=stub PITCH_EMBEDDINGS=none` and analyze with the `rules` model; reports then say which parts used sample data.
+
+## Trying the AI analysis on its own
+
+The LLM step can be tested before the speech-to-text, slides, and UI work is finished. `scripts/try_analysis.py` takes a plain-text transcript (and optionally slides and a script), runs the same analysis code as the server, and prints what the model decided: filler words kept, dropped, and added compared with the word list, content scores, and recommendations.
+
+```bash
+python -m scripts.try_analysis                                  # sample transcript, no model
+python -m scripts.try_analysis --backend ollama:qwen3:8b        # any model in your local Ollama
+python -m scripts.try_analysis --backend claude                 # needs ANTHROPIC_API_KEY
+python -m scripts.try_analysis --text my_pitch.txt --slides deck.pdf --script plan.txt --runs 3 --json out.json
+```
+
+Which model to use:
+- **No model (`rules`)**: free and instant; checks the plumbing and the word list only.
+- **Local Ollama (`ollama:<model>`, `gemma4-base`, `gemma4-ft`)**: free, runs on your machine. Install Ollama and pull a model (`ollama pull gemma4:e4b`). Use the RTX 4060 machine: an 8B model needs about 6.7 GB with the analysis prompt, so on an 8 GB laptop it swaps to disk and a run can take tens of minutes. Set `PITCH_OLLAMA_TIMEOUT_S` higher if it times out.
+- **Claude (`claude`)**: no local model needed, fastest and the strongest baseline, but each run costs money on the team's Anthropic key.
+
+`scripts/samples/pitch_fillers.txt` is a transcript with known answers (listed in `scripts/samples/README.md`): which words are fillers, which look like fillers but carry meaning, and which fillers are missing from the word list. `--runs 3` repeats the analysis to show how consistent the model is.
+
 ## 1. Speech-to-text evaluation
 
 Build a small, permissioned Mongolian audio set with human-corrected reference transcripts. Include multiple speakers, topics, recording devices, background-noise levels, and speaking speeds.
