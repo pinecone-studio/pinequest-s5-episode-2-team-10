@@ -13,6 +13,7 @@ import {
   slideKey,
   type FolderMeta,
 } from "@/lib/folderStore";
+import { api, ApiRequestError, USING_MOCK } from "@/lib/api";
 import { openPdf, paintPage, readSlideText } from "@/lib/slidePdf";
 
 interface SpeechResultLike {
@@ -59,6 +60,38 @@ function formatClock(seconds: number) {
 function isPdf(file: Blob) {
   const named = file instanceof File ? file.name : "";
   return file.type === "application/pdf" || named.toLowerCase().endsWith(".pdf");
+}
+
+function deckName(file: Blob, fallback: string | null) {
+  const named = (file instanceof File ? file.name : fallback ?? "").toLowerCase();
+  if (file.type === "application/pdf" || named.endsWith(".pdf")) return fallback?.toLowerCase().endsWith(".pdf") ? fallback : "slides.pdf";
+  if (named.endsWith(".pptx") || file.type === "application/vnd.openxmlformats-officedocument.presentationml.presentation") {
+    return fallback?.toLowerCase().endsWith(".pptx") ? fallback : "slides.pptx";
+  }
+  return null;
+}
+
+async function waitForReport(id: string) {
+  for (let i = 0; i < 30; i++) {
+    const status = await api.status(id);
+    if (status.status === "completed") return api.report(id);
+    if (status.status === "failed") {
+      throw new ApiRequestError({ code: "failed", message: status.error || "Шинжилгээ амжилтгүй." }, 500);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  throw new ApiRequestError({ code: "timeout", message: "Backend хариу удаан байна." }, 504);
+}
+
+function audioNameOf(file: Blob, fallback: string | null) {
+  const named = fallback ?? (file instanceof File ? file.name : "");
+  if (/\.(wav|mp3|m4a|webm|ogg)$/i.test(named)) return named;
+  if (file.type.includes("mpeg")) return "audio.mp3";
+  if (file.type.includes("wav")) return "audio.wav";
+  if (file.type.includes("mp4") || file.type.includes("m4a")) return "audio.m4a";
+  if (file.type.includes("ogg")) return "audio.ogg";
+  if (file.type.includes("webm")) return "audio.webm";
+  return named || null;
 }
 
 function isCancel(err: unknown) {
@@ -459,6 +492,8 @@ function FolderRoom({
       setSttNote("Энэ хөтөч яриаг текст болгохгүй. Chrome дээр нээнэ үү.");
       return;
     }
+    let interimTimer = 0;
+    let startedAt = Date.now();
     rec.onresult = (ev) => {
       if (sttGen.current !== mine) return;
       let done = "";
@@ -470,7 +505,11 @@ function FolderRoom({
       }
       if (done) writeSpeech(`${textRef.current} ${done}`);
       interimRef.current = live;
-      setInterim(live);
+      window.clearTimeout(interimTimer);
+      interimTimer = window.setTimeout(() => {
+        if (sttGen.current !== mine) return;
+        setInterim(interimRef.current);
+      }, 150);
     };
     rec.onerror = (ev) => {
       if (sttGen.current !== mine) return;
@@ -486,11 +525,18 @@ function FolderRoom({
     };
     rec.onend = () => {
       if (sttGen.current !== mine || !playingRef.current) return;
-      try {
-        rec.start();
-      } catch {
-        /* already running */
-      }
+      // Chrome ends the recognizer immediately when the mic is busy, and restarting
+      // it in a loop freezes the tab. Only continue after a real stretch of speech.
+      if (Date.now() - startedAt < 2000) return;
+      window.setTimeout(() => {
+        if (sttGen.current !== mine || !playingRef.current) return;
+        startedAt = Date.now();
+        try {
+          rec.start();
+        } catch {
+          /* already running */
+        }
+      }, 1200);
     };
     recRef.current = rec;
     try {
@@ -537,6 +583,10 @@ function FolderRoom({
         getFolderBlob(audioKey(folder.id)),
         getFolderBlob(slideKey(folder.id)),
       ]);
+      if (!USING_MOCK) {
+        await sendToBackend(speech, audio, slide);
+        return;
+      }
       const slideText = pdfRef.current ? await readSlideText(pdfRef.current) : "";
       const slideImage = await new Promise<Blob | null>((resolve) => {
         const canvas = canvasRef.current;
@@ -564,11 +614,70 @@ function FolderRoom({
         return;
       }
       setProbeResult({ summary: payload.summary, points: payload.points, received: payload.received });
-    } catch {
-      setProbeNote("LLM рүү илгээж чадсангүй.");
+    } catch (err) {
+      const message =
+        err instanceof ApiRequestError && err.code === "too_short"
+          ? "Дуу 3 секундээс богино байна. Ахиад жаахан яриарай."
+          : err instanceof ApiRequestError
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "";
+      setProbeNote(message || (USING_MOCK ? "LLM рүү илгээж чадсангүй." : "Backend рүү илгээж чадсангүй."));
     } finally {
       setProbing(false);
     }
+  }
+
+  async function sendToBackend(speech: string, audio: Blob | null, slide: Blob | null) {
+    const audioFile = audio ? audioNameOf(audio, folder.audioName) : null;
+    if (!audio || !audioFile) {
+      setProbeNote("Дууны файл алга. Доорх Оруулах дээр дарж аудио нэмнэ үү.");
+      return;
+    }
+    setProbeNote("Холбогдож байна…");
+    const savedKey = `pitchcoach:backend-project:${folder.id}`;
+    let projectId = localStorage.getItem(savedKey);
+    if (projectId) {
+      try {
+        await api.getProject(projectId);
+      } catch (err) {
+        if (!(err instanceof ApiRequestError) || err.status !== 404) throw err;
+        projectId = null;
+      }
+    }
+    if (!projectId) {
+      const project = await api.createProject({ name: folder.name || "Saylo" });
+      projectId = project.id;
+      localStorage.setItem(savedKey, projectId);
+    }
+    const attempt = await api.createAttempt(projectId);
+    setProbeNote("Дуу илгээж байна…");
+    await api.uploadAudio(attempt.id, audio, audioFile);
+    const slidesFile = slide ? deckName(slide, folder.slideName) : null;
+    if (slide && slidesFile) {
+      const file = slide instanceof File ? slide : new File([slide], slidesFile, { type: slide.type || "application/pdf" });
+      await api.uploadSlides(attempt.id, file);
+    }
+    if (speech) await api.setScript(attempt.id, speech);
+    setProbeNote("Шинжилж байна…");
+    await api.analyze(attempt.id);
+    const report = await waitForReport(attempt.id);
+    const points = report.feedback.recommendations
+      .slice(0, 3)
+      .map((item) => ({
+        title: (item.problem || item.area).slice(0, 120),
+        detail: (item.action || item.why).slice(0, 500),
+      }))
+      .filter((item) => item.title && item.detail);
+    setProbeResult({
+      summary: report.feedback.summary,
+      points,
+      received: { text: Boolean(speech), audio: audioFile, slide: slidesFile },
+    });
+    const notes = [...report.notes];
+    if (slide && !slidesFile) notes.push("Слайд PDF эсвэл PPTX байх ёстой.");
+    if (notes.length) setProbeNote(notes.join(" "));
   }
 
   function toggleAudio() {
@@ -701,7 +810,7 @@ function FolderRoom({
                 disabled={probing || (!spoken && !folder.audioName && !hasSlide)}
                 onClick={() => void sendToModel()}
               >
-                {probing ? "Илгээж байна" : "LLM рүү илгээх"}
+                {probing ? "Илгээж байна" : USING_MOCK ? "LLM рүү илгээх" : "Backend рүү илгээх"}
               </button>
               {probeNote && <p className="desk-note">{probeNote}</p>}
               {probeResult && (
@@ -805,7 +914,7 @@ function PlayMark() {
 
 function livePeaksFrom(analyser: AnalyserNode, data: Uint8Array<ArrayBuffer>) {
   analyser.getByteTimeDomainData(data);
-  const count = 96;
+  const count = 32;
   const block = Math.floor(data.length / count);
   const next: number[] = [];
   for (let i = 0; i < count; i++) {
@@ -882,7 +991,7 @@ function WaveAudio({
     let last = 0;
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
-      if (now - last < 70) return;
+      if (now - last < 180) return;
       last = now;
       setSpoken(livePeaksFrom(live, data));
     };

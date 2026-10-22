@@ -249,7 +249,7 @@ export const mockApi = {
     return { duration_s: s.durationS, format: file.type || "unknown" };
   },
 
-  async analyze(id: string, backend: FeedbackBackend) {
+  async analyze(id: string, backend: FeedbackBackend = "rules") {
     await wait();
     const store = load();
     const s = getSession(store, id);

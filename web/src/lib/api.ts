@@ -16,7 +16,9 @@ import { mockApi } from "./mock";
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 export const USING_MOCK = !API_URL;
 
-const BASE = `${API_URL}/api/v1`;
+// The browser calls this app. next.config forwards /api/v1 to NEXT_PUBLIC_API_URL,
+// so a deployed site can reach the API without that host allowing our origin.
+const BASE = "/api/v1";
 const TOKEN_KEY = "pitchcoach:user-token";
 
 export class ApiRequestError extends Error {
@@ -62,9 +64,13 @@ async function send<T>(path: string, init: RequestInit, token: string | null, as
 
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, { ...init, headers });
-  } catch {
-    throw new ApiRequestError({ code: "network", message: "Could not reach the server. Is the backend running?" });
+    res = await fetch(`${BASE}${path}`, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(25000) });
+  } catch (err) {
+    const timedOut = err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError");
+    throw new ApiRequestError({
+      code: "network",
+      message: timedOut ? "Backend хариу удаан байна. Дахин илгээнэ үү." : "Could not reach the server. Is the backend running?",
+    });
   }
   if (!res.ok) {
     let err: ApiError = { code: String(res.status), message: res.statusText || "Request failed." };
@@ -118,8 +124,8 @@ const realApi = {
   setScript: (id: string, text: string) => request<{ words: number }>(`/sessions/${id}/script`, json("PUT", { text })),
   uploadAudio: (id: string, file: Blob, filename: string) => upload<AudioUploadResult>(id, "audio", file, filename),
 
-  analyze: (id: string, feedback_backend: FeedbackBackend) =>
-    request<void>(`/sessions/${id}/analyze`, json("POST", { feedback_backend })),
+  analyze: (id: string, feedback_backend?: FeedbackBackend) =>
+    request<void>(`/sessions/${id}/analyze`, json("POST", feedback_backend ? { feedback_backend } : {})),
   status: (id: string) => request<StatusResponse>(`/sessions/${id}/status`),
   report: (id: string) => request<Report>(`/sessions/${id}/report`),
 
