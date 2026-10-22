@@ -7,10 +7,14 @@ def _env(name: str, default: str) -> str:
     return os.environ.get(name, default).strip()
 
 
-# Speech to text: "whisper" runs BuzzASR (needs requirements-ml.txt),
+# Speech to text: "duudlaga" calls api.duudlaga.dev (needs DUUDLAGA_API_KEY),
+# "whisper" runs BuzzASR (needs requirements-ml.txt),
 # "stub" returns sample text so the API can be tested without a GPU.
-ASR_BACKEND = _env("PITCH_ASR", "whisper")
+ASR_BACKEND = _env("PITCH_ASR", "duudlaga")
 ASR_MODEL = _env("PITCH_ASR_MODEL", "BuzzASR/mongolian")
+DUUDLAGA_API_KEY = _env("DUUDLAGA_API_KEY", "")
+DUUDLAGA_BASE_URL = _env("DUUDLAGA_BASE_URL", "https://api.duudlaga.dev").rstrip("/")
+DUUDLAGA_LANGUAGES = _env("DUUDLAGA_LANGUAGES", "mn-MN,en-US")
 
 # Slide alignment: "e5" uses multilingual-e5-small on CPU, "none" uses key-term overlap only.
 EMBEDDINGS = _env("PITCH_EMBEDDINGS", "e5")
