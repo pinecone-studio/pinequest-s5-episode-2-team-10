@@ -82,12 +82,36 @@ class AnalysisReport(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
-engine = create_engine(config.DB_URL, connect_args={"check_same_thread": False})
+def _engine():
+    url = config.DB_URL
+    if url.startswith("sqlite"):
+        return create_engine(url, connect_args={"check_same_thread": False})
+
+    # Supabase/Postgres: use the psycopg 3 driver for plain postgres:// URLs.
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            url = "postgresql+psycopg://" + url[len(prefix):]
+    return create_engine(
+        url,
+        pool_pre_ping=True,  # hosted connections drop when idle
+        # Supabase's transaction pooler (port 6543) can't use prepared statements.
+        connect_args={"prepare_threshold": None},
+    )
+
+
+engine = _engine()
 
 
 def init() -> None:
     config.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     SQLModel.metadata.create_all(engine)
+    if engine.dialect.name == "postgresql":
+        # Supabase exposes the public schema through its REST API. With row-level security on
+        # and no policies, the anon key can't read these tables; the server's own role owns
+        # them and is not affected.
+        with engine.begin() as conn:
+            for table in SQLModel.metadata.sorted_tables:
+                conn.exec_driver_sql(f'ALTER TABLE "{table.name}" ENABLE ROW LEVEL SECURITY')
 
 
 def session_dir(session_id: str):

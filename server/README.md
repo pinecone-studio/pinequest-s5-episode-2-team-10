@@ -54,3 +54,9 @@ ffmpeg is used from PATH, or from the `imageio-ffmpeg` package if it isn't insta
 | `run.py` | Runs the steps in order and reports each stage |
 
 The thresholds in `scoring.py` and `alignment.py` are first guesses. Tune them on our own clips and decks.
+
+## Using Supabase (Postgres)
+
+Set `PITCH_DB_URL` to the Supabase connection string (Project Settings → Database). The session pooler (port 5432) is the safest choice; the transaction pooler (6543) also works. Tables are created on startup, with row-level security turned on so Supabase's public REST API can't read them.
+
+Uploaded files are still stored on the server's disk under `PITCH_DATA_DIR`, not in Supabase Storage. That's fine while the API runs on the demo laptop.
