@@ -1,6 +1,7 @@
 // Models the folder prototype can send a speech to. Shared by the browser and the server.
 
-export const PROTO_MODELS = ["rules", "ollama", "claude"] as const;
+// "ollama-think" is the same Gemma with its step-by-step thinking on: slower, more careful.
+export const PROTO_MODELS = ["rules", "ollama", "ollama-think", "claude"] as const;
 export type ProtoModel = (typeof PROTO_MODELS)[number];
 
 export interface ModelStatus {

@@ -20,7 +20,7 @@ import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import DevTests from "./DevTests";
 import LangToggle from "./LangToggle";
-import ImprovementList, { type Improvement } from "./ImprovementList";
+import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
 
@@ -245,8 +245,9 @@ function FolderRoom({
   const [probeNote, setProbeNote] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<{
     summary: string;
-    strengths: string[];
+    strengths: Strength[];
     improvements: Improvement[];
+    offTopic: OffTopic[];
     model: string;
     mainPoints: MainPointsResult | null;
     received: { text: boolean; audio: string | null; slide: string | null } | null;
@@ -634,6 +635,7 @@ function FolderRoom({
             summary: partial.summary ?? "",
             strengths: partial.strengths ?? [],
             improvements: partial.improvements ?? [],
+            offTopic: [],
             model,
             mainPoints: null,
             received: null,
@@ -650,6 +652,7 @@ function FolderRoom({
         summary: payload.summary,
         strengths: payload.strengths ?? [],
         improvements: payload.improvements,
+        offTopic: payload.offTopic ?? [],
         model: payload.model ?? model,
         mainPoints: (payload.mainPoints as MainPointsResult | null) ?? null,
         received: payload.received,
@@ -834,7 +837,11 @@ function FolderRoom({
                     )}
                   </p>
                   <h3>{probeResult.summary}</h3>
-                  <ImprovementList strengths={probeResult.strengths} improvements={probeResult.improvements} />
+                  <ImprovementList
+                    strengths={probeResult.strengths}
+                    improvements={probeResult.improvements}
+                    offTopic={probeResult.offTopic}
+                  />
                   {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} />}
                 </>
               )}

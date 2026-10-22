@@ -63,6 +63,7 @@ export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
   return [
     { id: "rules", name: t(lang, "rulesName"), local: true, available: true, reason: null },
     { id: "ollama", name: `Gemma · Ollama (${ollamaModel()})`, local: true, ...ollama },
+    { id: "ollama-think", name: t(lang, "ollamaCarefulName", { m: ollamaModel() }), local: true, ...ollama },
     {
       id: "claude",
       name: `Claude (${claudeModel()})`,
@@ -74,17 +75,24 @@ export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
 }
 
 export interface Improvement {
+  // "measured": found by code (fillers, repeats, long sentences, numbers); "model": the model's advice.
+  source: "measured" | "model";
   title: string;
   why: string;
   action: string;
   example: string;
-  quote: string; // exact words from the speech; the route drops it when it isn't there
+  quote: string; // exact words from the speech; the route drops a model quote that isn't there
+}
+
+export interface Strength {
+  text: string;
+  quote: string; // the words that show it; strengths without a quote from the speech are dropped
 }
 
 /** A checked reply plus the raw JSON, so callers can read extra fields (main points) themselves. */
 export interface ModelReply {
   summary: string;
-  strengths: string[];
+  strengths: Strength[];
   improvements: Improvement[];
   raw: Record<string, unknown>;
 }
@@ -95,7 +103,7 @@ const MAX_STRENGTHS = 3;
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
 
 /**
- * Checks the model's JSON: {summary, strengths: [string], improvements: [{title, why, action, example, quote}]}.
+ * Checks the model's JSON: {summary, strengths: [{text, quote}], improvements: [{title, why, action, example, quote}]}.
  * Each improvement needs a title and an action; at most MAX_IMPROVEMENTS are kept.
  * The older {points: [{title, detail}]} shape is read as improvements, so small models that drift still work.
  */
@@ -113,12 +121,16 @@ export function parseReply(raw: unknown): ModelReply | null {
     const title = text(i.title, 120);
     const action = text(i.action ?? i.detail, 500);
     if (!title || !action) continue;
-    improvements.push({ title, why: text(i.why, 500), action, example: text(i.example, 400), quote: text(i.quote, 400) });
+    improvements.push({ source: "model", title, why: text(i.why, 500), action, example: text(i.example, 400), quote: text(i.quote, 400) });
     if (improvements.length === MAX_IMPROVEMENTS) break;
   }
   const strengths = (Array.isArray(body.strengths) ? body.strengths : [])
-    .map((v) => text(v, 300))
-    .filter(Boolean)
+    .map((v): Strength => {
+      if (typeof v === "string") return { text: text(v, 300), quote: "" };
+      const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+      return { text: text(o.text, 300), quote: text(o.quote, 400) };
+    })
+    .filter((v) => v.text)
     .slice(0, MAX_STRENGTHS);
   return { summary, strengths, improvements, raw: body };
 }
@@ -160,36 +172,32 @@ export async function askClaude(prompt: string, image: { mediaType: string; data
 const str = { type: "string" } as const;
 
 /** JSON schema for the reply; Ollama uses it to constrain the output to this shape. */
-export function replySchema(withPoints: boolean): Record<string, unknown> {
+export function replySchema(withPoints: boolean, withNumbers = false): Record<string, unknown> {
+  const obj = (props: Record<string, unknown>) => ({ type: "object", properties: props, required: Object.keys(props) });
   const properties: Record<string, unknown> = {
     summary: str,
-    strengths: { type: "array", items: str, maxItems: 3 },
+    strengths: { type: "array", maxItems: 3, items: obj({ text: str, quote: str }) },
     improvements: {
       type: "array",
       maxItems: MAX_IMPROVEMENTS,
-      items: {
-        type: "object",
-        properties: { title: str, why: str, action: str, example: str, quote: str },
-        required: ["title", "why", "action", "example", "quote"],
-      },
+      items: obj({ title: str, why: str, action: str, example: str, quote: str }),
     },
+    off_topic: { type: "array", items: obj({ sentence_id: { type: "integer" }, reason: str }) },
   };
+  if (withNumbers) {
+    properties.number_checks = {
+      type: "array",
+      items: obj({ on_slide: str, said: { type: ["string", "null"] }, inconsistent: { type: "boolean" } }),
+    };
+  }
   if (withPoints) {
     properties.point_checks = {
       type: "array",
-      items: {
-        type: "object",
-        properties: { point: { type: "integer" }, status: { type: "string", enum: ["covered", "partial", "missed"] }, evidence: str, note: str },
-        required: ["point", "status", "evidence", "note"],
-      },
-    };
-    properties.off_topic = {
-      type: "array",
-      items: { type: "object", properties: { sentence_id: { type: "integer" }, reason: str }, required: ["sentence_id", "reason"] },
+      items: obj({ point: { type: "integer" }, status: { type: "string", enum: ["covered", "partial", "missed"] }, evidence: str, note: str }),
     };
     properties.idea_comment = str;
   }
-  return { type: "object", properties, required: Object.keys(properties) };
+  return obj(properties);
 }
 
 const OLLAMA_TRIES = 2; // small local models sometimes return a reply that doesn't validate
@@ -254,6 +262,7 @@ export async function askOllama(
   lang: Lang,
   schema: Record<string, unknown> = replySchema(false),
   onText?: (text: string) => void,
+  think = false,
 ) {
   for (let attempt = 1; ; attempt++) {
     let response: Response;
@@ -268,8 +277,8 @@ export async function askOllama(
           format: schema,
           keep_alive: keepAlive(),
           // Gemma 4 "thinks" before answering by default: better judgement, but ~10 s before the
-          // first word. Off unless PITCH_OLLAMA_THINK=true.
-          think: setting("PITCH_OLLAMA_THINK", "false") === "true",
+          // first word and about 2x slower. Only the "careful" choice turns it on.
+          think,
           // Same settings as the pipeline (pipeline/feedback.py): long prompts need the larger context.
           options: { temperature: 0, num_ctx: 8192 },
           messages: [{ role: "user", content: prompt }],
@@ -292,22 +301,6 @@ export async function askOllama(
   }
 }
 
-let fillerCache: string[] | null = null;
-function fillers(): string[] {
-  if (fillerCache) return fillerCache;
-  try {
-    const file = path.join(process.cwd(), "..", "pipeline", "fillers_mn.txt");
-    fillerCache = readFileSync(file, "utf8")
-      .split(/\r?\n/)
-      .map((l) => l.trim().toLowerCase())
-      .filter((l) => l && !l.startsWith("#"))
-      .sort((a, b) => b.length - a.length);
-  } catch {
-    fillerCache = ["ээ", "ээм", "аан", "аа", "мм", "хмм", "нөгөө", "яахав"];
-  }
-  return fillerCache;
-}
-
 /** What the no-LLM check needs to know about the main points. */
 export interface PointStatus {
   text: string;
@@ -317,36 +310,18 @@ export interface PointStatus {
 const SHORT_SPEECH_WORDS = 60;
 
 /**
- * No model: things to improve from counts only (fillers, back-to-back repeats, main points
- * not found, slide words not said, a very short speech). Never quotes or invents speech.
+ * No model: things to improve from counts only. Fillers, repeats and long sentences come from
+ * measureSpeech (shown for every model); this adds main points not found, slide words not
+ * said, and a very short speech. Never quotes or invents speech.
  */
 export function rulesReply(speech: string, slideText: string, lang: Lang, points: PointStatus[] = []): ModelReply {
   const words = speech.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   const empty = { strengths: [], improvements: [], raw: {} };
   if (words.length === 0) return { summary: t(lang, "rulesNoText"), ...empty };
 
-  let joined = ` ${words.join(" ")} `;
-  const found: string[] = [];
-  let fillerTotal = 0;
-  for (const f of fillers()) {
-    const parts = joined.split(` ${f} `);
-    const count = parts.length - 1;
-    if (count > 0) {
-      found.push(`«${f}» ×${count}`);
-      fillerTotal += count;
-      joined = parts.join(" ");
-    }
-  }
-
-  const fillerSet = new Set(fillers());
-  const repeats = new Map<string, number>();
-  for (let i = 1; i < words.length; i++) {
-    const w = words[i];
-    if (w === words[i - 1] && w.length > 1 && !fillerSet.has(`${w} ${w}`)) repeats.set(w, (repeats.get(w) ?? 0) + 1);
-  }
-
   const improvements: Improvement[] = [];
-  const add = (title: string, why: string, action: string) => improvements.push({ title, why, action, example: "", quote: "" });
+  const add = (title: string, why: string, action: string) =>
+    improvements.push({ source: "measured", title, why, action, example: "", quote: "" });
 
   for (const p of points.filter((p) => p.status !== "covered").slice(0, 2)) {
     add(
@@ -354,13 +329,6 @@ export function rulesReply(speech: string, slideText: string, lang: Lang, points
       t(lang, p.status === "missed" ? "rulesPointMissed" : "rulesPointPartial"),
       t(lang, "rulesPointAction"),
     );
-  }
-  if (fillerTotal) {
-    const per100 = Math.round((fillerTotal / words.length) * 1000) / 10;
-    add(t(lang, "rulesFillers"), t(lang, "rulesFillersFound", { list: found.join(", "), per100 }), t(lang, "rulesFillersAction"));
-  }
-  if (repeats.size) {
-    add(t(lang, "rulesRepeats"), [...repeats].map(([w, n]) => `«${w} ${w}» ×${n}`).join(", "), t(lang, "rulesRepeatsAction"));
   }
   if (slideText) {
     const slideWords = new Set((slideText.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? []).slice(0, 400));
@@ -374,10 +342,5 @@ export function rulesReply(speech: string, slideText: string, lang: Lang, points
     add(t(lang, "rulesShortTitle"), t(lang, "rulesShortWhy", { n: words.length }), t(lang, "rulesShortAction"));
   }
 
-  return {
-    summary: t(lang, "rulesSummary", { n: words.length }),
-    strengths: [],
-    improvements: improvements.slice(0, MAX_IMPROVEMENTS),
-    raw: {},
-  };
+  return { summary: t(lang, "rulesSummary", { n: words.length }), strengths: [], improvements, raw: {} };
 }

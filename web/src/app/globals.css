@@ -721,3 +721,34 @@ body {
   color: var(--faint);
   font-style: normal;
 }
+
+.desk-tag {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border: 1px solid var(--control);
+  border-radius: 999px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.desk-strengths li q {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.desk-offtopic {
+  padding-left: 0;
+  list-style: none;
+}
+
+.desk-offtopic li {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.desk-offtopic li span {
+  color: var(--muted);
+}

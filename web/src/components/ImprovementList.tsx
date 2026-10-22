@@ -3,15 +3,35 @@
 import { useLang } from "@/lib/i18nClient";
 
 export interface Improvement {
+  source: "measured" | "model"; // measured: found by code; model: the model's advice
   title: string;
   why: string;
   action: string;
   example: string;
-  quote: string; // exact words from the speech; empty when the model gave none or made one up
+  quote: string; // from the speech; empty when the model gave none or made one up
 }
 
-/** Strengths, then a numbered list of things to improve, most important first. */
-export default function ImprovementList({ strengths, improvements }: { strengths: string[]; improvements: Improvement[] }) {
+export interface Strength {
+  text: string;
+  quote: string; // the words from the speech that show it
+}
+
+export interface OffTopic {
+  sentenceId: number;
+  text: string;
+  reason: string;
+}
+
+/** Strengths (each with the words that show it), things to improve, and off-topic sentences. */
+export default function ImprovementList({
+  strengths,
+  improvements,
+  offTopic = [],
+}: {
+  strengths: Strength[];
+  improvements: Improvement[];
+  offTopic?: OffTopic[];
+}) {
   const { tr } = useLang();
   return (
     <div className="desk-improve">
@@ -20,7 +40,10 @@ export default function ImprovementList({ strengths, improvements }: { strengths
           <h3>{tr("strengths")}</h3>
           <ul className="desk-strengths">
             {strengths.map((s, i) => (
-              <li key={i}>{s}</li>
+              <li key={i}>
+                {s.text}
+                {s.quote && <q>{s.quote}</q>}
+              </li>
             ))}
           </ul>
         </>
@@ -31,7 +54,10 @@ export default function ImprovementList({ strengths, improvements }: { strengths
           <ol>
             {improvements.map((item, i) => (
               <li key={i}>
-                <strong>{item.title}</strong>
+                <strong>
+                  {item.title}
+                  {item.source === "measured" && <span className="desk-tag">{tr("measuredTag")}</span>}
+                </strong>
                 {item.quote && <q>{item.quote}</q>}
                 {item.why && (
                   <span>
@@ -49,6 +75,19 @@ export default function ImprovementList({ strengths, improvements }: { strengths
               </li>
             ))}
           </ol>
+        </>
+      )}
+      {offTopic.length > 0 && (
+        <>
+          <h3>{tr("offTopic")}</h3>
+          <ul className="desk-offtopic">
+            {offTopic.map((o) => (
+              <li key={o.sentenceId}>
+                <q>{o.text}</q>
+                {o.reason && <span>{o.reason}</span>}
+              </li>
+            ))}
+          </ul>
         </>
       )}
     </div>

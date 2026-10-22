@@ -96,8 +96,18 @@ The folder page's "send to model" route (`web/src/lib/server/points.ts`) applies
 
 ## Folder page: things to improve
 
-The folder page's "send to model" (`web/src/app/api/prototype/route.ts`) returns a `summary`, up to 3 `strengths` and 3–5 `improvements`, most important first, each with `title`, `why`, `action`, an `example` sentence (no new facts or numbers) and an exact `quote`. A quote that is not in the speech is removed; the advice stays. With Ollama, the reply is constrained by a JSON schema and retried once if it still does not validate. Without an LLM, improvements come from counts only: main points not found, fillers, repeats, slide words not said, and a very short speech.
+The folder page's "send to model" (`web/src/app/api/prototype/route.ts`) judges the speech, not the slides; slide text is only used to check that the speech agrees with it.
 
-**Speed.** The reply is streamed: the route sends one JSON line per update (`Accept: application/x-ndjson`), the page shows the summary and list as Gemma writes them, and the checked reply replaces them at the end. Ollama keeps the model loaded (`PITCH_OLLAMA_KEEP_ALIVE`, default always) and the page pre-loads it when it opens. Gemma 4's thinking is off by default (`PITCH_OLLAMA_THINK`). Measured on an RTX 4060 with the 76 s sample: first words after about 3 s, full answer after about 11 s (English) or 16 s (Mongolian); with thinking on, about 21 s and 30 s. In our test, thinking on got all 4 main points right every time; off, it got 3 of 4.
+The reply has a `summary`, up to 3 `strengths` and a list of `improvements`:
+
+1. **Measured by code** (`web/src/lib/server/measure.ts`), the same for every model and shown first, marked "measured": filler words from `pipeline/fillers_mn.txt` with counts and rate per 100 words, back-to-back repeats, sentences over 25 words, run-on sentences with three or more «тэгээд», and numbers that disagree with the slides. A number said that isn't on the slides is paired with an unspoken slide figure of the same kind (decimal or whole, size, unit: time, size, percent or money), e.g. "the slides show 0.96, you said 0.86". The model is told these are already covered.
+2. **Numbers said in words** ("гурван секунд") are left to the model: it gets the slide figures the speech doesn't contain as written and says what the speaker said instead. Code keeps a mismatch only when that quote is in the speech.
+3. **The model's advice**: 2–4 items on the opening, the problem, the solution, proof, the ask at the end, and off-topic parts, each with `why`, `action`, an `example` sentence (no new facts or numbers) and an exact `quote`. A quote that isn't in the speech is removed; advice that repeats a number already flagged is dropped.
+
+`strengths` must quote the speech (`{text, quote}`); a strength whose quote isn't in the speech is dropped, so the model can't praise what only the slides show. `offTopic` is checked on every run, with or without main points.
+
+Model choices: the no-LLM check, Gemma through Ollama (fast, thinking off) and "Gemma · careful" (`ollama-think`, thinking on: about 2x slower and more accurate on main points and numbers in our tests), and Claude.
+
+**Speed.** The reply is streamed: the route sends one JSON line per update (`Accept: application/x-ndjson`), the page shows the summary and list as Gemma writes them, and the checked reply replaces them at the end. Ollama keeps the model loaded (`PITCH_OLLAMA_KEEP_ALIVE`, default always) and the page pre-loads it when it opens. Gemma 4's thinking is off for the fast choice and on for "Gemma · careful". Measured on an RTX 4060 with the 76 s sample: first words after about 3 s, full answer after about 11 s (English) or 16 s (Mongolian); with thinking on, about 21 s and 30 s. In our test, thinking on got all 4 main points right every time; off, it got 3 of 4.
 
 The speech reaches the model as sentences: the voice server returns no punctuation, so a full stop is placed wherever the speaker paused for 0.6 s or more (`textWithPauses` in `web/src/lib/server/voice.ts`).

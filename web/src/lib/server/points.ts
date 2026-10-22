@@ -37,8 +37,13 @@ export interface MainPoints {
   method: "llm" | "words";
   points: PointResult[];
   coverage: number | null;
-  offTopic: { sentenceId: number; text: string; reason: string }[];
   ideaComment: string;
+}
+
+export interface OffTopic {
+  sentenceId: number;
+  text: string; // quoted by code from the speech, not by the model
+  reason: string;
 }
 
 function tokens(text: string): string[] {
@@ -113,10 +118,8 @@ export function verifyPoints(
   checks: unknown,
   points: string[],
   sentences: Sentence[],
-  offTopic: unknown,
   ideaComment: unknown,
   method: MainPoints["method"],
-  idea = "",
 ): MainPoints {
   const transcript = ` ${tokens(sentences.map((s) => s.text).join(" ")).join(" ")} `;
   const byPoint = new Map<number, Record<string, unknown>>();
@@ -139,12 +142,25 @@ export function verifyPoints(
     return { point: i, text, status, verified, evidence: verified && status !== "missed" ? evidence : "", note: squash(c.note) };
   });
 
-  // Small models flag too much as off topic. A sentence that shares a key word with the idea or
-  // a main point is at least related, so its flag is dropped (conservative: may keep a real one out).
+  return {
+    method,
+    points: results,
+    coverage: points.length ? Math.round((100 * total) / points.length) : null,
+    ideaComment: squash(ideaComment),
+  };
+}
+
+/**
+ * The model's off-topic flags -> sentences the page can show. Only real sentence numbers are
+ * kept, and the text is quoted by code. Small models flag too much: when an idea or main points
+ * are given, a sentence that shares a key word with them is at least related, so its flag is
+ * dropped (conservative: may hide a real one).
+ */
+export function verifyOffTopic(raw: unknown, sentences: Sentence[], idea = "", points: string[] = []): OffTopic[] {
   const related = new Set([idea, ...points].flatMap((x) => [...terms(x)]));
   const seen = new Set<number>();
-  const flagged: MainPoints["offTopic"] = [];
-  for (const item of Array.isArray(offTopic) ? offTopic : []) {
+  const flagged: OffTopic[] = [];
+  for (const item of Array.isArray(raw) ? raw : []) {
     const sid = item && typeof item === "object" ? (item as Record<string, unknown>).sentence_id : undefined;
     if (
       typeof sid === "number" &&
@@ -161,13 +177,5 @@ export function verifyPoints(
       flagged.push({ sentenceId: sid, text: sentences[sid].text, reason: echo ? "" : reason });
     }
   }
-  flagged.sort((a, b) => a.sentenceId - b.sentenceId);
-
-  return {
-    method,
-    points: results,
-    coverage: points.length ? Math.round((100 * total) / points.length) : null,
-    offTopic: flagged,
-    ideaComment: squash(ideaComment),
-  };
+  return flagged.sort((a, b) => a.sentenceId - b.sentenceId);
 }
