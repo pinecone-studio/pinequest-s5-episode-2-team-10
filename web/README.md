@@ -13,24 +13,26 @@ copy `.env.example` to `.env.local` and set the URL.
 
 ## Screens
 
-- `/`: session details, slides (PDF/PPTX), audio (upload or record in the browser),
-  feedback model choice, then Analyze.
-- `/sessions/[id]`: polls status every 2 s, shows the stage, then the report.
+- `/`: main menu. Every project (folder) with its latest score, attempt count and last update, plus **New project**.
+- `/projects/[id]`: the project screen.
+  - Left: project details (saved as you leave each field), then the new attempt: slides (reused from the last attempt unless replaced), optional script, recording (upload or record), feedback model and **Analyze pitch**.
+  - Right: every attempt with its score and change from the previous one, and the selected attempt's AI suggestions, followed by its uploads (recording playback, slide text and download, script).
 
 ## What the front end expects from the API
 
-All under `/api/v1`, as in the TDD. Points the TDD leaves open, decided here:
+The project endpoints are listed in `server/README.md`. In short:
 
 | Item | Choice |
 | --- | --- |
-| Access token header | `X-Access-Token` (token kept in local storage per session) |
-| Upload field name | `file` (multipart) for both `/audio` and `/slides` |
-| Feedback model | `POST /sessions/{id}/analyze` body `{"feedback_backend": "claude" \| "gemma4-ft" \| "gemma4-base"}` |
-| `/slides` response | `{"slide_count", "image_only": [numbers]}` |
-| `/audio` response | `{"duration_s", "format"}` |
-| `/report` response | flat category scores (`overall`, `content`, `delivery`, `slide_alignment`, `timing`, null when missing) plus `title`, `metrics`, `feedback` (schema v2), `transcript.sentences`, `backend` |
+| Identity | `POST /users` once per browser; token kept in local storage and sent as `X-Access-Token` |
+| Projects | `GET/POST /projects`, `GET/PATCH/DELETE /projects/{id}` |
+| Attempts | `POST /projects/{id}/sessions` copies the last attempt's slides and script, then the usual uploads and `analyze` |
+| Script | `PUT /sessions/{id}/script` |
+| Viewing uploads | `GET /sessions/{id}/audio`, `/slides`, `/slides/file`, fetched as blobs because `<audio>` can't send the token header |
+
+If the server forgets the token (for example after the database is reset), the app creates a new user automatically.
 
 Types are in `src/lib/types.ts`; change them there if the server contract differs.
 Browser recordings are WebM/Opus (MP4 on Safari); the server converts to 16 kHz WAV.
 
-Not built yet: the compare screen (`/sessions/compare`) and delete.
+Not built yet: logins. The anonymous token means projects belong to one browser.

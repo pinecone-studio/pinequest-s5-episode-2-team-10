@@ -3,7 +3,8 @@
 
 export type PitchType = "startup" | "academic";
 
-export type FeedbackBackend = "gemma4-ft" | "gemma4-base" | "claude";
+// "rules" is server-side only (no model, offline testing); the UI never offers it.
+export type FeedbackBackend = "gemma4-ft" | "gemma4-base" | "claude" | "rules";
 
 export type SessionStatus =
   | "created"
@@ -19,23 +20,55 @@ export type Stage =
   | "feedback"
   | "scoring";
 
-export interface CreateSessionBody {
-  title: string;
+export interface ProjectDetails {
+  name: string;
   goal: string;
   audience: string;
   planned_s: number;
   pitch_type: PitchType;
-  group_id?: string | null;
 }
 
-export interface CreatedSession {
+export interface ProjectSummary extends ProjectDetails {
   id: string;
-  access_token: string;
+  created_at: string;
+  updated_at: string;
+  attempt_count: number;
+  latest_overall: number | null;
+  processing: boolean;
+}
+
+// One analysis inside a project.
+export interface Attempt {
+  id: string;
+  created_at: string;
+  status: SessionStatus;
+  stage: Stage | null;
+  error: string | null;
+  backend: FeedbackBackend | null;
+  overall: number | null;
+  duration_s: number | null;
+  slides_filename: string | null;
+  slide_count: number;
+  has_script: boolean;
+}
+
+export interface Project extends ProjectSummary {
+  attempts: Attempt[];
+  // Slides and script the next attempt reuses (from the latest attempt).
+  current: { slides_filename: string | null; slide_count: number; script: string };
 }
 
 export interface SlidesUploadResult {
   slide_count: number;
   image_only: number[];
+  filename: string;
+}
+
+export interface SlideText {
+  number: number;
+  text: string;
+  notes: string;
+  image_only: boolean;
 }
 
 export interface AudioUploadResult {
@@ -116,7 +149,10 @@ export interface Report {
   metrics: Metrics;
   feedback: Feedback;
   transcript: { text: string; sentences: Sentence[] };
+  script: string;
+  slides_filename: string | null;
   backend: FeedbackBackend;
+  notes: string[];
   created_at: string;
 }
 

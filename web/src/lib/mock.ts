@@ -1,90 +1,297 @@
 // In-browser stand-in for the FastAPI server, used when NEXT_PUBLIC_API_URL is unset.
-// It walks through the real stages on a timer and returns a sample report.
+// Projects and attempts live in local storage; analysis walks through the real stages on a
+// timer and returns a sample report. Recordings are kept in memory only (lost on reload).
 
 import type {
-  CreateSessionBody,
+  Attempt,
   FeedbackBackend,
+  Project,
+  ProjectDetails,
+  ProjectSummary,
   Report,
+  SessionStatus,
   Stage,
   StatusResponse,
 } from "./types";
 
-interface MockSession extends CreateSessionBody {
+interface MockProject extends ProjectDetails {
   id: string;
-  hasAudio: boolean;
-  slideCount: number;
-  durationS: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface MockSession {
+  id: string;
+  project_id: string;
+  seq: number;
+  created_at: string;
+  title: string;
+  planned_s: number;
+  status: SessionStatus;
   analyzeAt: number | null;
   backend: FeedbackBackend;
+  durationS: number;
+  slidesFilename: string | null;
+  slideCount: number;
+  script: string;
+}
+
+interface Store {
+  projects: Record<string, MockProject>;
+  sessions: Record<string, MockSession>;
 }
 
 const STAGES: Stage[] = ["transcribing", "measuring", "slides", "feedback", "scoring"];
 const STAGE_MS = 1500;
-const key = (id: string) => `pitchcoach:mock:${id}`;
+const KEY = "pitchcoach:mock:v2";
+const audioBlobs = new Map<string, Blob>();
 
-function load(id: string): MockSession {
-  const raw = localStorage.getItem(key(id));
-  if (!raw) throw { code: "not_found", message: "Session not found." };
-  return JSON.parse(raw);
+const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms));
+const now = () => new Date().toISOString();
+const notFound = (what: string) => ({ code: "not_found", message: `${what} not found.` });
+
+function load(): Store {
+  try {
+    return JSON.parse(localStorage.getItem(KEY) ?? "") as Store;
+  } catch {
+    return { projects: {}, sessions: {} };
+  }
 }
 
-function save(s: MockSession) {
-  localStorage.setItem(key(s.id), JSON.stringify(s));
+function save(store: Store) {
+  localStorage.setItem(KEY, JSON.stringify(store));
 }
 
-const wait = (ms = 300) => new Promise((r) => setTimeout(r, ms));
+function liveStatus(s: MockSession): { status: SessionStatus; stage: Stage | null } {
+  if (s.status !== "processing" || !s.analyzeAt) return { status: s.status, stage: null };
+  const i = Math.floor((Date.now() - s.analyzeAt) / STAGE_MS);
+  if (i >= STAGES.length) return { status: "completed", stage: null };
+  return { status: "processing", stage: STAGES[i] };
+}
+
+function attempt(s: MockSession): Attempt {
+  const { status, stage } = liveStatus(s);
+  return {
+    id: s.id,
+    created_at: s.created_at,
+    status,
+    stage,
+    error: null,
+    backend: s.analyzeAt ? s.backend : null,
+    overall: status === "completed" ? sampleReport(s).overall : null,
+    duration_s: s.durationS || null,
+    slides_filename: s.slidesFilename,
+    slide_count: s.slideCount,
+    has_script: !!s.script.trim(),
+  };
+}
+
+function projectSessions(store: Store, id: string): MockSession[] {
+  return Object.values(store.sessions)
+    .filter((s) => s.project_id === id)
+    .sort((a, b) => b.seq - a.seq);
+}
+
+function summary(store: Store, p: MockProject): ProjectSummary {
+  const sessions = projectSessions(store, p.id);
+  const analyzed = sessions.filter((s) => s.analyzeAt);
+  const done = analyzed.find((s) => liveStatus(s).status === "completed");
+  return {
+    ...p,
+    attempt_count: analyzed.length,
+    latest_overall: done ? sampleReport(done).overall : null,
+    processing: analyzed.some((s) => liveStatus(s).status === "processing"),
+  };
+}
+
+function full(store: Store, p: MockProject): Project {
+  const sessions = projectSessions(store, p.id);
+  const latest = sessions[0];
+  return {
+    ...summary(store, p),
+    attempts: sessions.filter((s) => s.analyzeAt).map(attempt),
+    current: {
+      slides_filename: latest?.slidesFilename ?? null,
+      slide_count: latest?.slideCount ?? 0,
+      script: latest?.script ?? "",
+    },
+  };
+}
+
+function getProjectRow(store: Store, id: string): MockProject {
+  const p = store.projects[id];
+  if (!p) throw notFound("Project");
+  return p;
+}
+
+function getSession(store: Store, id: string): MockSession {
+  const s = store.sessions[id];
+  if (!s) throw notFound("Attempt");
+  return s;
+}
 
 export const mockApi = {
-  async createSession(body: CreateSessionBody) {
+  async listProjects() {
     await wait();
-    const id = crypto.randomUUID();
-    save({ ...body, id, hasAudio: false, slideCount: 0, durationS: 0, analyzeAt: null, backend: "claude" });
-    return { id, access_token: "mock" };
+    const store = load();
+    return Object.values(store.projects)
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .map((p) => summary(store, p));
   },
 
-  async uploadSlides(id: string) {
-    await wait(600);
-    const s = load(id);
+  async createProject(details: Partial<ProjectDetails> = {}) {
+    await wait();
+    const store = load();
+    const p: MockProject = {
+      id: crypto.randomUUID(),
+      name: details.name?.trim() || "Untitled project",
+      goal: details.goal ?? "",
+      audience: details.audience ?? "",
+      planned_s: details.planned_s ?? 180,
+      pitch_type: details.pitch_type ?? "startup",
+      created_at: now(),
+      updated_at: now(),
+    };
+    store.projects[p.id] = p;
+    save(store);
+    return full(store, p);
+  },
+
+  async getProject(id: string) {
+    await wait(150);
+    const store = load();
+    return full(store, getProjectRow(store, id));
+  },
+
+  async updateProject(id: string, patch: Partial<ProjectDetails>) {
+    await wait(150);
+    const store = load();
+    const p = getProjectRow(store, id);
+    Object.assign(p, patch, { updated_at: now() });
+    if (!p.name.trim()) p.name = "Untitled project";
+    save(store);
+    return full(store, p);
+  },
+
+  async deleteProject(id: string) {
+    await wait();
+    const store = load();
+    for (const s of projectSessions(store, id)) delete store.sessions[s.id];
+    delete store.projects[id];
+    save(store);
+  },
+
+  async createAttempt(projectId: string) {
+    await wait();
+    const store = load();
+    const p = getProjectRow(store, projectId);
+    const prev = projectSessions(store, projectId)[0];
+    const s: MockSession = {
+      id: crypto.randomUUID(),
+      project_id: projectId,
+      seq: (prev?.seq ?? 0) + 1,
+      created_at: now(),
+      title: p.name,
+      planned_s: p.planned_s,
+      status: "created",
+      analyzeAt: null,
+      backend: "claude",
+      durationS: 0,
+      slidesFilename: prev?.slidesFilename ?? null,
+      slideCount: prev?.slideCount ?? 0,
+      script: prev?.script ?? "",
+    };
+    store.sessions[s.id] = s;
+    p.updated_at = now();
+    save(store);
+    return attempt(s);
+  },
+
+  async deleteAttempt(id: string) {
+    const store = load();
+    delete store.sessions[id];
+    save(store);
+  },
+
+  async uploadSlides(id: string, file: File) {
+    await wait(500);
+    const store = load();
+    const s = getSession(store, id);
+    s.slidesFilename = file.name;
     s.slideCount = 8;
-    save(s);
-    return { slide_count: 8, image_only: [6] };
+    save(store);
+    return { slide_count: 8, image_only: [6], filename: file.name };
+  },
+
+  async removeSlides(id: string) {
+    const store = load();
+    const s = getSession(store, id);
+    s.slidesFilename = null;
+    s.slideCount = 0;
+    save(store);
+  },
+
+  async setScript(id: string, text: string) {
+    const store = load();
+    getSession(store, id).script = text.trim();
+    save(store);
+    return { words: text.trim().split(/\s+/).filter(Boolean).length };
   },
 
   async uploadAudio(id: string, file: Blob) {
-    await wait(600);
-    const s = load(id);
-    s.hasAudio = true;
+    await wait(500);
+    const store = load();
+    const s = getSession(store, id);
     s.durationS = await audioDuration(file);
-    save(s);
+    s.status = "uploaded";
+    audioBlobs.set(id, file);
+    save(store);
     return { duration_s: s.durationS, format: file.type || "unknown" };
   },
 
   async analyze(id: string, backend: FeedbackBackend) {
     await wait();
-    const s = load(id);
-    if (!s.hasAudio) throw { code: "no_audio", message: "Upload or record audio first." };
-    s.analyzeAt = Date.now();
-    s.backend = backend;
-    save(s);
+    const store = load();
+    const s = getSession(store, id);
+    if (s.status === "created") throw { code: "no_audio", message: "Upload or record audio first." };
+    const p = getProjectRow(store, s.project_id);
+    Object.assign(s, { title: p.name, planned_s: p.planned_s, status: "processing", analyzeAt: Date.now(), backend });
+    p.updated_at = now();
+    save(store);
   },
 
   async status(id: string): Promise<StatusResponse> {
-    const s = load(id);
-    if (!s.analyzeAt) {
-      return { status: s.hasAudio ? "uploaded" : "created", stage: null, queue_position: null, error: null };
-    }
-    const i = Math.floor((Date.now() - s.analyzeAt) / STAGE_MS);
-    if (i >= STAGES.length) return { status: "completed", stage: null, queue_position: null, error: null };
-    return { status: "processing", stage: STAGES[i], queue_position: 0, error: null };
+    const s = getSession(load(), id);
+    const { status, stage } = liveStatus(s);
+    return { status, stage, queue_position: status === "processing" ? 0 : null, error: null };
   },
 
   async report(id: string): Promise<Report> {
     await wait();
-    return sampleReport(load(id));
+    return sampleReport(getSession(load(), id));
   },
 
-  async deleteSession(id: string) {
-    localStorage.removeItem(key(id));
+  async audioBlob(id: string): Promise<Blob> {
+    const blob = audioBlobs.get(id);
+    if (!blob) throw { code: "not_found", message: "Recordings aren't kept after a reload in demo mode." };
+    return blob;
+  },
+
+  async slidesText(id: string) {
+    const s = getSession(load(), id);
+    return {
+      filename: s.slidesFilename,
+      slides: Array.from({ length: s.slideCount }, (_, i) => ({
+        number: i + 1,
+        text: i === 5 ? "" : `Sample text for slide ${i + 1}`,
+        notes: "",
+        image_only: i === 5,
+      })),
+    };
+  },
+
+  async slidesFile(): Promise<Blob> {
+    throw { code: "not_found", message: "Slide files aren't stored in demo mode." };
   },
 };
 
@@ -98,8 +305,8 @@ async function audioDuration(file: Blob): Promise<number> {
 
 function sampleReport(s: MockSession): Report {
   const hasSlides = s.slideCount > 0;
-  const content = 68;
-  const delivery = 61;
+  const content = 58 + ((s.seq * 7) % 30);
+  const delivery = 52 + ((s.seq * 11) % 35);
   const slide_alignment = hasSlides ? 75 : null;
   const timingOff = Math.abs(s.durationS - s.planned_s) / s.planned_s;
   const timing = Math.round(Math.max(0, Math.min(1, (0.5 - timingOff) / 0.4)) * 100);
@@ -123,6 +330,9 @@ function sampleReport(s: MockSession): Report {
     slide_alignment,
     timing,
     backend: s.backend,
+    script: s.script,
+    slides_filename: s.slidesFilename,
+    notes: ["Demo mode: this is sample feedback, not an analysis of your recording."],
     created_at: new Date().toISOString(),
     metrics: {
       duration_s: s.durationS,
