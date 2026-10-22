@@ -49,7 +49,11 @@ export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
     const body = (await res.json()) as { models?: { name?: string }[] };
     const names = (body.models ?? []).map((m) => m.name ?? "");
     const want = ollamaModel();
-    ollama = names.some((n) => n === want || n.startsWith(`${want}:`))
+    const pulled = names.some((n) => n === want || n.startsWith(`${want}:`));
+    // The page asks for this list when it opens, so start loading the model now; the first
+    // "send to model" then doesn't wait for it.
+    if (pulled) void warmOllama();
+    ollama = pulled
       ? { available: true, reason: null }
       : { available: false, reason: t(lang, "ollamaNotPulled", { m: want }) };
   } catch {
@@ -189,7 +193,67 @@ export function replySchema(withPoints: boolean): Record<string, unknown> {
 
 const OLLAMA_TRIES = 2; // small local models sometimes return a reply that doesn't validate
 
-export async function askOllama(prompt: string, lang: Lang, schema: Record<string, unknown> = replySchema(false)) {
+// How long Ollama keeps the model in GPU memory after a request. "-1" = until Ollama stops,
+// so only the very first request pays the ~15 s load. Set e.g. "10m" to free the GPU sooner.
+const keepAlive = () => {
+  const value = setting("PITCH_OLLAMA_KEEP_ALIVE", "-1");
+  return /^-?\d+$/.test(value) ? Number(value) : value;
+};
+
+/** Loads the model into memory without generating anything, if it isn't loaded already. */
+export async function warmOllama(): Promise<void> {
+  try {
+    const ps = (await (await fetch(`${ollamaUrl()}/api/ps`, { signal: AbortSignal.timeout(2_000) })).json()) as {
+      models?: { name?: string }[];
+    };
+    const want = ollamaModel();
+    if ((ps.models ?? []).some((m) => m.name === want || m.name?.startsWith(`${want}:`))) return;
+    // An empty prompt only loads the model. Not awaited by callers; errors are ignored.
+    await fetch(`${ollamaUrl()}/api/generate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: want, prompt: "", keep_alive: keepAlive() }),
+    });
+  } catch {
+    /* Ollama isn't running; the model list already says so. */
+  }
+}
+
+/** Reads Ollama's streamed chat reply (one JSON object per line) and returns the full text. */
+async function readStream(response: Response, onText: (text: string) => void): Promise<string> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    buffered += decoder.decode(value, { stream: !done });
+    const lines = buffered.split("\n");
+    buffered = done ? "" : (lines.pop() ?? "");
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const chunk = JSON.parse(line) as { message?: { content?: string } };
+        text += chunk.message?.content ?? "";
+      } catch {
+        /* a broken line; the final parse decides */
+      }
+    }
+    onText(text);
+    if (done) return text;
+  }
+}
+
+/**
+ * Asks the local model. With `onText`, the reply is streamed and `onText` gets the text so far
+ * (it starts again from "" when a retry begins).
+ */
+export async function askOllama(
+  prompt: string,
+  lang: Lang,
+  schema: Record<string, unknown> = replySchema(false),
+  onText?: (text: string) => void,
+) {
   for (let attempt = 1; ; attempt++) {
     let response: Response;
     try {
@@ -199,8 +263,12 @@ export async function askOllama(prompt: string, lang: Lang, schema: Record<strin
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           model: ollamaModel(),
-          stream: false,
+          stream: Boolean(onText),
           format: schema,
+          keep_alive: keepAlive(),
+          // Gemma 4 "thinks" before answering by default: better judgement, but ~10 s before the
+          // first word. Off unless PITCH_OLLAMA_THINK=true.
+          think: setting("PITCH_OLLAMA_THINK", "false") === "true",
           // Same settings as the pipeline (pipeline/feedback.py): long prompts need the larger context.
           options: { temperature: 0, num_ctx: 8192 },
           messages: [{ role: "user", content: prompt }],
@@ -210,8 +278,14 @@ export async function askOllama(prompt: string, lang: Lang, schema: Record<strin
       throw new LlmError(t(lang, "ollamaUnreachable"), 502);
     }
     if (!response.ok) throw new LlmError(t(lang, "ollamaError", { status: response.status }), 502);
-    const payload = (await response.json()) as { message?: { content?: string } };
-    const reply = parseReply(jsonFrom(payload.message?.content ?? ""));
+    let content: string;
+    if (onText) {
+      onText("");
+      content = await readStream(response, onText);
+    } else {
+      content = ((await response.json()) as { message?: { content?: string } }).message?.content ?? "";
+    }
+    const reply = parseReply(jsonFrom(content));
     if (reply) return reply;
     if (attempt >= OLLAMA_TRIES) throw new LlmError(t(lang, "ollamaBadShape"), 502);
   }

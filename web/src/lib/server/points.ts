@@ -97,6 +97,11 @@ export function rulesCheck(points: string[], sentences: Sentence[]) {
   });
 }
 
+/** A quote without the "[3]" sentence numbers the prompt shows; models often copy them along. */
+export function cleanQuote(quote: unknown): string {
+  return squash(typeof quote === "string" ? quote.replace(/\[\d+\]/g, " ") : "");
+}
+
 /** True when `quote` appears word for word in the speech (case and punctuation ignored). */
 export function inSpeech(quote: string, sentences: Sentence[]): boolean {
   const words = tokens(quote).join(" ");
@@ -127,7 +132,7 @@ export function verifyPoints(
   const results: PointResult[] = points.map((text, i) => {
     const c = byPoint.get(i) ?? {};
     const status: Status = STATUSES.includes(c.status as Status) ? (c.status as Status) : "missed";
-    const evidence = squash(c.evidence);
+    const evidence = cleanQuote(c.evidence);
     const quoted = tokens(evidence).join(" ");
     const verified = status === "missed" || (quoted !== "" && transcript.includes(` ${quoted} `));
     if (verified) total += STATUS_VALUE[status];
