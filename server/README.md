@@ -20,23 +20,47 @@ ffmpeg is used from PATH, or from the `imageio-ffmpeg` package if it isn't insta
 
 ## Endpoints (`/api/v1`)
 
-| Method and path | Does | Errors |
-| --- | --- | --- |
-| `POST /sessions` | Body: `title, goal, audience, planned_s (30–900), pitch_type (startup/academic), group_id?`. Returns `{id, access_token}` | 422 |
-| `POST /sessions/{id}/audio` | Multipart `file`. WAV/MP3/M4A/WebM/OGG, 25 MB, 5 min. Converted to 16 kHz mono WAV. Returns `{duration_s, format}` | 400, 409, 413, 415 |
-| `POST /sessions/{id}/slides` | Multipart `file`. PDF/PPTX, 20 MB, 40 slides. Text extracted at once. Returns `{slide_count, image_only: [n]}` | 400, 409, 413, 415 |
-| `POST /sessions/{id}/analyze` | Body: `{feedback_backend?: claude, gemma4-ft, gemma4-base, rules}`. Returns 202 `{status, queue_position}` | 409 no audio / busy, 422 |
-| `GET /sessions/{id}/status` | `{status, stage, queue_position, error}` | |
-| `GET /sessions/{id}/report` | Scores, metrics, slide results, feedback, transcript | 409 not ready |
-| `GET /sessions/compare?a=&b=` | Before/after changes. Tokens in `X-Access-Token-A` and `X-Access-Token-B` | 404, 409 |
-| `DELETE /sessions/{id}` | Deletes rows and files | 409 while running |
-| `GET /health` | Which ASR, embeddings and default backend are configured | |
+There are no logins yet. The browser calls `POST /users` once, keeps the token, and sends it as `X-Access-Token` on every request. Projects (folders) belong to that user, and every analysis is an **attempt** (a session) inside a project. Anything owned by another user returns 404.
 
-**Auth:** send the session's token as `X-Access-Token`. A missing or wrong token gets 404.
+**Users and projects**
 
-**Errors:** every error is `{"code", "message"}`, and the message is written to show in the UI as is.
+| Method and path | Does |
+| --- | --- |
+| `POST /users` | Create an anonymous user. Returns `{id, access_token}` |
+| `GET /projects` | The user's projects, most recently used first, with `attempt_count` and `latest_overall` |
+| `POST /projects` | Body: `name, goal, audience, planned_s (30–900), pitch_type (startup/academic)`, all optional |
+| `GET /projects/{id}` | Project details, `attempts` (newest first) and `current` (slides and script the next attempt will reuse) |
+| `PATCH /projects/{id}` | Update any detail |
+| `DELETE /projects/{id}` | Delete the project, its attempts and files (409 while one is running) |
+| `POST /projects/{id}/sessions` | New attempt. Copies the project details, plus slides and script from the latest attempt unless `{"copy_inputs": false}` |
 
-**Status values:** `created → uploaded → processing → completed | failed`. While processing, `stage` is `transcribing, measuring, slides, feedback, scoring`. `queue_position` is 0 when running and n when n jobs are ahead.
+**Attempt inputs and uploads**
+
+| Method and path | Does |
+| --- | --- |
+| `POST /sessions/{id}/audio` | Multipart `file`. WAV/MP3/M4A/WebM/OGG, 25 MB, 5 min. Returns `{duration_s, format}` |
+| `POST /sessions/{id}/slides` | Multipart `file`. PDF/PPTX, 20 MB, 40 slides. Returns `{slide_count, image_only, filename}` |
+| `DELETE /sessions/{id}/slides` | Remove slides from this attempt |
+| `PUT /sessions/{id}/script` | Body `{text}`: what the speaker planned to say. Sent to the feedback model next to the transcript |
+| `GET /sessions/{id}/audio` | The uploaded recording, for playback |
+| `GET /sessions/{id}/slides` | Extracted text per slide and the file name |
+| `GET /sessions/{id}/slides/file` | The uploaded deck |
+| `GET /sessions/{id}/script` | The script |
+
+**Analysis**
+
+| Method and path | Does |
+| --- | --- |
+| `POST /sessions/{id}/analyze` | Body `{feedback_backend?: claude, gemma4-ft, gemma4-base, rules}`. Uses the project's current details. 202, or 409 without audio |
+| `GET /sessions/{id}/status` | `{status, stage, queue_position, error}` |
+| `GET /sessions/{id}/report` | Scores, metrics, slide results, feedback, transcript, script. 409 until completed |
+| `GET /sessions/compare?a=&b=` | Before and after for two of the user's attempts |
+| `DELETE /sessions/{id}` | Delete one attempt |
+| `GET /health` | Configured ASR, embeddings and default model |
+
+**Errors** are always `{"code", "message"}`, and the message is written to show in the UI as is. `status` goes `created → uploaded → processing → completed | failed`; while processing, `stage` is `transcribing, measuring, slides, feedback, scoring`.
+
+**Database changes:** there are no migrations yet. After pulling this version, delete `data/pitchcoach.db` (or drop the Supabase tables) so the new tables are created.
 
 ## Pipeline (`pipeline/`)
 

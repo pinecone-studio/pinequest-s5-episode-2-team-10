@@ -26,6 +26,7 @@ BACKENDS: tuple[str, ...] = ("claude", "gemma4-ft", "gemma4-base", "rules")
 PROMPT = (Path(__file__).parent / "prompts" / "feedback_v2.md").read_text(encoding="utf-8")
 MAX_RECOMMENDATIONS = 5
 SLIDE_WORDS = 60  # trim slide text so a 3-minute pitch plus 10 slides fits in 6144 tokens
+SCRIPT_WORDS = 600  # about 4 minutes of speech
 
 CRITERIA = {
     "startup": ["problem", "solution", "target_user", "value", "logical_order", "conclusion_cta"],
@@ -107,8 +108,11 @@ SCHEMA = _inline_refs(Feedback.model_json_schema())
 
 
 def build_input(session: dict, sentences: list[dict], metrics: dict, wording: dict, slides: list[dict], alignment: dict) -> dict:
+    info = {k: v for k, v in session.items() if k != "script"}
+    script = " ".join((session.get("script") or "").split()[:SCRIPT_WORDS])
     return {
-        "session": session,
+        "session": info,
+        "script": script or None,
         "criteria": CRITERIA.get(session.get("pitch_type", "startup"), CRITERIA["startup"]),
         "transcript": [{"id": i, **s} for i, s in enumerate(sentences)],
         "metrics": metrics,

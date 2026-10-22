@@ -15,8 +15,8 @@ class ApiError(Exception):
         self.status, self.code, self.message = status, code, message
 
 
-def not_found() -> ApiError:
-    return ApiError(404, "not_found", "Session not found.")
+def not_found(what: str = "Session") -> ApiError:
+    return ApiError(404, "not_found", f"{what} not found.")
 
 
 def _body(code: str, message: str) -> dict:
