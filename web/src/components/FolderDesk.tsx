@@ -14,40 +14,13 @@ import {
   type FolderMeta,
 } from "@/lib/folderStore";
 import { openPdf, paintPage, readSlideText } from "@/lib/slidePdf";
+import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 
-interface SpeechResultLike {
-  isFinal: boolean;
-  0: { transcript: string };
-}
+type Live = { stream: MediaStream; ctx: AudioContext };
 
-interface SpeechEventLike {
-  resultIndex: number;
-  results: ArrayLike<SpeechResultLike>;
-}
-
-interface SpeechRec {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((ev: SpeechEventLike) => void) | null;
-  onerror: ((ev: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-function getRecognizer(): SpeechRec | null {
-  const w = window as Window & {
-    SpeechRecognition?: new () => SpeechRec;
-    webkitSpeechRecognition?: new () => SpeechRec;
-  };
-  const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-  if (!Ctor) return null;
-  const rec = new Ctor();
-  rec.lang = "mn-MN";
-  rec.continuous = true;
-  rec.interimResults = true;
-  return rec;
+function closeLive(live: Live | null) {
+  live?.stream.getTracks().forEach((track) => track.stop());
+  void live?.ctx.close();
 }
 
 function formatClock(seconds: number) {
@@ -199,7 +172,10 @@ function FolderRoom({
   onChange: (folder: FolderMeta) => void;
 }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const recRef = useRef<SpeechRec | null>(null);
+  const recRef = useRef<PieceRecorder | null>(null);
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const takeBaseRef = useRef("");
+  const aliveRef = useRef(true);
   const playingRef = useRef(false);
   const sttGen = useRef(0);
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
@@ -207,7 +183,9 @@ function FolderRoom({
   const frameRef = useRef<HTMLDivElement | null>(null);
   const slideGen = useRef(0);
   const slideUrlRef = useRef<string | null>(null);
-  const liveRef = useRef<{ stream: MediaStream; ctx: AudioContext } | null>(null);
+  const liveRef = useRef<Live | null>(null);
+  const [pending, setPending] = useState(0);
+  const [fileBusy, setFileBusy] = useState(false);
 
   const [slideUrl, setSlideUrl] = useState<string | null>(null);
   const [slidePdf, setSlidePdf] = useState(false);
@@ -222,9 +200,7 @@ function FolderRoom({
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [finalText, setFinalText] = useState("");
-  const [interim, setInterim] = useState("");
   const textRef = useRef("");
-  const interimRef = useRef("");
   const [sttNote, setSttNote] = useState<string | null>(null);
   const [slideNote, setSlideNote] = useState<string | null>(null);
   const [full, setFull] = useState(false);
@@ -281,6 +257,7 @@ function FolderRoom({
   useEffect(() => {
     let audioObject: string | null = null;
     let cancelled = false;
+    aliveRef.current = true;
 
     (async () => {
       const [slide, audio] = await Promise.all([
@@ -311,10 +288,12 @@ function FolderRoom({
       if (slideUrlRef.current) URL.revokeObjectURL(slideUrlRef.current);
       slideUrlRef.current = null;
       if (audioObject) URL.revokeObjectURL(audioObject);
-      recRef.current?.stop();
+      aliveRef.current = false;
+      sttGen.current += 1;
+      playingRef.current = false;
+      void recRef.current?.stop();
       recRef.current = null;
-      liveRef.current?.stream.getTracks().forEach((track) => track.stop());
-      void liveRef.current?.ctx.close();
+      closeLive(liveRef.current);
       liveRef.current = null;
     };
     // loadSlide closes over stable setters; reload only when the folder changes.
@@ -325,8 +304,6 @@ function FolderRoom({
     const saved = loadSpeech(folder.id);
     textRef.current = saved ? `${saved} ` : "";
     setFinalText(textRef.current);
-    interimRef.current = "";
-    setInterim("");
   }, [folder.id]);
 
   useEffect(() => {
@@ -398,14 +375,6 @@ function FolderRoom({
     return () => window.removeEventListener("keydown", onKey);
   }, [pageCount]);
 
-  function releaseMic() {
-    const live = liveRef.current;
-    liveRef.current = null;
-    live?.stream.getTracks().forEach((track) => track.stop());
-    void live?.ctx.close();
-    setAnalyser(null);
-  }
-
   function writeSpeech(next: string) {
     const cleaned = next.replace(/\s+/g, " ").trim();
     textRef.current = cleaned ? `${cleaned} ` : "";
@@ -413,94 +382,130 @@ function FolderRoom({
     setFinalText(textRef.current);
   }
 
-  function stopStt() {
-    const pending = interimRef.current.trim();
-    sttGen.current += 1;
-    playingRef.current = false;
-    recRef.current?.stop();
-    recRef.current = null;
-    releaseMic();
-    setListening(false);
-    interimRef.current = "";
-    setInterim("");
-    if (pending) writeSpeech(`${textRef.current} ${pending}`);
+  /** Pieces are transcribed one after another so the text stays in speaking order. */
+  function queueTranscript(blob: Blob, name: string) {
+    setPending((n) => n + 1);
+    queueRef.current = queueRef.current.then(async () => {
+      try {
+        const reply = await transcribeBlob(blob, name);
+        if (aliveRef.current && reply.text.trim()) writeSpeech(`${textRef.current} ${reply.text}`);
+      } catch (err) {
+        if (aliveRef.current) setSttNote(err instanceof Error ? err.message : "Яриаг текст болгож чадсангүй.");
+      } finally {
+        if (aliveRef.current) setPending((n) => n - 1);
+      }
+    });
   }
 
-  function beginStt() {
+  /** Saves the whole take as the folder's audio, then replaces the live text with a full transcription. */
+  async function finishTake(take: Blob, extension: string, base: string, gen: number) {
+    if (take.size < 2_000) return; // shorter than a moment of sound
+    const name = `Бичлэг.${extension}`;
+    await putFolderBlob(audioKey(folder.id), take);
+    if (!aliveRef.current) return;
+    onChange({ ...folder, audioName: name });
+    setAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(take);
+    });
+    setTime(0);
+
+    // The live pieces were cut short; the whole take reads better with full context.
+    setFileBusy(true);
+    try {
+      await queueRef.current;
+      const reply = await transcribeBlob(take, name);
+      if (aliveRef.current && sttGen.current === gen && reply.text.trim()) writeSpeech(`${base} ${reply.text}`);
+    } catch {
+      /* keep the live text */
+    } finally {
+      if (aliveRef.current) setFileBusy(false);
+    }
+  }
+
+  function stopStt() {
+    sttGen.current += 1;
+    playingRef.current = false;
+    setListening(false);
+    setAnalyser(null);
+    const rec = recRef.current;
+    const live = liveRef.current;
+    recRef.current = null;
+    liveRef.current = null;
+    if (!rec) {
+      closeLive(live);
+      return;
+    }
+    const gen = sttGen.current;
+    const base = takeBaseRef.current;
+    void rec.stop().then((take) => {
+      closeLive(live);
+      if (take && aliveRef.current) void finishTake(take, rec.extension, base, gen);
+    });
+  }
+
+  async function beginStt() {
     stopStt();
     const mine = sttGen.current;
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setSttNote("Энэ хөтөч дуу бичихгүй. Chrome, Edge эсвэл Firefox дээр нээнэ үү.");
+      return;
+    }
     playingRef.current = true;
     setListening(true);
     setSttNote(null);
+    takeBaseRef.current = textRef.current;
     const ctx = new AudioContext();
     void ctx.resume();
-    navigator.mediaDevices
-      .getUserMedia({ audio: true })
-      .then((stream) => {
-        if (sttGen.current !== mine) {
-          stream.getTracks().forEach((track) => track.stop());
-          void ctx.close();
-          return;
-        }
-        const node = ctx.createAnalyser();
-        node.fftSize = 2048;
-        ctx.createMediaStreamSource(stream).connect(node);
-        liveRef.current = { stream, ctx };
-        setAnalyser(node);
-      })
-      .catch(() => {
-        void ctx.close();
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        // Call-style processing (noise suppression, auto gain) distorts speech for the speech model.
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
-    const rec = getRecognizer();
-    if (!rec) {
-      sttGen.current += 1;
-      playingRef.current = false;
-      setListening(false);
-      setSttNote("Энэ хөтөч яриаг текст болгохгүй. Chrome дээр нээнэ үү.");
-      return;
-    }
-    rec.onresult = (ev) => {
-      if (sttGen.current !== mine) return;
-      let done = "";
-      let live = "";
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const piece = ev.results[i][0].transcript;
-        if (ev.results[i].isFinal) done += piece + " ";
-        else live += piece;
-      }
-      if (done) writeSpeech(`${textRef.current} ${done}`);
-      interimRef.current = live;
-      setInterim(live);
-    };
-    rec.onerror = (ev) => {
-      if (sttGen.current !== mine) return;
-      if (ev.error === "not-allowed") {
-        sttGen.current += 1;
+    } catch {
+      void ctx.close();
+      if (sttGen.current === mine) {
         playingRef.current = false;
         setListening(false);
-        releaseMic();
         setSttNote("Микрофон хаагдсан. Зөвшөөрсний дараа Ярих дээр дахин дар.");
-      } else if (ev.error !== "aborted" && ev.error !== "no-speech") {
-        setSttNote("Яриаг текст болгож чадсангүй.");
       }
-    };
-    rec.onend = () => {
-      if (sttGen.current !== mine || !playingRef.current) return;
-      try {
-        rec.start();
-      } catch {
-        /* already running */
-      }
-    };
-    recRef.current = rec;
+      return;
+    }
+    if (sttGen.current !== mine) {
+      closeLive({ stream, ctx });
+      return;
+    }
+    const node = ctx.createAnalyser();
+    node.fftSize = 2048;
+    ctx.createMediaStreamSource(stream).connect(node);
+    liveRef.current = { stream, ctx };
+    setAnalyser(node);
+    const rec = new PieceRecorder(stream, node, queueTranscript);
     try {
       rec.start();
+      recRef.current = rec;
     } catch {
-      sttGen.current += 1;
-      playingRef.current = false;
-      setListening(false);
-      releaseMic();
-      setSttNote("Яриаг текст болгож эхлүүлж чадсангүй.");
+      stopStt();
+      setSttNote("Бичлэг эхлүүлж чадсангүй.");
+    }
+  }
+
+  /** Re-transcribes the whole saved audio file and replaces the text with it. */
+  async function transcribeAudioFile() {
+    const audio = await getFolderBlob(audioKey(folder.id));
+    if (!audio) return;
+    setFileBusy(true);
+    setSttNote(null);
+    try {
+      const reply = await transcribeBlob(audio, folder.audioName ?? "audio.webm");
+      if (!aliveRef.current) return;
+      if (reply.text.trim()) writeSpeech(reply.text);
+      else setSttNote("Аудиод яриа олдсонгүй.");
+    } catch (err) {
+      if (aliveRef.current) setSttNote(err instanceof Error ? err.message : "Яриаг текст болгож чадсангүй.");
+    } finally {
+      if (aliveRef.current) setFileBusy(false);
     }
   }
 
@@ -524,11 +529,11 @@ function FolderRoom({
 
   function toggleSpeak() {
     if (playingRef.current) stopStt();
-    else beginStt();
+    else void beginStt();
   }
 
   async function sendToModel() {
-    const speech = `${textRef.current}${interimRef.current}`.trim();
+    const speech = textRef.current.trim();
     setProbing(true);
     setProbeNote(null);
     setProbeResult(null);
@@ -563,7 +568,11 @@ function FolderRoom({
         setProbeNote(payload.error || "LLM рүү илгээж чадсангүй.");
         return;
       }
-      setProbeResult({ summary: payload.summary, points: payload.points, received: payload.received });
+      setProbeResult({
+        summary: payload.summary,
+        points: payload.points,
+        received: payload.received,
+      });
     } catch {
       setProbeNote("LLM рүү илгээж чадсангүй.");
     } finally {
@@ -574,16 +583,11 @@ function FolderRoom({
   function toggleAudio() {
     const el = audioRef.current;
     if (!el) return;
-    if (el.paused) {
-      beginStt();
-      void el.play();
-    } else {
-      el.pause();
-      stopStt();
-    }
+    if (el.paused) void el.play();
+    else el.pause();
   }
 
-  const spoken = `${finalText}${interim}`.trim();
+  const spoken = finalText.trim();
   function speakButton() {
     return (
       <button type="button" className={listening ? "desk-ghost" : "desk-primary"} onClick={toggleSpeak}>
@@ -687,13 +691,38 @@ function FolderRoom({
           </div>
           <aside className="desk-speech">
             <h2>Ярианы текст</h2>
-            <p className="desk-sub">
-              {listening ? "Сонсож байна" : spoken ? "Яриа хадгалагдсан" : "Ярих дээр дараад ярь"}
+            <p className="desk-sub" aria-live="polite">
+              {listening
+                ? "Сонсож байна. Түр зогсох бүрт текст нэмэгдэнэ."
+                : pending > 0 || fileBusy
+                  ? "Текст болгож байна"
+                  : spoken
+                    ? "Яриа хадгалагдсан"
+                    : "Ярих дээр дараад ярь"}
             </p>
-            <p>
-              {spoken || <span className="desk-missing">Хоосон</span>}
+            <p className="desk-transcript">
+              {spoken || (pending === 0 && <span className="desk-missing">Хоосон</span>)}
+              {pending > 0 && <span className="desk-missing"> …</span>}
             </p>
             {sttNote && <p className="desk-note">{sttNote}</p>}
+            <div className="desk-speech-tools">
+              <button
+                type="button"
+                className="desk-link"
+                disabled={!folder.audioName || fileBusy || listening}
+                onClick={() => void transcribeAudioFile()}
+              >
+                {fileBusy ? "Аудиог текст болгож байна" : "Аудиогоос дахин бичих"}
+              </button>
+              <button
+                type="button"
+                className="desk-link"
+                disabled={!spoken || listening}
+                onClick={() => writeSpeech("")}
+              >
+                Текст арилгах
+              </button>
+            </div>
             <div className="desk-probe">
               <button
                 type="button"
@@ -746,7 +775,7 @@ function FolderRoom({
           className="hidden"
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
-          onEnded={() => stopStt()}
+          onEnded={() => setPlaying(false)}
           onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         />
