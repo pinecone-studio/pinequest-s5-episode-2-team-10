@@ -262,6 +262,10 @@ def _rules(data: dict) -> dict:
         recs.append(("delivery", f"Минутанд {m['wpm']:.0f} үг хэлсэн нь удаан байна.", "Өгүүлбэр хоорондын завсарлагыг богиносго.", "medium"))
     if w.get("fillers_per_100") and w["fillers_per_100"] > 2:
         recs.append(("delivery", f"100 үг тутамд {w['fillers_per_100']} дүүргэгч үг хэлсэн.", "Дүүргэгч үгийн оронд чимээгүй завсарла.", "high"))
+    point_checks = points.rules_check([p["text"] for p in data["pitch"]["key_points"]], data["transcript"])
+    for c in [c for c in point_checks if c["status"] != "covered"][:2]:
+        text = data["pitch"]["key_points"][c["point"]]["text"]
+        recs.append(("content", f"Гол санаа ярианд тод сонсогдсонгүй: «{text}».", "Энэ санааг нэг тодорхой өгүүлбэрээр, баримт эсвэл жишээтэй хэл.", "high"))
     missed = [a["slide"] for a in data["alignment"] if a["status"] == "missed"]
     if missed:
         recs.append(("slides", f"{', '.join(map(str, missed))}-р слайдын агуулгыг яриандаа хэлээгүй.", "Слайд бүрийн гол санааг нэг өгүүлбэрээр хэл.", "high"))
@@ -282,7 +286,7 @@ def _rules(data: dict) -> dict:
         # Without a model, every listed filler counts.
         "filler_occurrences": data["filler_candidates"],
         # Without a model, main points are matched by key words.
-        "point_checks": points.rules_check([p["text"] for p in data["pitch"]["key_points"]], data["transcript"]),
+        "point_checks": point_checks,
         "off_topic": [],
         "idea_comment": "",
     }
@@ -338,5 +342,6 @@ def _sanitize(fb: dict, data: dict, filler_method: str = "llm") -> dict:
     fb["main_points"] = points.verify(
         fb["point_checks"], [p["text"] for p in data["pitch"]["key_points"]], sentences,
         fb["off_topic"], fb["idea_comment"], "words" if filler_method == "list" else "llm",
+        idea=data["pitch"]["idea"] or "",
     )
     return fb

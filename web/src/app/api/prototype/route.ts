@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { langOf, t } from "@/lib/i18n";
-import { askClaude, askOllama, isProtoModel, LlmError, rulesReply, type Point } from "@/lib/server/llm";
-import { cleanPoints, MAX_POINTS, rulesCheck, toSentences, verifyPoints, type MainPoints } from "@/lib/server/points";
+import {
+  askClaude,
+  askOllama,
+  isProtoModel,
+  LlmError,
+  replySchema,
+  rulesReply,
+  type Improvement,
+  type ModelReply,
+} from "@/lib/server/llm";
+import { cleanPoints, inSpeech, MAX_POINTS, rulesCheck, toSentences, verifyPoints, type MainPoints } from "@/lib/server/points";
 
 const MAX_TEXT = 20_000;
 const MAX_IDEA = 500;
@@ -10,7 +19,9 @@ const MAX_IMAGE = 4 * 1024 * 1024;
 
 type Reply = {
   summary: string;
-  points: Point[];
+  strengths: string[];
+  // Most important first. `quote` is kept only when it is really in the speech.
+  improvements: Improvement[];
   model: string;
   mainPoints: MainPoints | null;
   received: { text: boolean; audio: string | null; slide: string | null };
@@ -99,14 +110,31 @@ export async function POST(request: Request) {
           "- status: covered (clearly made), partial (vague or incomplete), missed (not said or only implied).",
           "- evidence: the exact words from the speech that make the point, copied from one sentence or consecutive sentences; empty when missed. Every quote is checked against the speech.",
           "- note: one short sentence on what was missing, or empty.",
-          "Also list sentences that serve neither the idea nor any main point as off_topic, and say in idea_comment how well the speech got the idea across.",
+          "off_topic: only sentences that have nothing to do with this pitch at all (its problem, solution, team, customers or business).",
+          "A sentence about the team, experience, customers or money is on topic even if it is not a main point. Most pitches have none or one.",
+          "reason: why it is off topic, in your own words; do not repeat the sentence.",
+          "idea_comment: how well the speech as a whole got the idea across.",
           "",
         ]
       : []),
+    "What to return:",
+    "- summary: 2-3 sentences on the most important things to change.",
+    "- strengths: 1-3 specific things the speaker did well.",
+    "- improvements: 3-5 things to improve, most important first. For each:",
+    "  title: a short name for the problem; why: what in the speech shows it and why it matters to the audience;",
+    "  action: one concrete thing to do next time; example: a sentence the speaker could say instead, keeping their meaning",
+    "  and adding no new facts or numbers; quote: the exact words from the speech where the problem shows, or empty.",
+    ...(checkPoints ? ["  Include main points that were missed or only partly made."] : []),
+    "Look at structure (opening, problem, solution, ask), clarity, missing evidence or numbers, a missing call to action,",
+    "off-topic parts, fillers and repetition. Do not judge the voice, confidence or emotion.",
+    "",
     "Reply with JSON only:",
     JSON.stringify({
       summary: `2-3 sentences in ${language}`,
-      points: [{ title: "short", detail: "one concrete note" }],
+      strengths: ["specific strength"],
+      improvements: [
+        { title: "short", why: "what shows it and why it matters", action: "what to do", example: "a better sentence", quote: "exact words or empty" },
+      ],
       ...(checkPoints
         ? {
             point_checks: [{ point: 0, status: "covered | partial | missed", evidence: "exact quote", note: "" }],
@@ -115,41 +143,38 @@ export async function POST(request: Request) {
           }
         : {}),
     }),
-    `At most 3 points. Each detail must stay within what the transcript or slide text actually says. Write all text in ${language}.`,
+    `Write all text in ${language}. Use only what the speech and slide text say; never invent quotes or numbers.`,
   ].join("\n");
 
   try {
-    let reply: { summary: string; points: Point[]; raw?: Record<string, unknown> };
+    let reply: ModelReply;
+    let mainPoints: MainPoints | null = null;
     if (model === "rules") {
-      reply = rulesReply(text, slideText, lang);
-    } else if (model === "ollama") {
-      reply = await askOllama(prompt, lang);
+      if (checkPoints) mainPoints = verifyPoints(rulesCheck(keyPoints, sentences), keyPoints, sentences, [], "", "words");
+      reply = rulesReply(text, slideText, lang, mainPoints?.points ?? []);
     } else {
-      let image: { mediaType: string; data: string } | null = null;
-      if (slideImage && slideImage.type.startsWith("image/") && slideImage.size <= MAX_IMAGE) {
-        image = {
-          mediaType: slideImage.type === "image/png" ? "image/png" : "image/jpeg",
-          data: Buffer.from(await slideImage.arrayBuffer()).toString("base64"),
-        };
+      if (model === "ollama") {
+        reply = await askOllama(prompt, lang, replySchema(checkPoints));
+      } else {
+        let image: { mediaType: string; data: string } | null = null;
+        if (slideImage && slideImage.type.startsWith("image/") && slideImage.size <= MAX_IMAGE) {
+          image = {
+            mediaType: slideImage.type === "image/png" ? "image/png" : "image/jpeg",
+            data: Buffer.from(await slideImage.arrayBuffer()).toString("base64"),
+          };
+        }
+        reply = await askClaude(prompt, image, lang);
       }
-      reply = await askClaude(prompt, image, lang);
+      if (checkPoints) {
+        mainPoints = verifyPoints(
+          reply.raw.point_checks, keyPoints, sentences, reply.raw.off_topic, reply.raw.idea_comment, "llm", idea,
+        );
+      }
     }
 
-    let mainPoints: MainPoints | null = null;
-    if (checkPoints) {
-      mainPoints =
-        model === "rules"
-          ? verifyPoints(rulesCheck(keyPoints, sentences), keyPoints, sentences, [], "", "words")
-          : verifyPoints(
-              reply.raw?.point_checks,
-              keyPoints,
-              sentences,
-              reply.raw?.off_topic,
-              reply.raw?.idea_comment,
-              "llm",
-            );
-    }
-    const body: Reply = { summary: reply.summary, points: reply.points, model, mainPoints, received };
+    // A quote the model made up is dropped; the advice itself stays.
+    const improvements = reply.improvements.map((i) => (i.quote && !inSpeech(i.quote, sentences) ? { ...i, quote: "" } : i));
+    const body: Reply = { summary: reply.summary, strengths: reply.strengths, improvements, model, mainPoints, received };
     return NextResponse.json(body);
   } catch (err) {
     if (err instanceof LlmError) return jsonError(err.message, err.status);

@@ -135,3 +135,19 @@ def test_rules_backend_fills_main_points():
 def test_without_points_report_has_empty_main_points():
     mp = feedback.generate("rules", _data(key_points=[], idea=""))["main_points"]
     assert mp["points"] == [] and mp["coverage"] is None and mp["idea_comment"] == ""
+
+
+def test_rules_backend_recommends_missed_points():
+    recs = feedback.generate("rules", _data())["recommendations"]
+    assert any(r["area"] == "content" and POINTS[2] in r["problem"] for r in recs)
+
+
+def test_off_topic_reason_that_repeats_the_sentence_is_dropped():
+    r = _verify([], off_topic=[{"sentence_id": 2, "reason": SENTENCES[2]["text"]}])
+    assert r["off_topic"][0]["reason"] == ""
+
+
+def test_off_topic_flag_is_dropped_when_sentence_relates_to_a_point():
+    # Sentence 1 shares "апп" and "минут" with main point 1, so it is not off topic.
+    r = _verify([], off_topic=[{"sentence_id": 1, "reason": "x"}, {"sentence_id": 2, "reason": "y"}])
+    assert [o["sentence_id"] for o in r["off_topic"]] == [2]

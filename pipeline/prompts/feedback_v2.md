@@ -22,7 +22,7 @@ What to return:
 - `recommendations`: at most 5, most important first. Each has `area` (structure, content, delivery, slides, accuracy or timing), the `problem`, `why` it matters to this audience, an `action`, an `example_sentence` the speaker could say instead (in Mongolian), and `impact` (high, medium, low). `start_s` must be the `start` of a transcript sentence where the problem happens, or null. `slide` must be a slide number from the input, or null.
 
 - `point_checks`: one entry per item in `pitch.key_points`, in order. See "Main points" below.
-- `off_topic`: sentences that do not serve the pitch idea or any main point, as `sentence_id` and a short `reason`. Empty when everything is on topic or there is no idea or main points.
+- `off_topic`: only sentences that have nothing to do with this pitch at all (its problem, solution, team, customers or business), as `sentence_id` and a short `reason` in your own words (do not repeat the sentence). A sentence about the team, experience, customers or money is on topic even if it is not a main point. Most pitches have none or one. Empty when there is no idea or main points.
 - `idea_comment`: one or two sentences on how well the speech as a whole got the pitch idea across, or an empty string when `pitch.idea` is null.
 - `filler_occurrences`: every filler word or hesitation the speaker used, one entry per occurrence, as the `sentence_id` and the `word` exactly as written in that sentence (lowercase is fine). See "Filler words" below.
 
@@ -42,6 +42,7 @@ Main points:
 - `note` is one short sentence on what was missing or how to make the point land, or empty when covered well.
 - Judge meaning, not wording: a paraphrase that makes the same point is covered. Do not count a point as covered because a single shared word appears.
 - Coverage scores are computed in code from these statuses; do not give a number.
+- A main point that is `missed` or `partial` is usually worth a recommendation (area `content`), unless more important problems fill all five.
 
 Content score anchors:
 - 90 to 100: clear, specific, supported by a fact or example, and easy for this audience to follow.

@@ -18,6 +18,7 @@ import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import DevTests from "./DevTests";
 import LangToggle from "./LangToggle";
+import ImprovementList, { type Improvement } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
 
@@ -217,7 +218,8 @@ function FolderRoom({
   const [probeNote, setProbeNote] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<{
     summary: string;
-    points: { title: string; detail: string }[];
+    strengths: string[];
+    improvements: Improvement[];
     model: string;
     mainPoints: MainPointsResult | null;
     received: { text: boolean; audio: string | null; slide: string | null };
@@ -590,18 +592,20 @@ function FolderRoom({
       const payload = (await res.json()) as {
         error?: string;
         summary?: string;
-        points?: { title: string; detail: string }[];
+        strengths?: string[];
+        improvements?: Improvement[];
         model?: string;
         mainPoints?: MainPointsResult | null;
         received?: { text: boolean; audio: string | null; slide: string | null };
       };
-      if (!res.ok || !payload.summary || !payload.points || !payload.received) {
+      if (!res.ok || !payload.summary || !payload.improvements || !payload.received) {
         setProbeNote(payload.error || tr("sendFail"));
         return;
       }
       setProbeResult({
         summary: payload.summary,
-        points: payload.points,
+        strengths: payload.strengths ?? [],
+        improvements: payload.improvements,
         model: payload.model ?? model,
         mainPoints: payload.mainPoints ?? null,
         received: payload.received,
@@ -776,16 +780,7 @@ function FolderRoom({
                     {probeResult.received.slide ? ` · ${tr("slide")} ${probeResult.received.slide}` : ""}
                   </p>
                   <h3>{probeResult.summary}</h3>
-                  {probeResult.points.length > 0 && (
-                    <ul>
-                      {probeResult.points.map((point) => (
-                        <li key={point.title}>
-                          <strong>{point.title}</strong>
-                          {point.detail}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <ImprovementList strengths={probeResult.strengths} improvements={probeResult.improvements} />
                   {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} />}
                 </>
               )}
