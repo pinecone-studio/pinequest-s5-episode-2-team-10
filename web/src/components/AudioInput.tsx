@@ -146,7 +146,10 @@ export default function AudioInput({
             type="file"
             accept={ACCEPT}
             className="sr-only"
-            onChange={(e) => handleFile(e.target.files?.[0])}
+            onChange={(e) => {
+              handleFile(e.target.files?.[0]);
+              e.target.value = ""; // so picking the same file again still fires
+            }}
           />
         </label>
       ) : (

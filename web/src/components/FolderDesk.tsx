@@ -100,8 +100,8 @@ export default function FolderDesk() {
             <h1 className="text-2xl font-semibold">Хавтаснууд</h1>
             <p className="mt-1 text-sm text-zinc-500">Figma слайд, аудио, ярианы текст нэг дор.</p>
           </div>
-          <Link href="/pitch" className="text-sm text-zinc-500 underline">
-            Pitch шинжлэх
+          <Link href="/" className="text-sm text-zinc-500 underline">
+            Төслүүд
           </Link>
         </header>
 

@@ -14,11 +14,11 @@ export default function ModelPicker({
 
   return (
     <div className="space-y-2">
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2">
         {MODEL_OPTIONS.map((m) => (
           <label
             key={m.id}
-            className={`flex cursor-pointer flex-col gap-1 rounded-lg border p-3 text-sm ${
+            className={`flex cursor-pointer items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm ${
               value === m.id
                 ? "border-zinc-900 ring-1 ring-zinc-900 dark:border-zinc-100 dark:ring-zinc-100"
                 : "border-zinc-300 hover:border-zinc-400 dark:border-zinc-700"
@@ -32,10 +32,12 @@ export default function ModelPicker({
               onChange={() => onChange(m.id)}
               className="sr-only"
             />
-            <span className="font-medium">{m.name}</span>
-            <span className="text-zinc-500">{m.detail}</span>
+            <span className="min-w-0">
+              <span className="block font-medium">{m.name}</span>
+              <span className="block text-zinc-500">{m.detail}</span>
+            </span>
             <span
-              className={`mt-1 w-fit rounded px-1.5 py-0.5 text-xs ${
+              className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${
                 m.runsLocally
                   ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
                   : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
