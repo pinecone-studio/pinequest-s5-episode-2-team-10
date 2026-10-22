@@ -19,10 +19,11 @@ export class LlmError extends Error {
 }
 
 function fromEnvFiles(key: string): string {
-  const files = [".env.local", ".env", path.join("..", ".env")].map((f) => path.join(process.cwd(), f));
+  // Local development only; a host like Vercel provides process.env, so the build doesn't trace these.
+  const files = [".env.local", ".env", path.join("..", ".env")].map((f) => path.join(/*turbopackIgnore: true*/ process.cwd(), f));
   for (const file of files) {
     try {
-      const line = readFileSync(file, "utf8")
+      const line = readFileSync(/*turbopackIgnore: true*/ file, "utf8")
         .split(/\r?\n/)
         .find((row) => row.startsWith(`${key}=`));
       const value = line?.slice(key.length + 1).trim().replace(/^["']|["']$/g, "");
@@ -40,13 +41,19 @@ function setting(key: string, fallback = "") {
 
 const ollamaUrl = () => setting("OLLAMA_URL", "http://localhost:11434").replace(/\/+$/, "");
 const ollamaModel = () => setting("PITCH_OLLAMA_MODEL_BASE", "gemma4:e4b");
+// When Ollama is reached through the voice server's /v1/ollama route (a deployed app calling the
+// GPU PC), that route needs the voice server token. Local Ollama ignores the header.
+const ollamaHeaders = (json = false): Record<string, string> => {
+  const token = setting("OLLAMA_TOKEN");
+  return { ...(json ? { "content-type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+};
 const claudeModel = () => setting("PITCH_CLAUDE_MODEL", "claude-opus-5-5");
 
 export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
   const claudeKey = Boolean(setting("ANTHROPIC_API_KEY"));
   let ollama: { available: boolean; reason: string | null };
   try {
-    const res = await fetch(`${ollamaUrl()}/api/tags`, { signal: AbortSignal.timeout(2_000), cache: "no-store" });
+    const res = await fetch(`${ollamaUrl()}/api/tags`, { signal: AbortSignal.timeout(5_000), cache: "no-store", headers: ollamaHeaders() });
     const body = (await res.json()) as { models?: { name?: string }[] };
     const names = (body.models ?? []).map((m) => m.name ?? "");
     const want = ollamaModel();
@@ -226,7 +233,7 @@ const keepAlive = () => {
 /** Loads the model into memory without generating anything, if it isn't loaded already. */
 export async function warmOllama(): Promise<void> {
   try {
-    const ps = (await (await fetch(`${ollamaUrl()}/api/ps`, { signal: AbortSignal.timeout(2_000) })).json()) as {
+    const ps = (await (await fetch(`${ollamaUrl()}/api/ps`, { signal: AbortSignal.timeout(5_000), headers: ollamaHeaders() })).json()) as {
       models?: { name?: string }[];
     };
     const want = ollamaModel();
@@ -234,7 +241,7 @@ export async function warmOllama(): Promise<void> {
     // An empty prompt only loads the model. Not awaited by callers; errors are ignored.
     await fetch(`${ollamaUrl()}/api/generate`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: ollamaHeaders(true),
       body: JSON.stringify({ model: want, prompt: "", keep_alive: keepAlive() }),
     });
   } catch {
@@ -284,7 +291,7 @@ export async function askOllama(
       response = await fetch(`${ollamaUrl()}/api/chat`, {
         method: "POST",
         signal: AbortSignal.timeout(240_000),
-        headers: { "content-type": "application/json" },
+        headers: ollamaHeaders(true),
         body: JSON.stringify({
           model: ollamaModel(),
           stream: Boolean(onText),

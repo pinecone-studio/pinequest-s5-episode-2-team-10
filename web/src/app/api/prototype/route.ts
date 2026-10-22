@@ -26,6 +26,9 @@ import {
   type OffTopic,
 } from "@/lib/server/points";
 
+// Vercel stops a function after its time limit; Gemma can take ~30 s and the backend choice is called directly.
+export const maxDuration = 60; // the most every Vercel plan allows
+
 const MAX_TEXT = 20_000;
 const MAX_IDEA = 500;
 const MAX_FILE = 12 * 1024 * 1024;
@@ -99,8 +102,9 @@ export async function POST(request: Request) {
 
   const received = {
     text: Boolean(text),
-    audio: audio ? audio.name || "audio" : null,
-    slide: slide?.name || (slideImage ? "current-slide.jpg" : null),
+    // The page sends only the file names; Vercel rejects request bodies over 4.5 MB.
+    audio: audio ? audio.name || "audio" : clip(String(form.get("audioName") ?? ""), 200) || null,
+    slide: slide?.name || clip(String(form.get("slideName") ?? ""), 200) || (slideImage ? "current-slide.jpg" : null),
   };
 
   const sentences = toSentences(text);

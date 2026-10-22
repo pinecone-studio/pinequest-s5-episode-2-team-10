@@ -638,8 +638,9 @@ function FolderRoom({
       body.set("model", model);
       body.set("idea", folder.idea ?? "");
       body.set("keyPoints", JSON.stringify((folder.keyPoints ?? []).filter((p) => p.trim())));
-      if (audio) body.set("audio", audio, folder.audioName ?? "audio");
-      if (slide) body.set("slide", slide, folder.slideName ?? "slide");
+      // Names only: the route needs the text, and hosts like Vercel reject bodies over 4.5 MB.
+      if (audio) body.set("audioName", folder.audioName ?? "audio");
+      if (slide) body.set("slideName", folder.slideName ?? "slide");
       if (slideImage) body.set("slideImage", slideImage, "current-slide.jpg");
       // Streamed: the summary and list fill in while the model writes; the checked reply replaces them.
       const payload = await streamModelReply(

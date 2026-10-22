@@ -86,3 +86,32 @@ It starts the voice server, the FastAPI backend (full analysis with local Gemma 
 ## Remote access to this PC
 
 `scripts\setup-remote-ssh.ps1` (run once in an administrator PowerShell) sets up SSH with key login only, reachable only through Tailscale, and turns off sleep while plugged in. Windows 11 Home has no Remote Desktop host, so SSH is the way in; for a screen, use Chrome Remote Desktop. From the laptop: `ssh <user>@<tailscale address>`, or VS Code's Remote-SSH to edit and run code here.
+
+## Using this PC from the deployed site (Vercel + Railway)
+
+The deployed apps can't reach `localhost`, so this PC is published with Tailscale Funnel at a fixed HTTPS address (it survives restarts):
+
+| Public path | Goes to | Protected by |
+| --- | --- | --- |
+| `https://ddd5.tail9b3d3b.ts.net/` | FastAPI backend (8000) | nothing: anyone with the link can use it |
+| `https://ddd5.tail9b3d3b.ts.net/voice` | voice server (8001) | `VOICE_SERVER_TOKEN` |
+| `https://ddd5.tail9b3d3b.ts.net/voice/v1/ollama` | Ollama (Gemma), through the voice server | `VOICE_SERVER_TOKEN` |
+
+Set up once (administrator not needed): `tailscale funnel --bg 8000` and `tailscale funnel --bg --set-path /voice http://127.0.0.1:8001`. Run them from PowerShell; Git Bash rewrites `/voice` into a Windows path.
+
+**Vercel** (Project → Settings → Environment Variables, then redeploy):
+
+| Variable | Value |
+| --- | --- |
+| `NEXT_PUBLIC_API_URL` | `https://ddd5.tail9b3d3b.ts.net` (this PC's backend; or the Railway URL, see below) |
+| `PITCH_VOICE_URL` | `https://ddd5.tail9b3d3b.ts.net/voice` |
+| `PITCH_VOICE_TOKEN` | the `VOICE_SERVER_TOKEN` from `.env.voice` on this PC |
+| `OLLAMA_URL` | `https://ddd5.tail9b3d3b.ts.net/voice/v1/ollama` |
+| `OLLAMA_TOKEN` | the same token |
+| `PITCH_OLLAMA_MODEL_BASE` | `gemma4:e4b` |
+
+PowerPoint conversion needs LibreOffice, which Vercel doesn't have: on the deployed site, upload slides as PDF.
+
+**Railway**, only if `NEXT_PUBLIC_API_URL` points at Railway instead of this PC: `PITCH_ASR=remote`, `PITCH_VOICE_URL`, `PITCH_VOICE_TOKEN`, `OLLAMA_URL`, `OLLAMA_TOKEN` as above, and `PITCH_DEFAULT_BACKEND=gemma4-base`.
+
+When the demo is over: `tailscale funnel reset`.

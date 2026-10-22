@@ -29,11 +29,11 @@ export class VoiceError extends Error {
 /** Reads KEY=value from env files: web/.env.local, web/.env, then the repo's .env.voice and .env. */
 function fromEnvFiles(key: string): string {
   const files = [".env.local", ".env", path.join("..", ".env.voice"), path.join("..", ".env")].map((f) =>
-    path.join(process.cwd(), f),
+    path.join(/*turbopackIgnore: true*/ process.cwd(), f), // local development only; hosts provide process.env
   );
   for (const file of files) {
     try {
-      const line = readFileSync(file, "utf8")
+      const line = readFileSync(/*turbopackIgnore: true*/ file, "utf8")
         .split(/\r?\n/)
         .map((row) => row.trim()) // trim also drops the byte-order mark PowerShell writes
         .find((row) => row.startsWith(`${key}=`));
