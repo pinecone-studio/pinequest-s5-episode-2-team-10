@@ -1,4 +1,4 @@
-# Pitchly Database Design
+# Saylo Database Design
 
 This is a proposed MVP schema. Adapt field types and naming to the selected ORM and provider.
 

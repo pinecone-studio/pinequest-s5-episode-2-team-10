@@ -2,7 +2,7 @@
 
 ## Project context
 
-Pitchly is a speaking-practice MVP. A user uploads audio, the app transcribes speech, analyzes the transcript, and displays evidence-based feedback and practice tasks.
+Saylo is a speaking-practice MVP. A user uploads audio, the app transcribes speech, analyzes the transcript, and displays evidence-based feedback and practice tasks.
 
 Read `README.md`, `PRD.md`, `TECHNICAL_DESIGN.md`, and `AI_PIPELINE.md` before making broad changes.
 

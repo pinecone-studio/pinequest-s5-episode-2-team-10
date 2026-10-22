@@ -1,4 +1,4 @@
-# Pitchly API Contract
+# Saylo API Contract
 
 The following REST endpoints are a proposed MVP contract. They are not implemented endpoints yet. Choose consistent response envelopes and authentication behavior before coding.
 

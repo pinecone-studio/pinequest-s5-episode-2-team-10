@@ -1,4 +1,4 @@
-# Pitchly MVP Task Plan
+# Saylo MVP Task Plan
 
 ## Workstreams
 

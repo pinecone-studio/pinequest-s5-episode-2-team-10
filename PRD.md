@@ -1,8 +1,8 @@
-# Pitchly Product Requirements Document
+# Saylo Product Requirements Document
 
 ## 1. Product summary
 
-Pitchly helps people improve the clarity and structure of their spoken presentations. The user uploads a recording and receives transcript-based feedback they can act on immediately.
+Saylo helps people improve the clarity and structure of their spoken presentations. The user uploads a recording and receives transcript-based feedback they can act on immediately.
 
 ## 2. Problem
 
@@ -17,7 +17,7 @@ People practicing a pitch often do not notice repeated words, filler words, ramb
 
 ## 4. MVP user journey
 
-1. Open Pitchly.
+1. Open Saylo.
 2. Upload an audio file and confirm that they have permission to process it.
 3. See processing status.
 4. Read or correct the transcript if transcript editing is supported in the first release.

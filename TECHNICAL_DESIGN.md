@@ -1,4 +1,4 @@
-# Pitchly Technical Design
+# Saylo Technical Design
 
 ## 1. Architecture
 

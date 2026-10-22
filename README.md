@@ -1,6 +1,6 @@
-# Pitchly
+# Saylo
 
-Pitchly is an AI-assisted speaking practice tool. A user uploads a short recording, receives a transcript, reviews actionable feedback about wording and delivery-related language patterns, and practices an improved version.
+Saylo is an AI-assisted speaking practice tool. A user uploads a short recording, receives a transcript, reviews actionable feedback about wording and delivery-related language patterns, and practices an improved version.
 
 ## MVP goals
 

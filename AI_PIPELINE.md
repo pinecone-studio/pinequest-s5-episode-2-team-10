@@ -1,4 +1,4 @@
-# Pitchly AI Pipeline
+# Saylo AI Pipeline
 
 ## Goal
 
