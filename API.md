@@ -1,87 +1,86 @@
 # Saylo API Contract
 
-The following REST endpoints are a proposed MVP contract. They are not implemented endpoints yet. Choose consistent response envelopes and authentication behavior before coding.
+Implemented by the FastAPI server in `backend/main.py`. All paths are under `/api/v1`. Interactive docs run at `/docs` on the API server.
 
 ## Common rules
 
-- Use JSON for ordinary request/response bodies.
-- Use multipart form data for audio upload.
-- Authenticate requests if accounts are enabled.
-- Verify that the requester owns the recording before returning, reprocessing, or deleting it.
-- Return safe error messages; never expose API keys or raw provider exceptions.
+- JSON bodies, except uploads, which are `multipart/form-data` with one `file` field.
+- Identity: the browser calls `POST /users` once and sends the token as `X-Access-Token` on every other request. A missing or unknown token returns `401`.
+- Ownership is checked on every project and attempt; anything owned by another user returns `404`, so IDs can't be probed.
+- Errors always use this shape, with a message safe to show the user:
 
-## Endpoints
+```json
+{ "code": "no_audio", "message": "Upload or record audio first." }
+```
 
-### `POST /api/recordings`
-Upload an audio recording.
+## Users and projects
 
-Request: `multipart/form-data`
-- `file`: audio file
+| Method and path | Does | Response |
+| --- | --- | --- |
+| `POST /users` | Create an anonymous user | `201 {id, access_token}` |
+| `GET /projects` | The user's projects, most recently used first | `[{id, name, goal, audience, planned_s, pitch_type, created_at, updated_at, attempt_count, latest_overall, processing}]` |
+| `POST /projects` | Create a project; every field optional (`name, goal, audience, planned_s 30–900, pitch_type startup/academic`) | `201` project with `attempts` and `current` |
+| `GET /projects/{id}` | Project, `attempts` (newest first), and `current` = slides and script the next attempt will reuse | project |
+| `PATCH /projects/{id}` | Update any detail | project |
+| `DELETE /projects/{id}` | Delete the project, attempts, and files | `204`; `409` while an attempt is running |
+| `POST /projects/{id}/sessions` | New attempt; copies slides and script from the latest attempt unless `{"copy_inputs": false}` | `201` attempt |
 
-Response `201`:
+## Attempt inputs and uploads
+
+| Method and path | Does | Errors |
+| --- | --- | --- |
+| `POST /sessions/{id}/audio` | WAV, MP3, M4A, WebM or OGG; 25 MB; 3 s to 5 min. Returns `{duration_s, format}` | `400` unreadable, `409` busy, `413` too large or long, `415` format |
+| `POST /sessions/{id}/slides` | PDF or PPTX; 20 MB; 40 slides. Returns `{slide_count, image_only, filename}` | `400`, `409`, `413`, `415` |
+| `DELETE /sessions/{id}/slides` | Remove slides from this attempt | `409` busy |
+| `PUT /sessions/{id}/script` | `{text}` up to 20,000 characters. Returns `{words}` | `409` busy |
+| `GET /sessions/{id}/audio` | The recording as uploaded | `404` |
+| `GET /sessions/{id}/slides` | `{filename, slides: [{number, text, notes, image_only}]}` | |
+| `GET /sessions/{id}/slides/file` | The uploaded deck | `404` |
+| `GET /sessions/{id}/script` | `{text}` | |
+
+## Analysis
+
+| Method and path | Does | Response |
+| --- | --- | --- |
+| `POST /sessions/{id}/analyze` | `{feedback_backend?}`: `claude`, `gemma4-ft`, `gemma4-base`, `rules` (default from `PITCH_DEFAULT_BACKEND`). Uses the project's current details | `202 {status, queue_position}`; `409` without audio or while running; `422` unknown model |
+| `GET /sessions/{id}/status` | `{status, stage, queue_position, error}` | |
+| `GET /sessions/{id}/report` | The report (below) | `409` until completed |
+| `GET /sessions/compare?a=&b=` | Changes in scores and metrics between two of the user's attempts | `{a, b, changes: {field: {a, b, delta}}}` |
+| `DELETE /sessions/{id}` | Delete one attempt | `204`; `409` while running |
+| `GET /health` | Configured speech-to-text, embeddings, and default model | |
+
+### Report
+
 ```json
 {
-  "id": "recording_id",
-  "status": "UPLOADED"
+  "session_id": "…", "project_id": "…", "title": "…",
+  "overall": 72, "content": 68, "delivery": 61, "slide_alignment": 75, "timing": 90,
+  "categories_used": 4,
+  "delivery_parts": { "pace": 80, "fillers": 63, "pauses": 100, "pitch_range": 40, "volume_end": 100 },
+  "metrics": { "duration_s": 182.4, "wpm": 142.2, "fillers_per_100": 2.86, "long_pauses_per_min": 0.3, "pitch_range_st": 5.1, "end_volume_drop_db": 2.0 },
+  "wording": { "word_count": 412, "filler_total": 12, "list_filler_total": 14, "repeats": 3, "…": "…" },
+  "slide_results": { "method": "e5", "coverage": 0.75, "slides": ["…"], "number_candidates": ["…"] },
+  "feedback": {
+    "summary": "…", "strengths": ["…"],
+    "content_scores": [{ "criterion": "problem", "score": 80, "evidence": "exact quote", "recommendation": "…" }],
+    "slide_feedback": [{ "slide": 3, "status": "missed", "comment": "…" }],
+    "number_checks": [{ "slide": 4, "on_slide": "25%", "said": "гучин хувь", "inconsistent": true }],
+    "recommendations": [{ "area": "structure", "problem": "…", "start_s": 84.2, "slide": 5, "why": "…", "action": "…", "example_sentence": "…", "impact": "high" }],
+    "filler_occurrences": [{ "sentence_id": 1, "word": "ээ" }],
+    "fillers": {
+      "method": "llm", "total": 12, "per_100": 2.91, "model_reported": 13, "note": null,
+      "words": [{ "word": "ээ", "count": 7, "evidence": ["…"], "occurrences": [{ "sentence_id": 1, "start_s": 3.1 }] }]
+    }
+  },
+  "transcript": { "text": "…", "sentences": [{ "text": "…", "start": 0.0, "end": 2.8 }] },
+  "script": "…", "slides_filename": "deck.pptx",
+  "backend": "claude", "asr_backend": "whisper", "prompt_version": "v2.1-fillers",
+  "notes": [], "created_at": "2026-10-22T03:51:46+00:00"
 }
 ```
 
-Possible errors: `400` invalid input, `413` file too large, `415` unsupported format, `401` unauthenticated, `500` storage failure.
+Category scores are `null` when there is no data (for example no slides); `overall` is then reweighted over the categories that exist, and `categories_used` says how many.
 
-### `POST /api/recordings/:id/transcribe`
-Start transcription, or retry it if the previous attempt failed.
+## Changing the contract
 
-Response `202`:
-```json
-{
-  "recordingId": "recording_id",
-  "status": "TRANSCRIBING"
-}
-```
-
-### `POST /api/recordings/:id/analyze`
-Analyze an available transcript.
-
-Response `202`:
-```json
-{
-  "recordingId": "recording_id",
-  "status": "ANALYZING"
-}
-```
-
-Return `409` if no transcript exists yet or the recording is in an incompatible state.
-
-### `GET /api/recordings/:id`
-Return recording metadata and current processing status. Do not return private storage credentials.
-
-### `GET /api/recordings/:id/analysis`
-Return the latest completed analysis for the recording.
-
-### `GET /api/recordings`
-Return the authenticated user's recording history, paginated.
-
-### `DELETE /api/recordings/:id`
-Delete the recording and associated transcript/analysis data and schedule or perform deletion of the audio object.
-
-Response `204` on success.
-
-## Error response format
-
-Use one consistent format, for example:
-```json
-{
-  "error": {
-    "code": "UNSUPPORTED_AUDIO_FORMAT",
-    "message": "This audio format is not supported."
-  }
-}
-```
-
-## Implementation notes
-
-- Validate path parameters, payloads, and provider output.
-- Set upload limits and request timeouts.
-- Use background processing for slow transcription/analysis when needed.
-- Add idempotency or state checks to avoid duplicate work.
-- Document exact status codes and pagination fields when implementing.
+Update this file, `server/README.md`, and `web/src/lib/types.ts` together with the code.

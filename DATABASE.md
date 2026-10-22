@@ -1,66 +1,78 @@
 # Saylo Database Design
 
-This is a proposed MVP schema. Adapt field types and naming to the selected ORM and provider.
+The database is **PostgreSQL on Supabase** in hosted setups and SQLite for local development. Tables are defined with SQLModel in `backend/db.py` and created on server startup. There are no migrations yet: after a schema change, drop the tables (or delete `data/pitchcoach.db`) and restart.
 
-## Entities
+## Tables
 
-### User
-- `id`: primary key
-- `email`: unique, nullable only if anonymous use is deliberately supported
-- `createdAt`
-- `updatedAt`
+### `app_user`
+Anonymous user; the browser keeps the token.
+- `id`: UUID primary key
+- `token_hash`: SHA-256 of the access token (unique, indexed); the token itself is never stored
+- `created_at`
 
-### Recording
-- `id`: primary key
-- `userId`: foreign key to User, nullable only if anonymous sessions are supported
-- `originalFileName`
-- `storageKey`: private object-storage key, not a public URL
-- `mimeType`
-- `fileSizeBytes`
-- `durationSeconds`
-- `status`: enum such as `UPLOADED`, `TRANSCRIBING`, `TRANSCRIBED`, `ANALYZING`, `COMPLETED`, `FAILED`
-- `errorCode`: nullable, safe internal code
-- `createdAt`
-- `updatedAt`
-- `deletedAt`: nullable, if soft deletion is used
+### `project`
+A folder for one pitch.
+- `id`: UUID primary key
+- `user_id` → `app_user.id` (indexed)
+- `name`, `goal`, `audience`
+- `planned_s`: planned length in seconds (30–900)
+- `pitch_type`: `startup` or `academic`
+- `created_at`, `updated_at` (updated on every new attempt or analysis)
 
-### Transcript
-- `id`: primary key
-- `recordingId`: foreign key to Recording
-- `text`
-- `languageCode`: nullable if not reliably detected
-- `provider`
-- `providerModel`: nullable
-- `createdAt`
+### `session`
+One attempt inside a project. Project details are copied in when it is analyzed, so history stays accurate.
+- `id`: UUID primary key
+- `project_id` → `project.id` (indexed)
+- `title`, `goal`, `audience`, `planned_s`, `pitch_type`: copied from the project
+- `script`: planned script (optional)
+- `slides_filename`: original name of the uploaded deck
+- `status`: `created`, `uploaded`, `processing`, `completed`, `failed`
+- `stage`: `transcribing`, `measuring`, `slides`, `feedback`, `scoring` while processing
+- `error`: user-readable failure message
+- `feedback_backend`: `claude`, `gemma4-ft`, `gemma4-base`, or `rules`
+- `created_at`
 
-### Analysis
-- `id`: primary key
-- `recordingId`: foreign key to Recording
-- `transcriptId`: foreign key to Transcript
-- `overallScore`: integer from 0 to 100
-- `categoryScores`: JSON or normalized child rows
-- `feedback`: validated JSON matching the analysis contract
-- `modelProvider`
-- `modelName`
-- `promptVersion`
-- `createdAt`
+### `audio_asset`
+- `session_id` → `session.id` (primary key)
+- `path`: converted 16 kHz WAV used by the pipeline
+- `original_path`: the file as uploaded, for playback
+- `duration_s`, `format`
+
+### `slide`
+- `id` primary key; `session_id` → `session.id` (indexed)
+- `number`, `text`, `notes`, `image_only`
+- `numbers`, `key_terms`: JSON arrays used for slide matching
+
+### `transcript`
+- `session_id` → `session.id` (primary key)
+- `text`, `sentences` (JSON: text, start, end), `words` (JSON: word, start, end), `language`
+
+### `analysis_report`
+- `session_id` → `session.id` (primary key; one report per attempt)
+- `overall`, `content`, `delivery`, `slide_alignment`, `timing`: integers 0–100 or null when a category has no data
+- `metrics`: JSON (duration, pace, pauses, pitch range, volume drop, fillers per 100 words)
+- `slide_results`: JSON from slide matching
+- `feedback`: validated LLM output, including `fillers`
+- `extra`: JSON (categories used, delivery sub-scores, wording checks, notes, speech-to-text backend, prompt version)
+- `backend`: which feedback model wrote it
+- `created_at`
 
 ## Relationships
 
-- A User can own many Recordings.
-- A Recording can have one or more Transcript versions if re-transcription is supported.
-- A Recording can have one or more Analysis versions if re-analysis is supported.
-- Each Analysis references the Transcript version it analyzed.
+- An `app_user` owns many projects; a project has many attempts (`session`).
+- Each attempt has at most one audio asset, transcript, and report, and any number of slides.
+- Deleting a project deletes its attempts, their rows, and their files on disk.
 
-## Constraints and indexes
+## Supabase setup
 
-- Index `Recording(userId, createdAt)`.
-- Index `Recording(status, updatedAt)` for processing/retry workflows.
-- Foreign keys must enforce ownership relationships.
-- Validate score ranges at the application layer and, where appropriate, in the database.
-- Do not store public audio URLs as the source of truth; store a private storage key.
-- Ensure delete operations remove or schedule deletion of audio and associated records according to the retention policy.
+1. Create a Supabase project and copy the **session pooler** connection string (Project Settings → Database, port 5432). The transaction pooler (6543) also works.
+2. Set `PITCH_DB_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres` on the API server.
+3. Start the API. It creates the tables and turns on **row-level security** on each one, so Supabase's public REST API (anon key) cannot read them. The API connects as the table owner and is not affected.
 
-## Privacy
+The web app never talks to Supabase directly; all access goes through FastAPI, which checks ownership on every query.
 
-Document the retention policy before launch. Delete audio and transcript data when the user requests deletion, subject to clearly disclosed operational backups and legal requirements. Restrict access by user ownership on every query.
+## Privacy and retention
+
+- Projects are kept until the user deletes them (`PITCH_RETENTION_DAYS=0`). Setting a number of days deletes projects untouched for that long at startup.
+- Audio, slides, and scripts live on the API server's disk under `data/sessions/`, not in Supabase. Moving them to private Supabase Storage is planned.
+- Access tokens are stored only as hashes.

@@ -1,6 +1,6 @@
 # Heavy models for the demo machine (RTX 4060). Install after requirements.txt.
 -r requirements.txt
 torch
-transformers
+transformers>=4.45,<5  # 5.x breaks BuzzASR's language setting with timestamps
 accelerate
 sentence-transformers
