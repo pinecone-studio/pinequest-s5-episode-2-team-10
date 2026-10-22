@@ -161,22 +161,29 @@ body {
   inset: 0;
   z-index: 50;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding: 24px;
   background: #000000;
 }
 
 .desk-full .desk-slide {
-  width: min(calc(100vw - 48px), calc((100vh - 140px) * 16 / 9));
+  /* Fill the viewport. Controls sit on the slide so they do not shrink it. */
+  width: min(100vw, calc(100vh * 16 / 9));
+  max-height: 100vh;
+  border-radius: 0;
 }
 
 .desk-full-bar {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  transform: translateX(-50%);
 }
 
 .desk-panel {
@@ -379,8 +386,33 @@ body {
   white-space: pre-wrap;
 }
 
-.desk-missing {
-  color: var(--faint);
+.desk-probe {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+
+.desk-probe h3 {
+  margin: 12px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.desk-probe p,
+.desk-probe li {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.desk-probe ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.desk-probe li strong {
+  display: block;
 }
 
 .desk-live {
