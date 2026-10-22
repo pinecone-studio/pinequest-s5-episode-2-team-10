@@ -1,0 +1,115 @@
+"use client";
+
+import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { isProtoModel, parseModelStatuses, type ModelStatus, type ProtoModel } from "@/lib/feedbackModels";
+
+const STORAGE_KEY = "pitchcoach:feedback-model";
+
+// The choice lives in memory and is copied to localStorage when storage is allowed.
+const listeners = new Set<() => void>();
+let current: ProtoModel | null = null;
+
+function snapshot(): ProtoModel {
+  if (current) return current;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    current = isProtoModel(saved) ? saved : "rules";
+  } catch {
+    current = "rules"; // storage blocked
+  }
+  return current;
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+function choose(next: ProtoModel) {
+  current = next;
+  try {
+    localStorage.setItem(STORAGE_KEY, next);
+  } catch {
+    /* storage blocked; the choice lasts until reload */
+  }
+  listeners.forEach((l) => l());
+}
+
+/** The chosen feedback model, remembered in this browser. */
+export function useFeedbackModel(): [ProtoModel, (m: ProtoModel) => void] {
+  const model = useSyncExternalStore(subscribe, snapshot, () => "rules" as ProtoModel);
+  return [model, choose];
+}
+
+export async function fetchModelStatuses(): Promise<ModelStatus[]> {
+  const res = await fetch("/api/models", { cache: "no-store" });
+  const parsed = parseModelStatuses(await res.json().catch(() => null));
+  if (!res.ok || !parsed) throw new Error("Загваруудын төлөвийг уншиж чадсангүй.");
+  return parsed;
+}
+
+export default function FeedbackModelSelect({
+  value,
+  onChange,
+}: {
+  value: ProtoModel;
+  onChange: (m: ProtoModel) => void;
+}) {
+  const id = useId();
+  const [models, setModels] = useState<ModelStatus[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchModelStatuses()
+      .then((list) => !cancelled && setModels(list))
+      .catch((err: Error) => !cancelled && setError(err.message));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // If the saved choice isn't usable on this machine, fall back to the first one that is.
+  useEffect(() => {
+    if (!models) return;
+    const current = models.find((m) => m.id === value);
+    if (current?.available) return;
+    const first = models.find((m) => m.available);
+    if (first) onChange(first.id);
+  }, [models, value, onChange]);
+
+  const selected = models?.find((m) => m.id === value);
+
+  return (
+    <div className="desk-model">
+      <label htmlFor={id}>Загвар</label>
+      <select
+        id={id}
+        className="desk-field"
+        value={value}
+        disabled={!models}
+        onChange={(e) => isProtoModel(e.target.value) && onChange(e.target.value)}
+      >
+        {(models ?? []).map((m) => (
+          <option key={m.id} value={m.id} disabled={!m.available}>
+            {m.name}
+            {m.local ? ` · энэ PC` : ` · cloud`}
+            {m.available ? "" : ` (боломжгүй)`}
+          </option>
+        ))}
+        {!models && <option value={value}>Ачаалж байна…</option>}
+      </select>
+      {error && <p className="desk-note">{error}</p>}
+      {selected && !selected.local && (
+        <p className="desk-sub">Текст, слайд Anthropic-ийн API руу илгээгдэнэ.</p>
+      )}
+      {models
+        ?.filter((m) => !m.available && m.reason)
+        .map((m) => (
+          <p key={m.id} className="desk-sub">
+            {m.name}: {m.reason}
+          </p>
+        ))}
+    </div>
+  );
+}

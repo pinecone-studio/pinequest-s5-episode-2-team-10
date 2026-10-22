@@ -469,3 +469,20 @@ body {
     overflow: auto;
   }
 }
+
+.desk-model {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.desk-model label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.desk-model .desk-sub,
+.desk-model .desk-note {
+  margin: 0;
+  font-size: 12px;
+}
