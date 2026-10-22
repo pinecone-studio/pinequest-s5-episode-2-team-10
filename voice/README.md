@@ -73,3 +73,16 @@ Quick check on public Common Voice clips (6 sentences, 35 s): 42 of 47 words rig
 RTX 4060. This is not an evaluation; measure on our own recordings as `TESTING.md` describes.
 
 The server logs only durations and word counts, never transcripts or audio.
+
+## Running a demo on this PC
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\demo.ps1          # start or restart everything, then check it
+powershell -ExecutionPolicy Bypass -File scripts\demo.ps1 -Stop    # stop it
+```
+
+It starts the voice server, the FastAPI backend (full analysis with local Gemma by default; `-FeedbackModel rules` for no LLM), the web app and Ollama if needed, checks each one, and pre-loads Gemma. Logs are in `data\demo-logs`. Add `-Tunnel` for a public voice-server URL.
+
+## Remote access to this PC
+
+`scripts\setup-remote-ssh.ps1` (run once in an administrator PowerShell) sets up SSH with key login only, reachable only through Tailscale, and turns off sleep while plugged in. Windows 11 Home has no Remote Desktop host, so SSH is the way in; for a screen, use Chrome Remote Desktop. From the laptop: `ssh <user>@<tailscale address>`, or VS Code's Remote-SSH to edit and run code here.
