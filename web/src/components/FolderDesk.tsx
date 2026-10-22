@@ -59,11 +59,10 @@ export default function FolderDesk() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [naming, setNaming] = useState(false);
   const [draft, setDraft] = useState("");
+  const [slideFile, setSlideFile] = useState<File | null>(null);
 
   useEffect(() => {
-    const list = loadFolders();
-    setFolders(list);
-    setOpenId(list.find((f) => f.name === "figma tdd")?.id ?? null);
+    setFolders(loadFolders());
     setReady(true);
   }, []);
 
@@ -72,18 +71,20 @@ export default function FolderDesk() {
     saveFolders(next);
   }
 
-  function createFolder(e: React.FormEvent) {
+  async function createFolder(e: React.FormEvent) {
     e.preventDefault();
     const name = draft.trim();
-    if (!name) return;
+    if (!name || !slideFile) return;
     const folder: FolderMeta = {
       id: crypto.randomUUID(),
       name,
-      slideName: null,
+      slideName: slideFile.name,
       audioName: null,
     };
+    await putFolderBlob(slideKey(folder.id), slideFile);
     persist([folder, ...folders]);
     setDraft("");
+    setSlideFile(null);
     setNaming(false);
     setOpenId(folder.id);
   }
@@ -106,16 +107,36 @@ export default function FolderDesk() {
         </header>
 
         {naming ? (
-          <form onSubmit={createFolder} className="mb-6 flex gap-2">
-            <input
-              autoFocus
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="figma tdd"
-              className="w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
-            />
-            <button type="submit" className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900">
-              Үүсгэх
+          <form onSubmit={createFolder} className="mb-6 space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+            <label className="block space-y-1 text-sm">
+              <span>Хавтасны нэр</span>
+              <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder="figma tdd"
+                className="w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
+              />
+            </label>
+            <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm dark:border-zinc-700">
+              <span>
+                <span className="block font-medium">Слайд</span>
+                <span className="text-zinc-500">{slideFile ? slideFile.name : "TDD слайдаа оруул"}</span>
+              </span>
+              <span className="text-zinc-500 underline">{slideFile ? "Солих" : "Оруулах"}</span>
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                className="sr-only"
+                onChange={(e) => setSlideFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={!draft.trim() || !slideFile}
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+            >
+              Үүсгээд орох
             </button>
           </form>
         ) : (
@@ -173,6 +194,7 @@ function FolderRoom({
   const [slidePdf, setSlidePdf] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [listening, setListening] = useState(false);
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [finalText, setFinalText] = useState("");
@@ -218,6 +240,7 @@ function FolderRoom({
     playingRef.current = false;
     recRef.current?.stop();
     recRef.current = null;
+    setListening(false);
     setInterim("");
   }
 
@@ -225,9 +248,12 @@ function FolderRoom({
     stopStt();
     const mine = sttGen.current;
     playingRef.current = true;
+    setListening(true);
     setSttNote(null);
     const rec = getRecognizer();
     if (!rec) {
+      playingRef.current = false;
+      setListening(false);
       setSttNote("Энэ хөтөч яриаг текст болгохгүй. Chrome дээр нээнэ үү.");
       return;
     }
@@ -245,8 +271,13 @@ function FolderRoom({
     };
     rec.onerror = (ev) => {
       if (sttGen.current !== mine) return;
-      if (ev.error === "not-allowed") setSttNote("Микрофон хаагдсан. Зөвшөөрсний дараа аудиог дахин дар.");
-      else if (ev.error !== "aborted" && ev.error !== "no-speech") setSttNote("Яриаг текст болгож чадсангүй.");
+      if (ev.error === "not-allowed") {
+        playingRef.current = false;
+        setListening(false);
+        setSttNote("Микрофон хаагдсан. Зөвшөөрсний дараа Ярих дээр дахин дар.");
+      } else if (ev.error !== "aborted" && ev.error !== "no-speech") {
+        setSttNote("Яриаг текст болгож чадсангүй.");
+      }
     };
     rec.onend = () => {
       if (sttGen.current !== mine || !playingRef.current) return;
@@ -260,6 +291,8 @@ function FolderRoom({
     try {
       rec.start();
     } catch {
+      playingRef.current = false;
+      setListening(false);
       setSttNote("Яриаг текст болгож эхлүүлж чадсангүй.");
     }
   }
@@ -286,6 +319,11 @@ function FolderRoom({
     setTime(0);
     setFinalText("");
     setInterim("");
+  }
+
+  function toggleSpeak() {
+    if (playingRef.current) stopStt();
+    else beginStt();
   }
 
   function toggleAudio() {
@@ -336,6 +374,27 @@ function FolderRoom({
               <input type="file" accept="image/*" className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
             </label>
           )}
+
+          <button
+            type="button"
+            onClick={toggleSpeak}
+            className="flex w-full items-center gap-3 rounded-xl border border-zinc-200 px-3 py-3 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+          >
+            <span
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white ${
+                listening ? "bg-red-600" : "bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900"
+              }`}
+              aria-hidden
+            >
+              {listening ? <span className="h-3 w-3 rounded-sm bg-white" /> : <span className="h-3.5 w-3.5 rounded-full bg-red-500" />}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">{listening ? "Зогсоох" : "Ярих"}</span>
+              <span className="text-xs text-zinc-500">
+                {listening ? "Сонсож байна. Ярихад баруун талд бичигдэнэ." : "Файл хэрэггүй. Дарж ярь."}
+              </span>
+            </span>
+          </button>
 
           {audioUrl ? (
             <button
@@ -408,7 +467,7 @@ function FolderRoom({
         <aside className="min-h-64 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
           <h2 className="text-sm font-medium">Ярианы текст</h2>
           <p className="mt-1 text-xs text-zinc-500">
-            {playing ? "Сонсож байна" : "Аудиог дармагц энд гарна"}
+            {listening ? "Сонсож байна" : "Ярих дээр дараад ярь"}
           </p>
           <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed">
             {spoken || <span className="text-zinc-400">Хоосон</span>}
