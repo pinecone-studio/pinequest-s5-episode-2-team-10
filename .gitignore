@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Server data (sessions, SQLite)
+data/
+.env
+
+# Node (web/ lives on another branch)
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo

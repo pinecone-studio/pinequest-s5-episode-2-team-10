@@ -1,0 +1,6 @@
+# Heavy models for the demo machine (RTX 4060). Install after requirements.txt.
+-r requirements.txt
+torch
+transformers
+accelerate
+sentence-transformers
