@@ -1,8 +1,24 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #000000;
+  --foreground: #ffffff;
+  --ground: #000000;
+  --surface: #111111;
+  --raised: #2a2a2a;
+  --border: #1a1a1a;
+  --rule: #161616;
+  --control: #444444;
+  --text: #ffffff;
+  --muted: #b4b4b4;
+  --faint: #949494;
+  --accent: #5b8def;
+  --positive: #5b8def;
+  --negative: #e5566f;
+  --primary: #ffffff;
+  --radius-card: 20px;
+  --gap: 14px;
+  /* 1150 = 6×180 + 5×14. Slide is 4 columns (762). Transcript is 2 (374). */
 }
 
 @theme inline {
@@ -10,15 +26,394 @@
   --color-foreground: var(--foreground);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background: var(--ground);
+  color: var(--text);
+  font-family: var(--font-inter), "Inter", system-ui, sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+.desk {
+  min-height: 100vh;
+  background: var(--ground);
+  color: var(--text);
+}
+
+.desk-col {
+  width: min(1150px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 0 0 40px;
+}
+
+.desk-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.desk-bar svg {
+  color: var(--accent);
+}
+
+.desk-title {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 28px 0 24px;
+}
+
+.desk h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.desk-sub {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.desk-primary,
+.desk-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.desk-primary {
+  border: 0;
+  background: var(--primary);
+  color: #111111;
+}
+
+.desk-primary:hover {
+  background: #e8e8e8;
+}
+
+.desk-ghost:hover:not(:disabled) {
+  border-color: var(--text);
+}
+
+.desk-primary:focus-visible,
+.desk-ghost:focus-visible,
+.desk-back:focus-visible,
+.desk-row:focus-visible,
+.desk-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.desk-primary:disabled {
+  opacity: 0.4;
+}
+
+.desk-ghost {
+  border: 1px solid var(--control);
+  background: transparent;
+  color: var(--text);
+}
+
+.desk-ghost:disabled {
+  opacity: 0.4;
+}
+
+.desk-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  margin-bottom: 12px;
+  padding: 0 14px 0 10px;
+  border: 1px solid var(--control);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.desk-back:hover {
+  border-color: var(--text);
+}
+
+.desk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 16px;
+}
+
+.desk-full {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  background: #000000;
+}
+
+.desk-full .desk-slide {
+  width: min(calc(100vw - 48px), calc((100vh - 140px) * 16 / 9));
+}
+
+.desk-full-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.desk-panel {
+  margin-bottom: 14px;
+  padding: 22px;
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.desk-panel label {
+  display: block;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.desk-panel label > span:first-child {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.desk-file span {
+  margin: 0;
+}
+
+.desk-panel input[type="text"],
+.desk-field {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--control);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+
+.desk-panel input[type="text"]::placeholder {
+  color: var(--faint);
+}
+
+.desk-file {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px dashed var(--control);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.desk-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.desk-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 72px;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.desk-list li:last-child .desk-row {
+  border-bottom: 1px solid var(--rule);
+}
+
+.desk-row:hover {
+  background: var(--surface);
+}
+
+.desk-row strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.desk-row em {
+  display: block;
+  margin-top: 2px;
+  color: var(--faint);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.desk-empty {
+  padding: 22px;
+  border: 1px dashed var(--control);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.desk-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.desk-slide {
+  overflow: hidden;
+  border-radius: 20px;
+  background: #ffffff;
+}
+
+.desk-slide canvas,
+.desk-slide img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.desk-slide-empty {
+  display: flex;
+  min-height: 280px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px dashed var(--control);
+  border-radius: 20px;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.desk-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.desk-pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.desk-count {
+  min-width: 64px;
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.desk-link {
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.desk-note {
+  margin: 8px 0 0;
+  color: var(--negative);
+  font-size: 14px;
+}
+
+.desk-speech {
+  display: flex;
+  min-height: 280px;
+  flex-direction: column;
+  padding: 22px;
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.desk-speech h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.desk-speech .desk-sub {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.desk-speech p:last-child {
+  margin: 16px 0 0;
+  font-size: 14px;
+  line-height: 22px;
+  white-space: pre-wrap;
+}
+
+.desk-missing {
+  color: var(--faint);
+}
+
+.desk-live {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.desk-live p {
+  margin: 2px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.desk-rec {
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: var(--negative);
+}
+
+@media (min-width: 900px) {
+  .desk-stage {
+    grid-template-columns: minmax(0, 762fr) minmax(280px, 374fr);
+  }
+
+  .desk-speech {
+    position: sticky;
+    top: 14px;
+    max-height: calc(100vh - 28px);
+    overflow: auto;
+  }
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
@@ -102,79 +101,80 @@ export default function FolderDesk() {
 
   const open = folders.find((f) => f.id === openId) ?? null;
 
-  if (!ready) return <main className="mx-auto w-full max-w-5xl px-4 py-10" />;
+  if (!ready) return <div className="desk" />;
 
   if (!open) {
     return (
-      <main className="mx-auto w-full max-w-3xl px-4 py-10">
-        <header className="mb-8 flex items-end justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">Хавтаснууд</h1>
-            <p className="mt-1 text-sm text-zinc-500">Figma слайд, аудио, ярианы текст нэг дор.</p>
+      <div className="desk">
+        <div className="desk-col">
+          <div className="desk-bar">
+            <WaveMark />
+            <span>Pitch Coach</span>
           </div>
-          <Link href="/" className="text-sm text-zinc-500 underline">
-            Төслүүд
-          </Link>
-        </header>
-
-        {naming ? (
-          <form onSubmit={createFolder} className="mb-6 space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-            <label className="block space-y-1 text-sm">
-              <span>Хавтасны нэр</span>
-              <input
-                autoFocus
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="figma tdd"
-                className="w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100"
-              />
-            </label>
-            <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm dark:border-zinc-700">
-              <span>
-                <span className="block font-medium">Слайд</span>
-                <span className="text-zinc-500">{slideFile ? slideFile.name : "TDD слайдаа оруул"}</span>
-              </span>
-              <span className="text-zinc-500 underline">{slideFile ? "Солих" : "Оруулах"}</span>
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                className="sr-only"
-                onChange={(e) => setSlideFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={!draft.trim() || !slideFile}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
-            >
-              Үүсгээд орох
-            </button>
-          </form>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setNaming(true)}
-            className="mb-6 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
-          >
-            Хавтас нэмэх
-          </button>
-        )}
-
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {folders.map((folder) => (
-            <li key={folder.id}>
-              <button
-                type="button"
-                onClick={() => setOpenId(folder.id)}
-                className="flex w-full items-center gap-3 rounded-xl border border-zinc-200 px-4 py-4 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-              >
-                <FolderMark />
-                <span className="font-medium">{folder.name}</span>
+          <div className="desk-title">
+            <div>
+              <h1>Хавтаснууд</h1>
+              <p className="desk-sub">
+                {folders.length === 0 ? "Одоогоор хавтас алга." : `${folders.length} хавтас.`}
+              </p>
+            </div>
+            {!naming && (
+              <button type="button" className="desk-primary" onClick={() => setNaming(true)}>
+                Хавтас нэмэх
               </button>
-            </li>
-          ))}
-        </ul>
-      </main>
+            )}
+          </div>
+
+          {naming && (
+            <form onSubmit={createFolder} className="desk-panel">
+              <label>
+                <span>Хавтасны нэр</span>
+                <input
+                  type="text"
+                  autoFocus
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  placeholder="figma tdd"
+                />
+              </label>
+              <label>
+                <span>Слайд</span>
+                <span className="desk-file">
+                  <span>{slideFile ? slideFile.name : "TDD слайдаа оруул"}</span>
+                  <span>{slideFile ? "Солих" : "Оруулах"}</span>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="sr-only"
+                    onChange={(e) => setSlideFile(e.target.files?.[0] ?? null)}
+                  />
+                </span>
+              </label>
+              <button type="submit" className="desk-primary" disabled={!draft.trim() || !slideFile}>
+                Үүсгээд орох
+              </button>
+            </form>
+          )}
+
+          {folders.length === 0 ? (
+            <p className="desk-empty">Хавтас алга. Нэр өгөөд слайдаа оруул.</p>
+          ) : (
+            <ul className="desk-list">
+              {folders.map((folder) => (
+                <li key={folder.id}>
+                  <button type="button" className="desk-row" onClick={() => setOpenId(folder.id)}>
+                    <FolderMark />
+                    <span>
+                      <strong>{folder.name}</strong>
+                      <em>{folder.slideName ?? "Слайд оруулаагүй"}</em>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     );
   }
 
@@ -223,6 +223,7 @@ function FolderRoom({
   const [interim, setInterim] = useState("");
   const [sttNote, setSttNote] = useState<string | null>(null);
   const [slideNote, setSlideNote] = useState<string | null>(null);
+  const [full, setFull] = useState(false);
 
   function rememberUrl(next: string | null) {
     if (slideUrlRef.current) URL.revokeObjectURL(slideUrlRef.current);
@@ -348,10 +349,23 @@ function FolderRoom({
       ro.disconnect();
       window.clearTimeout(timer);
     };
-  }, [page, pdfEpoch, slidePdf]);
+  }, [page, pdfEpoch, slidePdf, full]);
+
+  useEffect(() => {
+    if (!full) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [full]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setFull(false);
+        return;
+      }
       if (pageCount < 2) return;
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
       const tag = (e.target as HTMLElement | null)?.tagName;
@@ -498,138 +512,165 @@ function FolderRoom({
   }
 
   const spoken = `${finalText}${interim}`.trim();
+  function speakButton() {
+    return (
+      <button type="button" className={listening ? "desk-ghost" : "desk-primary"} onClick={toggleSpeak}>
+        {listening && <span className="desk-rec" aria-hidden />}
+        {listening ? "Зогсоох" : "Ярих"}
+      </button>
+    );
+  }
+  function pageButtons() {
+    if (pageCount < 2) return null;
+    return (
+      <>
+        <button type="button" className="desk-ghost" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+          Өмнөх
+        </button>
+        <span className="desk-count">
+          {page} / {pageCount}
+        </span>
+        <button
+          type="button"
+          className="desk-ghost"
+          disabled={page >= pageCount}
+          onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+        >
+          Дараах
+        </button>
+      </>
+    );
+  }
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8">
-      <div className="mb-6 flex items-center gap-3">
-        <button type="button" onClick={onBack} className="text-sm text-zinc-500 underline">
-          ← Хавтаснууд
-        </button>
-        <h1 className="text-xl font-semibold">{folder.name}</h1>
-      </div>
-
-      <div className="grid items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div>
-          {slidePdf ? (
-            <div ref={frameRef} className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800">
-              <canvas ref={canvasRef} width={1920} height={1080} className="block h-auto w-full bg-white" />
-            </div>
-          ) : slideUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={slideUrl} alt={folder.slideName ?? "Figma слайд"} className="max-h-[36rem] w-full rounded-xl border border-zinc-200 bg-zinc-50 object-contain dark:border-zinc-800 dark:bg-zinc-900" />
-          ) : (
-            <label className="flex min-h-80 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-zinc-300 text-sm text-zinc-500 dark:border-zinc-700">
-              <span className="font-medium text-zinc-800 dark:text-zinc-200">Figma слайд</span>
-              Зураг оруулах
-              <input
-                type="file"
-                accept="image/*,.pdf"
-                className="sr-only"
-                onChange={(e) => chooseSlide(e.target.files?.[0])}
-              />
-            </label>
-          )}
+    <div className="desk">
+      <div className="desk-col">
+        <div className="desk-bar">
+          <WaveMark />
+          <span>Pitch Coach</span>
+        </div>
+        <div className="desk-title">
+          <div>
+            <button type="button" className="desk-back" onClick={onBack}>
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+                <path d="M8.5 2.5 4 7l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              Хавтаснууд
+            </button>
+            <h1>{folder.name}</h1>
+            <p className="desk-sub">{pageCount > 1 ? `Слайд ${page} / ${pageCount}` : "Ярь. Текст баруун талд бичигдэнэ."}</p>
+          </div>
+        </div>
+        <div className="desk-actions" hidden={full && hasSlide}>
+          {speakButton()}
           {hasSlide && (
-            <div className="mt-3 flex items-center justify-between gap-3">
-              {pageCount > 1 ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={page <= 1}
-                    onClick={() => setPage((current) => Math.max(1, current - 1))}
-                    className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-zinc-700"
-                  >
-                    Өмнөх
-                  </button>
-                  <span className="min-w-16 text-center text-sm tabular-nums">
-                    {page} / {pageCount}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={page >= pageCount}
-                    onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-                    className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-zinc-700"
-                  >
-                    Дараах
+            <button type="button" className="desk-ghost" onClick={() => setFull(true)}>
+              Бүтэн дэлгэц
+            </button>
+          )}
+        </div>
+
+        <div className="desk-stage">
+          <div>
+            <div className={full && hasSlide ? "desk-full" : undefined}>
+              {slidePdf ? (
+                <div ref={frameRef} className="desk-slide">
+                  <canvas ref={canvasRef} width={1920} height={1080} />
+                </div>
+              ) : slideUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img className="desk-slide" src={slideUrl} alt={folder.slideName ?? "Figma слайд"} />
+              ) : (
+                <label className="desk-slide-empty">
+                  <span>Figma слайд</span>
+                  Зураг оруулах
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="sr-only"
+                    onChange={(e) => chooseSlide(e.target.files?.[0])}
+                  />
+                </label>
+              )}
+              {full && hasSlide && (
+                <div className="desk-full-bar">
+                  {speakButton()}
+                  {pageButtons()}
+                  <button type="button" className="desk-ghost" onClick={() => setFull(false)}>
+                    Хаах
                   </button>
                 </div>
-              ) : (
-                <span />
               )}
-              <label className="cursor-pointer text-xs text-zinc-500 underline">
-                Слайд солих
-                <input type="file" accept="image/*,.pdf" className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
-              </label>
             </div>
-          )}
-          {slideNote && <p className="mt-2 text-sm text-red-600">{slideNote}</p>}
+            {hasSlide && !full && (
+              <div className="desk-tools">
+                <div className="desk-pages">{pageButtons()}</div>
+                <label className="desk-link">
+                  Слайд солих
+                  <input type="file" accept="image/*,.pdf" className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
+                </label>
+              </div>
+            )}
+            {slideNote && <p className="desk-note">{slideNote}</p>}
+          </div>
+          <aside className="desk-speech">
+            <h2>Ярианы текст</h2>
+            <p className="desk-sub">{listening ? "Сонсож байна" : "Ярих дээр дараад ярь"}</p>
+            <p>
+              {spoken || <span className="desk-missing">Хоосон</span>}
+            </p>
+            {sttNote && <p className="desk-note">{sttNote}</p>}
+          </aside>
         </div>
-        <aside className="flex min-h-64 flex-col overflow-y-auto rounded-xl border border-zinc-200 p-4 lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] dark:border-zinc-800">
-          <h2 className="text-sm font-medium">Ярианы текст</h2>
-          <p className="mt-1 text-xs text-zinc-500">{listening ? "Сонсож байна" : "Ярих дээр дараад ярь"}</p>
-          <p className="mt-4 flex-1 whitespace-pre-wrap text-sm leading-relaxed">
-            {spoken || <span className="text-zinc-400">Хоосон</span>}
-          </p>
-          {sttNote && <p className="mt-3 text-sm text-red-600">{sttNote}</p>}
-        </aside>
+
+        <div>
+        <WaveAudio
+          url={audioUrl}
+          name={folder.audioName}
+          playing={playing}
+          live={analyser}
+          time={time}
+          duration={duration}
+          onToggle={toggleAudio}
+          onPick={chooseAudio}
+        />
+        <audio
+          ref={audioRef}
+          src={audioUrl ?? undefined}
+          preload="metadata"
+          className="hidden"
+          onPlay={() => setPlaying(true)}
+          onPause={() => setPlaying(false)}
+          onEnded={() => stopStt()}
+          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        />
+        </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="mt-4 space-y-3">
-
-          <button
-            type="button"
-            onClick={toggleSpeak}
-            className="flex w-full items-center gap-3 rounded-xl border border-zinc-200 px-3 py-3 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
-          >
-            <span
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white ${
-                listening ? "bg-red-600" : "bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900"
-              }`}
-              aria-hidden
-            >
-              {listening ? <span className="h-3 w-3 rounded-sm bg-white" /> : <span className="h-3.5 w-3.5 rounded-full bg-red-500" />}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium">{listening ? "Зогсоох" : "Ярих"}</span>
-              <span className="text-xs text-zinc-500">
-                {listening ? "Сонсож байна. Долгион хөдөлж, текст баруун талд бичигдэнэ." : "Файл хэрэггүй. Дарж ярь."}
-              </span>
-            </span>
-          </button>
-
-          <WaveAudio
-            url={audioUrl}
-            name={folder.audioName}
-            playing={playing}
-            live={analyser}
-            time={time}
-            duration={duration}
-            onToggle={toggleAudio}
-            onPick={chooseAudio}
-          />
-          <audio
-            ref={audioRef}
-            src={audioUrl ?? undefined}
-            preload="metadata"
-            className="hidden"
-            onPlay={() => setPlaying(true)}
-            onPause={() => setPlaying(false)}
-            onEnded={() => stopStt()}
-            onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-            onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-          />
-      </div>
-    </main>
+function WaveMark() {
+  return (
+    <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden>
+      <path
+        d="M1 7h2l2-5 3 10 3-8 2 3h8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
 function FolderMark() {
   return (
-    <svg width="22" height="18" viewBox="0 0 22 18" aria-hidden className="shrink-0 text-zinc-500">
-      <path
-        fill="currentColor"
-        d="M1 3.5A2.5 2.5 0 0 1 3.5 1H8l2 2h8.5A2.5 2.5 0 0 1 21 5.5v9a2.5 2.5 0 0 1-2.5 2.5h-15A2.5 2.5 0 0 1 1 14.5v-11Z"
-      />
+    <svg width="28" height="18" viewBox="0 0 28 18" aria-hidden className="shrink-0" style={{ color: "var(--muted)" }}>
+      <rect x="0.75" y="0.75" width="26.5" height="16.5" rx="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M6 9h2l1.2-3 2 6 2-4 1.2 1.5H22" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -748,7 +789,7 @@ function WaveAudio({
   }, [live]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white text-zinc-900">
+    <div className="mt-[14px] overflow-hidden rounded-[20px] bg-white text-[#111]">
       <button type="button" onClick={url && !live ? onToggle : undefined} className="relative block w-full px-4 pb-4 pt-6 text-left" disabled={!url || Boolean(live)}>
         <svg viewBox="0 0 640 160" className="h-36 w-full" aria-hidden>
           <path d={d} fill="none" stroke="#c5d7fb" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
