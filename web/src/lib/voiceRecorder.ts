@@ -1,6 +1,8 @@
 // Records the microphone in sentence-sized pieces and sends each to /api/transcribe
 // (the local voice server). Replaces the browser's SpeechRecognition, which has no Mongolian.
 
+import { t } from "./i18n";
+import { currentLang, langHeaders } from "./i18nClient";
 
 export interface TranscribeReply {
   text: string;
@@ -32,9 +34,9 @@ export async function transcribeBlob(blob: Blob, name: string): Promise<Transcri
   form.set("file", blob, name);
   let res: Response;
   try {
-    res = await fetch("/api/transcribe", { method: "POST", body: form });
+    res = await fetch("/api/transcribe", { method: "POST", body: form, headers: langHeaders() });
   } catch {
-    throw new Error("Сервер рүү хүрч чадсангүй.");
+    throw new Error(t(currentLang(), "serverUnreachable"));
   }
   const body = (await res.json().catch(() => null)) as {
     text?: unknown;
@@ -43,7 +45,7 @@ export async function transcribeBlob(blob: Blob, name: string): Promise<Transcri
     error?: unknown;
   } | null;
   if (!res.ok || !body || typeof body.text !== "string") {
-    throw new Error(typeof body?.error === "string" ? body.error : "Яриаг текст болгож чадсангүй.");
+    throw new Error(typeof body?.error === "string" ? body.error : t(currentLang(), "sttFail"));
   }
   return {
     text: body.text,

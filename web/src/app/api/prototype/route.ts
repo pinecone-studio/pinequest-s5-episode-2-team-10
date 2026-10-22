@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { langOf, t } from "@/lib/i18n";
 import { askClaude, askOllama, isProtoModel, LlmError, rulesReply, type Point } from "@/lib/server/llm";
 
 const MAX_TEXT = 20_000;
@@ -25,11 +26,12 @@ function jsonError(message: string, status: number) {
 }
 
 export async function POST(request: Request) {
+  const lang = langOf(request);
   let form: FormData;
   try {
     form = await request.formData();
   } catch {
-    return jsonError("Илгээсэн өгөгдлийг уншиж чадсангүй.", 400);
+    return jsonError(t(lang, "badForm"), 400);
   }
 
   const text = clip(String(form.get("text") ?? ""), MAX_TEXT);
@@ -38,14 +40,14 @@ export async function POST(request: Request) {
   const slide = fileOf(form.get("slide"));
   const slideImage = fileOf(form.get("slideImage"));
   const modelField = form.get("model") ?? "claude";
-  if (!isProtoModel(modelField)) return jsonError("Ийм загвар алга.", 400);
+  if (!isProtoModel(modelField)) return jsonError(t(lang, "unknownModel"), 400);
   const model = modelField;
 
   if (!text && !slideText && !audio && !slide && !slideImage) {
-    return jsonError("Яриа, аудио, эсвэл слайд алга.", 400);
+    return jsonError(t(lang, "noInput"), 400);
   }
   for (const file of [audio, slide, slideImage]) {
-    if (file && file.size > MAX_FILE) return jsonError("Файл 12 MB-аас том байна.", 413);
+    if (file && file.size > MAX_FILE) return jsonError(t(lang, "fileTooBig"), 413);
   }
 
   const received = {
@@ -67,16 +69,16 @@ export async function POST(request: Request) {
     "Slide text:",
     slideText || "(none)",
     "",
-    'Reply with JSON only: {"summary":"2-3 sentences in Mongolian","points":[{"title":"short","detail":"one concrete note"}]}',
+    `Reply with JSON only: {"summary":"2-3 sentences in ${t(lang, "replyLanguage")}","points":[{"title":"short","detail":"one concrete note"}]}`,
     "At most 3 points. Each detail must stay within what the transcript or slide text actually says.",
   ].join("\n");
 
   try {
     let reply: { summary: string; points: Point[] };
     if (model === "rules") {
-      reply = rulesReply(text, slideText);
+      reply = rulesReply(text, slideText, lang);
     } else if (model === "ollama") {
-      reply = await askOllama(prompt);
+      reply = await askOllama(prompt, lang);
     } else {
       let image: { mediaType: string; data: string } | null = null;
       if (slideImage && slideImage.type.startsWith("image/") && slideImage.size <= MAX_IMAGE) {
@@ -85,12 +87,12 @@ export async function POST(request: Request) {
           data: Buffer.from(await slideImage.arrayBuffer()).toString("base64"),
         };
       }
-      reply = await askClaude(prompt, image);
+      reply = await askClaude(prompt, image, lang);
     }
     const body: Reply = { ...reply, model, received };
     return NextResponse.json(body);
   } catch (err) {
     if (err instanceof LlmError) return jsonError(err.message, err.status);
-    return jsonError("Загвар руу илгээж чадсангүй.", 500);
+    return jsonError(t(lang, "sendFail"), 500);
   }
 }

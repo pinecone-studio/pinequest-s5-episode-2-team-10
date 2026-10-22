@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import { isProtoModel, parseModelStatuses, type ModelStatus, type ProtoModel } from "@/lib/feedbackModels";
+import { t } from "@/lib/i18n";
+import { currentLang, langHeaders, useLang } from "@/lib/i18nClient";
 
 const STORAGE_KEY = "pitchcoach:feedback-model";
 
@@ -42,9 +44,9 @@ export function useFeedbackModel(): [ProtoModel, (m: ProtoModel) => void] {
 }
 
 export async function fetchModelStatuses(): Promise<ModelStatus[]> {
-  const res = await fetch("/api/models", { cache: "no-store" });
+  const res = await fetch("/api/models", { cache: "no-store", headers: langHeaders() });
   const parsed = parseModelStatuses(await res.json().catch(() => null));
-  if (!res.ok || !parsed) throw new Error("Загваруудын төлөвийг уншиж чадсангүй.");
+  if (!res.ok || !parsed) throw new Error(t(currentLang(), "modelsLoadFail"));
   return parsed;
 }
 
@@ -56,6 +58,7 @@ export default function FeedbackModelSelect({
   onChange: (m: ProtoModel) => void;
 }) {
   const id = useId();
+  const { lang, tr } = useLang();
   const [models, setModels] = useState<ModelStatus[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,7 +70,7 @@ export default function FeedbackModelSelect({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [lang]); // reload so the reasons are in the chosen language
 
   // If the saved choice isn't usable on this machine, fall back to the first one that is.
   useEffect(() => {
@@ -82,7 +85,7 @@ export default function FeedbackModelSelect({
 
   return (
     <div className="desk-model">
-      <label htmlFor={id}>Загвар</label>
+      <label htmlFor={id}>{tr("model")}</label>
       <select
         id={id}
         className="desk-field"
@@ -93,15 +96,15 @@ export default function FeedbackModelSelect({
         {(models ?? []).map((m) => (
           <option key={m.id} value={m.id} disabled={!m.available}>
             {m.name}
-            {m.local ? ` · энэ PC` : ` · cloud`}
-            {m.available ? "" : ` (боломжгүй)`}
+            {m.local ? ` · ${tr("thisPc")}` : ` · ${tr("cloud")}`}
+            {m.available ? "" : ` (${tr("unavailableTag")})`}
           </option>
         ))}
-        {!models && <option value={value}>Ачаалж байна…</option>}
+        {!models && <option value={value}>{tr("loading")}</option>}
       </select>
       {error && <p className="desk-note">{error}</p>}
       {selected && !selected.local && (
-        <p className="desk-sub">Текст, слайд Anthropic-ийн API руу илгээгдэнэ.</p>
+        <p className="desk-sub">{tr("cloudNotice")}</p>
       )}
       {models
         ?.filter((m) => !m.available && m.reason)
