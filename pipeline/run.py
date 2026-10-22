@@ -23,6 +23,8 @@ def analyze(
     asr.unload()  # free the GPU before the feedback model runs
     if asr_backend == "stub":
         notes.append("Transcript is sample text (PITCH_ASR=stub), not your speech.")
+    elif asr_backend == "duudlaga":
+        notes.append("Word timings are estimated; Duudlaga batch STT returns text only.")
     if not words:
         raise ValueError("No speech was found in the recording.")
     sentences = segments.to_sentences(words)
