@@ -25,6 +25,8 @@ def analyze(
         notes.append("Transcript is sample text (PITCH_ASR=stub), not your speech.")
     elif asr_backend == "duudlaga":
         notes.append("Word timings are estimated; Duudlaga batch STT returns text only.")
+    elif asr_backend in ("whisper", "remote"):
+        notes.append("Word timings are estimated from where the audio has sound; the speech model returns text only.")
     if not words:
         raise ValueError("No speech was found in the recording.")
     sentences = segments.to_sentences(words)

@@ -1,0 +1,11 @@
+# Voice server (voice/server.py). Install torch with CUDA first, e.g.:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+torch
+transformers>=4.45,<5
+accelerate
+fastapi
+uvicorn[standard]
+python-multipart
+httpx
+numpy
+imageio-ffmpeg

@@ -5,21 +5,28 @@ Word timings are estimated from the returned text and billed duration — the
 batch endpoint does not return per-word timestamps.
 
 PITCH_ASR=whisper runs BuzzASR/mongolian (Whisper large-v3) through transformers.
+The model returns text only; word timings are estimated from where the audio has sound.
+PITCH_ASR=remote sends the WAV to the voice server (voice/server.py), which runs the
+same Whisper model on another machine's GPU.
 PITCH_ASR=stub returns sample sentences spread over the audio length, for testing
 the API without a GPU. The report notes when the stub was used.
 """
 
 import gc
 import re
+import wave
 from pathlib import Path
 
 import httpx
+import numpy as np
 
-from . import config
+from . import config, word_timing
 from .audio import wav_duration
 from .segments import Word
 
-_pipe = None
+_model = None
+_proc = None
+_BATCH = 8  # pieces per generate call; fits an 8 GB card in fp16
 
 # Map Duudlaga Developer API error codes to short UI messages.
 _DUUDLAGA_MESSAGES = {
@@ -46,17 +53,19 @@ def transcribe(wav: Path) -> tuple[list[Word], str]:
         return _stub_words(wav_duration(wav)), "stub"
     if config.ASR_BACKEND == "duudlaga":
         return _duudlaga_words(wav), "duudlaga"
+    if config.ASR_BACKEND == "remote":
+        return _remote_words(wav), "remote"
     if config.ASR_BACKEND != "whisper":
         raise AsrError(f"Unknown PITCH_ASR value: {config.ASR_BACKEND}")
-    return _whisper_words(wav), "whisper"
+    return whisper_words(wav), "whisper"
 
 
 def unload() -> None:
     """Free GPU memory before the feedback model runs (8 GB card)."""
-    global _pipe
-    if _pipe is None:
+    global _model, _proc
+    if _model is None:
         return
-    _pipe = None
+    _model = _proc = None
     gc.collect()
     try:
         import torch
@@ -67,42 +76,123 @@ def unload() -> None:
         pass
 
 
+def is_loaded() -> bool:
+    return _model is not None
+
+
 def _load():
-    global _pipe
-    if _pipe is not None:
-        return _pipe
+    """Load BuzzASR as its model card shows. The Mongolian/transcribe prompt is in its generation config."""
+    global _model, _proc
+    if _model is not None:
+        return _model, _proc
     try:
         import torch
-        from transformers import pipeline
+        from transformers import WhisperForConditionalGeneration, WhisperProcessor
     except ImportError as e:
         raise AsrError("Speech model is not installed. Install requirements-ml.txt or set PITCH_ASR=stub.") from e
 
-    device = 0 if torch.cuda.is_available() else -1
-    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-    _pipe = pipeline(
-        "automatic-speech-recognition",
-        model=config.ASR_MODEL,
-        torch_dtype=dtype,
-        device=device,
-        chunk_length_s=30,
+    cuda = torch.cuda.is_available()
+    model = WhisperForConditionalGeneration.from_pretrained(
+        config.ASR_MODEL, dtype=torch.float16 if cuda else torch.float32
     )
-    return _pipe
+    _model = model.to("cuda" if cuda else "cpu").eval()
+    _proc = WhisperProcessor.from_pretrained(config.ASR_MODEL)
+    return _model, _proc
 
 
-def _whisper_words(wav: Path) -> list[Word]:
-    pipe = _load()
-    out = pipe(
-        str(wav),
-        return_timestamps="word",
-        generate_kwargs={"language": "mongolian", "task": "transcribe"},
-    )
+def whisper_words(wav: Path) -> list[Word]:
+    """Transcribe 16 kHz mono WAV in sentence-sized pieces; word times are estimated (see word_timing)."""
+    import torch
+
+    model, proc = _load()
+    samples, sr = _read_wav(wav)
+    duration = len(samples) / sr
+    spans = word_timing.voiced_spans(samples, sr)
+
+    pieces = []
+    for lo, hi in word_timing.chunk_bounds(duration, spans):
+        piece_spans = word_timing.clip_spans(spans, lo, hi)
+        if sum(e - s for s, e in piece_spans) >= word_timing.MIN_SPEECH_S:  # skip silence: Whisper invents text there
+            pieces.append((samples[int(lo * sr) : int(hi * sr)], piece_spans))
+
     words: list[Word] = []
-    for chunk in out.get("chunks", []):
-        start, end = chunk.get("timestamp", (None, None))
-        text = chunk.get("text", "").strip()
-        if not text or start is None:
+    for i in range(0, len(pieces), _BATCH):
+        batch = pieces[i : i + _BATCH]
+        feats = proc([a for a, _ in batch], sampling_rate=sr, return_tensors="pt").input_features
+        feats = feats.to(model.device, dtype=model.dtype)
+        with torch.inference_mode():
+            ids = model.generate(feats, num_beams=1, no_repeat_ngram_size=3, repetition_penalty=1.2)
+        for text, (_, piece_spans) in zip(proc.batch_decode(ids, skip_special_tokens=True), batch):
+            words.extend(word_timing.spread_words(text.split(), piece_spans))
+    return words
+
+
+def _read_wav(path: Path) -> tuple["np.ndarray", int]:
+    with wave.open(str(path), "rb") as w:
+        if w.getsampwidth() != 2 or w.getnchannels() != 1:
+            raise AsrError("Expected 16-bit mono WAV.")
+        sr = w.getframerate()
+        raw = w.readframes(w.getnframes())
+    return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0, sr
+
+
+def _remote_words(wav: Path) -> list[Word]:
+    """Ask the voice server to transcribe. Retries once on connection errors and 502/503/504."""
+    if not config.VOICE_TOKEN:
+        raise AsrError("Set PITCH_VOICE_TOKEN (same value as VOICE_SERVER_TOKEN) for PITCH_ASR=remote.")
+
+    url = f"{config.VOICE_URL}/v1/transcribe"
+    headers = {"Authorization": f"Bearer {config.VOICE_TOKEN}"}
+    timeout = httpx.Timeout(config.VOICE_TIMEOUT_S, connect=20.0)
+    resp = None
+    for attempt in range(2):
+        try:
+            with wav.open("rb") as f, httpx.Client(timeout=timeout) as client:
+                resp = client.post(url, headers=headers, files={"file": (wav.name, f, "audio/wav")})
+        except httpx.TimeoutException as e:
+            raise AsrError("The voice server took too long to transcribe. Try again.") from e
+        except httpx.RequestError as e:
+            if attempt == 0:
+                continue
+            raise AsrError("Could not reach the voice server. Check that it and the tunnel are running.") from e
+        if resp.status_code in (502, 503, 504) and attempt == 0:
             continue
-        words.append({"word": text, "start": float(start), "end": float(end if end is not None else start)})
+        break
+
+    if resp is None:
+        raise AsrError("Could not reach the voice server.")
+    if resp.status_code == 401:
+        raise AsrError("The voice server rejected PITCH_VOICE_TOKEN.")
+    if resp.status_code >= 400:
+        message = None
+        try:
+            message = resp.json().get("message")
+        except ValueError:
+            pass
+        raise AsrError(message if isinstance(message, str) else f"Voice server failed (HTTP {resp.status_code}).")
+
+    try:
+        return parse_remote_words(resp.json())
+    except ValueError as e:
+        raise AsrError("The voice server returned an invalid response.") from e
+
+
+def parse_remote_words(body: object) -> list[Word]:
+    """Check the voice server's JSON: {"words": [{"word": str, "start": num, "end": num}, ...]}."""
+    if not isinstance(body, dict) or not isinstance(body.get("words"), list):
+        raise ValueError("missing words list")
+    words: list[Word] = []
+    for item in body["words"]:
+        if not isinstance(item, dict):
+            raise ValueError("word is not an object")
+        text, start, end = item.get("word"), item.get("start"), item.get("end")
+        if not isinstance(text, str) or isinstance(start, bool) or not isinstance(start, (int, float)):
+            raise ValueError("bad word entry")
+        if isinstance(end, bool) or not isinstance(end, (int, float)):
+            end = start
+        if not text.strip():
+            continue
+        words.append({"word": text.strip(), "start": float(start), "end": max(float(end), float(start))})
     return words
 
 

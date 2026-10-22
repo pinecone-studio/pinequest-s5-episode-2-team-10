@@ -9,12 +9,18 @@ def _env(name: str, default: str) -> str:
 
 # Speech to text: "duudlaga" calls api.duudlaga.dev (needs DUUDLAGA_API_KEY),
 # "whisper" runs BuzzASR (needs requirements-ml.txt),
+# "remote" sends audio to the local voice server (voice/server.py), e.g. through a Cloudflare tunnel,
 # "stub" returns sample text so the API can be tested without a GPU.
 ASR_BACKEND = _env("PITCH_ASR", "duudlaga")
 ASR_MODEL = _env("PITCH_ASR_MODEL", "BuzzASR/mongolian")
 DUUDLAGA_API_KEY = _env("DUUDLAGA_API_KEY", "")
 DUUDLAGA_BASE_URL = _env("DUUDLAGA_BASE_URL", "https://api.duudlaga.dev").rstrip("/")
 DUUDLAGA_LANGUAGES = _env("DUUDLAGA_LANGUAGES", "mn-MN,en-US")
+
+# Voice server (PITCH_ASR=remote). The token must match VOICE_SERVER_TOKEN on the voice machine.
+VOICE_URL = _env("PITCH_VOICE_URL", "http://localhost:8001").rstrip("/")
+VOICE_TOKEN = _env("PITCH_VOICE_TOKEN", "")
+VOICE_TIMEOUT_S = float(_env("PITCH_VOICE_TIMEOUT_S", "300"))
 
 # Slide alignment: "e5" uses multilingual-e5-small on CPU, "none" uses key-term overlap only.
 EMBEDDINGS = _env("PITCH_EMBEDDINGS", "e5")
