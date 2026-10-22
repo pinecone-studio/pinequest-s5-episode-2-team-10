@@ -18,8 +18,8 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 | Method and path | Does | Response |
 | --- | --- | --- |
 | `POST /users` | Create an anonymous user | `201 {id, access_token}` |
-| `GET /projects` | The user's projects, most recently used first | `[{id, name, goal, audience, planned_s, pitch_type, created_at, updated_at, attempt_count, latest_overall, processing}]` |
-| `POST /projects` | Create a project; every field optional (`name, goal, audience, planned_s 30–900, pitch_type startup/academic`) | `201` project with `attempts` and `current` |
+| `GET /projects` | The user's projects, most recently used first | `[{id, name, goal, audience, idea, key_points, planned_s, pitch_type, created_at, updated_at, attempt_count, latest_overall, processing}]` |
+| `POST /projects` | Create a project; every field optional (`name, goal, audience, idea` up to 500 characters, `key_points` up to 6 strings of up to 200 characters (blank ones dropped), `planned_s 30–900, pitch_type startup/academic`) | `201` project with `attempts` and `current` |
 | `GET /projects/{id}` | Project, `attempts` (newest first), and `current` = slides and script the next attempt will reuse | project |
 | `PATCH /projects/{id}` | Update any detail | project |
 | `DELETE /projects/{id}` | Delete the project, attempts, and files | `204`; `409` while an attempt is running |
@@ -70,11 +70,19 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
     "fillers": {
       "method": "llm", "total": 12, "per_100": 2.91, "model_reported": 13, "note": null,
       "words": [{ "word": "ээ", "count": 7, "evidence": ["…"], "occurrences": [{ "sentence_id": 1, "start_s": 3.1 }] }]
+    },
+    "point_checks": [{ "point": 0, "status": "covered", "evidence": "exact quote", "note": "" }],
+    "off_topic": [{ "sentence_id": 1, "reason": "…" }],
+    "idea_comment": "…",
+    "main_points": {
+      "method": "llm", "coverage": 67, "idea_comment": "…",
+      "points": [{ "point": 0, "text": "the project's main point", "status": "covered", "verified": true, "evidence": "exact quote", "note": "" }],
+      "off_topic": [{ "sentence_id": 1, "start": 6.9, "text": "sentence quoted by code", "reason": "…" }]
     }
   },
   "transcript": { "text": "…", "sentences": [{ "text": "…", "start": 0.0, "end": 2.8 }] },
   "script": "…", "slides_filename": "deck.pptx",
-  "backend": "claude", "asr_backend": "whisper", "prompt_version": "v2.1-fillers",
+  "backend": "claude", "asr_backend": "whisper", "prompt_version": "v2.2-points",
   "notes": [], "created_at": "2026-10-22T03:51:46+00:00"
 }
 ```

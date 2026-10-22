@@ -18,13 +18,13 @@ from typing import Literal, Optional
 import httpx
 from pydantic import BaseModel, ConfigDict
 
-from . import config, fillers
+from . import config, fillers, points
 
 Backend = Literal["claude", "gemma4-ft", "gemma4-base", "rules"]
 BACKENDS: tuple[str, ...] = ("claude", "gemma4-ft", "gemma4-base", "rules")
 
 PROMPT = (Path(__file__).parent / "prompts" / "feedback_v2.md").read_text(encoding="utf-8")
-PROMPT_VERSION = "v2.1-fillers"  # stored with each report; bump when the prompt or schema changes
+PROMPT_VERSION = "v2.2-points"  # stored with each report; bump when the prompt or schema changes
 MAX_RECOMMENDATIONS = 5
 SLIDE_WORDS = 60  # trim slide text so a 3-minute pitch plus 10 slides fits in 6144 tokens
 SCRIPT_WORDS = 600  # about 4 minutes of speech
@@ -82,6 +82,18 @@ class FillerOccurrence(_Strict):
     word: str
 
 
+class PointCheck(_Strict):
+    point: int
+    status: Literal["covered", "partial", "missed"]
+    evidence: str
+    note: str
+
+
+class OffTopic(_Strict):
+    sentence_id: int
+    reason: str
+
+
 class Feedback(_Strict):
     summary: str
     strengths: list[str]
@@ -90,6 +102,9 @@ class Feedback(_Strict):
     number_checks: list[NumberCheck]
     recommendations: list[Recommendation]
     filler_occurrences: list[FillerOccurrence]
+    point_checks: list[PointCheck]
+    off_topic: list[OffTopic]
+    idea_comment: str
 
 
 def _inline_refs(schema: dict) -> dict:
@@ -115,11 +130,17 @@ SCHEMA = _inline_refs(Feedback.model_json_schema())
 
 
 def build_input(session: dict, sentences: list[dict], metrics: dict, wording: dict, slides: list[dict], alignment: dict) -> dict:
-    info = {k: v for k, v in session.items() if k != "script"}
+    info = {k: v for k, v in session.items() if k not in ("script", "idea", "key_points")}
     script = " ".join((session.get("script") or "").split()[:SCRIPT_WORDS])
+    key_points = points.clean_points(session.get("key_points"))
     return {
         "session": info,
         "script": script or None,
+        # The speaker's own pitch idea and main points; the model checks each against the transcript.
+        "pitch": {
+            "idea": " ".join((session.get("idea") or "").split())[:500] or None,
+            "key_points": [{"id": i, "text": p} for i, p in enumerate(key_points)],
+        },
         "criteria": CRITERIA.get(session.get("pitch_type", "startup"), CRITERIA["startup"]),
         "transcript": [{"id": i, **s} for i, s in enumerate(sentences)],
         "metrics": metrics,
@@ -260,6 +281,10 @@ def _rules(data: dict) -> dict:
         ],
         # Without a model, every listed filler counts.
         "filler_occurrences": data["filler_candidates"],
+        # Without a model, main points are matched by key words.
+        "point_checks": points.rules_check([p["text"] for p in data["pitch"]["key_points"]], data["transcript"]),
+        "off_topic": [],
+        "idea_comment": "",
     }
 
 
@@ -308,4 +333,10 @@ def _sanitize(fb: dict, data: dict, filler_method: str = "llm") -> dict:
     )
     # How many occurrences the model claimed before verification; the gap is what it invented.
     fb["fillers"]["model_reported"] = reported
+
+    # Main points: quotes are checked against the transcript and coverage is computed in code.
+    fb["main_points"] = points.verify(
+        fb["point_checks"], [p["text"] for p in data["pitch"]["key_points"]], sentences,
+        fb["off_topic"], fb["idea_comment"], "words" if filler_method == "list" else "llm",
+    )
     return fb

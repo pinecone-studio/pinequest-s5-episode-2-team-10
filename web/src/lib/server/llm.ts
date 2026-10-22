@@ -74,7 +74,14 @@ export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
 }
 
 /** Checks the model's JSON: {summary: string, points: [{title, detail}] (at most 3)}. */
-export function parseReply(raw: unknown): { summary: string; points: Point[] } | null {
+/** A checked reply plus the raw JSON, so callers can read extra fields (main points) themselves. */
+export interface ModelReply {
+  summary: string;
+  points: Point[];
+  raw: Record<string, unknown>;
+}
+
+export function parseReply(raw: unknown): ModelReply | null {
   if (!raw || typeof raw !== "object") return null;
   const body = raw as Record<string, unknown>;
   if (typeof body.summary !== "string" || !body.summary.trim()) return null;
@@ -89,7 +96,7 @@ export function parseReply(raw: unknown): { summary: string; points: Point[] } |
     if (!title || !detail) return null;
     points.push({ title, detail });
   }
-  return { summary: body.summary.trim().slice(0, 800), points };
+  return { summary: body.summary.trim().slice(0, 800), points, raw: body };
 }
 
 function jsonFrom(text: string): unknown {

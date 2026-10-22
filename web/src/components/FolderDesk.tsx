@@ -18,6 +18,7 @@ import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import DevTests from "./DevTests";
 import LangToggle from "./LangToggle";
+import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
 
 type Live = { stream: MediaStream; ctx: AudioContext };
@@ -218,6 +219,7 @@ function FolderRoom({
     summary: string;
     points: { title: string; detail: string }[];
     model: string;
+    mainPoints: MainPointsResult | null;
     received: { text: boolean; audio: string | null; slide: string | null };
   } | null>(null);
 
@@ -579,6 +581,8 @@ function FolderRoom({
       body.set("text", speech);
       body.set("slideText", slideText);
       body.set("model", model);
+      body.set("idea", folder.idea ?? "");
+      body.set("keyPoints", JSON.stringify((folder.keyPoints ?? []).filter((p) => p.trim())));
       if (audio) body.set("audio", audio, folder.audioName ?? "audio");
       if (slide) body.set("slide", slide, folder.slideName ?? "slide");
       if (slideImage) body.set("slideImage", slideImage, "current-slide.jpg");
@@ -588,6 +592,7 @@ function FolderRoom({
         summary?: string;
         points?: { title: string; detail: string }[];
         model?: string;
+        mainPoints?: MainPointsResult | null;
         received?: { text: boolean; audio: string | null; slide: string | null };
       };
       if (!res.ok || !payload.summary || !payload.points || !payload.received) {
@@ -598,6 +603,7 @@ function FolderRoom({
         summary: payload.summary,
         points: payload.points,
         model: payload.model ?? model,
+        mainPoints: payload.mainPoints ?? null,
         received: payload.received,
       });
     } catch {
@@ -780,12 +786,19 @@ function FolderRoom({
                       ))}
                     </ul>
                   )}
+                  {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} />}
                 </>
               )}
             </div>
             {process.env.NODE_ENV === "development" && <DevTests model={model} onLoadSample={loadSample} />}
           </aside>
         </div>
+
+        <PitchPointsEditor
+          idea={folder.idea ?? ""}
+          points={folder.keyPoints ?? []}
+          onChange={({ idea, points }) => onChange({ ...folder, idea, keyPoints: points })}
+        />
 
         <div>
         <WaveAudio

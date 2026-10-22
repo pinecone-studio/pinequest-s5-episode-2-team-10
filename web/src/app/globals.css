@@ -568,3 +568,110 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+.desk-points {
+  margin-top: var(--gap);
+  padding: 22px;
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.desk-points h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.desk-points > .desk-sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.desk-points-field {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.desk-points-field > span,
+.desk-points-field legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.desk-points textarea.desk-field {
+  height: auto;
+  padding: 10px 12px;
+  line-height: 20px;
+  resize: vertical;
+}
+
+.desk-points ol {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding-left: 20px;
+}
+
+.desk-points li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.desk-points li .desk-link {
+  flex-shrink: 0;
+  border: 0;
+  background: none;
+  text-decoration: underline;
+}
+
+.desk-points-result {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+}
+
+.desk-points-result ul {
+  display: grid;
+  gap: 10px;
+}
+
+.desk-points-result li {
+  display: grid;
+  gap: 4px;
+}
+
+.desk-points-result q,
+.desk-points-result em,
+.desk-points-result li span:not(.desk-chip) {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.desk-chip {
+  justify-self: start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.desk-chip.is-covered {
+  background: color-mix(in srgb, var(--positive) 22%, transparent);
+  color: var(--positive);
+}
+
+.desk-chip.is-partial {
+  background: color-mix(in srgb, #e0a43a 22%, transparent);
+  color: #e0a43a;
+}
+
+.desk-chip.is-missed {
+  background: color-mix(in srgb, var(--negative) 22%, transparent);
+  color: var(--negative);
+}

@@ -1,6 +1,6 @@
 import { formatTime } from "@/lib/format";
 import { modelName, sendsDataToCloud } from "@/lib/models";
-import type { Recommendation, Report, SlideFeedback } from "@/lib/types";
+import type { MainPoints, Recommendation, Report, SlideFeedback } from "@/lib/types";
 
 const CATEGORIES = [
   { key: "content", label: "Content", weight: 35 },
@@ -67,6 +67,10 @@ export default function ReportView({ report }: { report: Report }) {
           </ul>
         )}
       </section>
+
+      {feedback.main_points && feedback.main_points.points.length > 0 && (
+        <MainPointsSection data={feedback.main_points} />
+      )}
 
       <section>
         <h2 className="mb-3 font-medium">Top recommendations</h2>
@@ -211,5 +215,57 @@ function SlideTile({ slide }: { slide: SlideFeedback }) {
       <div className="text-zinc-500">{slide.status === "image_only" ? "image only, not scored" : slide.status}</div>
       {slide.comment && <div className="mt-1">{slide.comment}</div>}
     </div>
+  );
+}
+
+const POINT_STATUS = {
+  covered: { label: "Covered", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" },
+  partial: { label: "Partly", className: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
+  missed: { label: "Missed", className: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300" },
+} as const;
+
+function MainPointsSection({ data }: { data: MainPoints }) {
+  return (
+    <section>
+      <h2 className="mb-1 font-medium">
+        Main points{data.coverage !== null && <span className="text-zinc-500"> · {data.coverage}% covered</span>}
+      </h2>
+      {data.method === "words" && (
+        <p className="mb-2 text-xs text-zinc-500">Matched by key words without an LLM, so this is a rough estimate.</p>
+      )}
+      {data.idea_comment && <p className="mb-3 text-sm leading-relaxed">{data.idea_comment}</p>}
+      <ul className="space-y-3">
+        {data.points.map((p) => {
+          const status = POINT_STATUS[p.verified ? p.status : "missed"];
+          return (
+            <li key={p.point} className="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+              <div className="flex items-start justify-between gap-3">
+                <span className="font-medium">{p.text}</span>
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${status.className}`}>{status.label}</span>
+              </div>
+              {p.evidence && <p className="mt-1 text-zinc-600 dark:text-zinc-400">&ldquo;{p.evidence}&rdquo;</p>}
+              {!p.verified && (
+                <p className="mt-1 text-xs text-zinc-500">The model&apos;s quote isn&apos;t in the transcript, so this wasn&apos;t counted.</p>
+              )}
+              {p.note && <p className="mt-1 text-zinc-500">{p.note}</p>}
+            </li>
+          );
+        })}
+      </ul>
+      {data.off_topic.length > 0 && (
+        <div className="mt-4">
+          <h3 className="mb-2 text-sm font-medium">Off topic</h3>
+          <ul className="space-y-2 text-sm">
+            {data.off_topic.map((o) => (
+              <li key={o.sentence_id}>
+                {o.start !== null && <span className="mr-2 tabular-nums text-zinc-500">{formatTime(o.start)}</span>}
+                &ldquo;{o.text}&rdquo;
+                {o.reason && <span className="text-zinc-500"> · {o.reason}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }

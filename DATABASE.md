@@ -15,6 +15,8 @@ A folder for one pitch.
 - `id`: UUID primary key
 - `user_id` → `app_user.id` (indexed)
 - `name`, `goal`, `audience`
+- `idea`: the pitch idea in one or two sentences (default empty)
+- `key_points`: JSON array of up to 6 main points the speech should get across (default empty)
 - `planned_s`: planned length in seconds (30–900)
 - `pitch_type`: `startup` or `academic`
 - `created_at`, `updated_at` (updated on every new attempt or analysis)
@@ -23,7 +25,7 @@ A folder for one pitch.
 One attempt inside a project. Project details are copied in when it is analyzed, so history stays accurate.
 - `id`: UUID primary key
 - `project_id` → `project.id` (indexed)
-- `title`, `goal`, `audience`, `planned_s`, `pitch_type`: copied from the project
+- `title`, `goal`, `audience`, `idea`, `key_points`, `planned_s`, `pitch_type`: copied from the project
 - `script`: planned script (optional)
 - `slides_filename`: original name of the uploaded deck
 - `status`: `created`, `uploaded`, `processing`, `completed`, `failed`
@@ -52,10 +54,14 @@ One attempt inside a project. Project details are copied in when it is analyzed,
 - `overall`, `content`, `delivery`, `slide_alignment`, `timing`: integers 0–100 or null when a category has no data
 - `metrics`: JSON (duration, pace, pauses, pitch range, volume drop, fillers per 100 words)
 - `slide_results`: JSON from slide matching
-- `feedback`: validated LLM output, including `fillers`
+- `feedback`: validated LLM output, including `fillers` and `main_points`
 - `extra`: JSON (categories used, delivery sub-scores, wording checks, notes, speech-to-text backend, prompt version)
 - `backend`: which feedback model wrote it
 - `created_at`
+
+### Added columns
+
+`project.idea`, `project.key_points`, `session.idea` and `session.key_points` were added after the first release. `backend/db.py` adds them on startup when they are missing (`ADDED_COLUMNS`), on SQLite and Postgres alike, so existing databases keep their data. Add later columns there too.
 
 ## Relationships
 

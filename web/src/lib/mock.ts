@@ -147,6 +147,8 @@ export const mockApi = {
       name: details.name?.trim() || "Untitled project",
       goal: details.goal ?? "",
       audience: details.audience ?? "",
+      idea: details.idea ?? "",
+      key_points: details.key_points ?? [],
       planned_s: details.planned_s ?? 180,
       pitch_type: details.pitch_type ?? "startup",
       created_at: now(),

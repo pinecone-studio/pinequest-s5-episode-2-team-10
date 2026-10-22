@@ -111,6 +111,32 @@ async function modelCheck(model: ProtoModel): Promise<string> {
   return payload.summary;
 }
 
+// Two points the sample makes and one it never does, so a good check scores about 67%.
+const SAMPLE_POINTS = [
+  "Сайн хүн болж харагдах гэж өөрийгөө элээдэг",
+  "Ахыгаа ирэхэд дүү нар баярладаг",
+  "Эхний жилд мянган хэрэглэгчтэй болно",
+];
+
+async function pointsCheck(model: ProtoModel): Promise<string> {
+  const { reference } = await fetchSample();
+  const body = new FormData();
+  body.set("text", reference);
+  body.set("slideText", "");
+  body.set("model", model);
+  body.set("idea", "Хүмүүсийн зан төлөвийн тухай богино өгүүллэгүүд");
+  body.set("keyPoints", JSON.stringify(SAMPLE_POINTS));
+  const res = await fetch("/api/prototype", { method: "POST", body, headers: langHeaders() });
+  const payload = (await res.json().catch(() => null)) as {
+    mainPoints?: { coverage: number | null; points: { status: string; verified: boolean }[]; offTopic: unknown[] } | null;
+    error?: string;
+  } | null;
+  const mp = payload?.mainPoints;
+  if (!res.ok || !mp) throw new Error(payload?.error ?? `HTTP ${res.status}`);
+  const marks = mp.points.map((p, i) => `${i + 1}:${p.verified ? p.status : `${p.status}?`}`).join(" ");
+  return `${tr("coverage", { pct: mp.coverage ?? 0 })} · ${marks} · ${tr("offTopic")}: ${mp.offTopic.length}`;
+}
+
 let nextId = 0;
 
 async function timed(label: string, check: () => Promise<string>): Promise<Result> {
@@ -126,7 +152,7 @@ async function timed(label: string, check: () => Promise<string>): Promise<Resul
   return { id: ++nextId, label, ok, detail, ms: performance.now() - started };
 }
 
-type CheckId = "voice" | "sample" | "loadSample" | "mic" | "models" | "model";
+type CheckId = "voice" | "sample" | "loadSample" | "mic" | "models" | "model" | "points";
 
 export default function DevTests({
   model,
@@ -147,6 +173,7 @@ export default function DevTests({
     { id: "mic", label: trNow("testMic", { s: MIC_SECONDS }), run: micCheck },
     { id: "models", label: trNow("testModels"), run: modelList },
     { id: "model", label: trNow("testModel", { m: model }), run: () => modelCheck(model) },
+    { id: "points", label: trNow("testPoints"), run: () => pointsCheck(model) },
   ];
 
   async function run(check: (typeof checks)[number]) {

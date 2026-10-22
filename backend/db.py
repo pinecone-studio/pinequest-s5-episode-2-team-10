@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, inspect
 from sqlmodel import Field, Session, SQLModel, create_engine, delete, select
 
 from . import config
@@ -39,6 +39,8 @@ class Project(SQLModel, table=True):
     name: str
     goal: str = ""
     audience: str = ""
+    idea: str = ""  # the pitch idea in one or two sentences
+    key_points: list[str] = Field(default_factory=list, sa_column=Column(JSON))  # main points to get across
     planned_s: int = 180
     pitch_type: str = "startup"
     created_at: datetime = Field(default_factory=utcnow)
@@ -55,6 +57,8 @@ class PitchSession(SQLModel, table=True):
     title: str
     goal: str = ""
     audience: str = ""
+    idea: str = ""
+    key_points: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     planned_s: int
     pitch_type: str = "startup"
     script: str = ""  # what the speaker planned to say (optional)
@@ -136,9 +140,30 @@ def _engine():
 engine = _engine()
 
 
+# Columns added after the first release. create_all() doesn't change existing tables, so these
+# are added on startup when missing. Additive only: existing rows get the default.
+ADDED_COLUMNS = {
+    "project": {"idea": "TEXT NOT NULL DEFAULT ''", "key_points": "JSON"},
+    "session": {"idea": "TEXT NOT NULL DEFAULT ''", "key_points": "JSON"},
+}
+
+
+def _add_missing_columns() -> None:
+    existing = inspect(engine)
+    with engine.begin() as conn:
+        for table, columns in ADDED_COLUMNS.items():
+            if not existing.has_table(table):
+                continue
+            have = {c["name"] for c in existing.get_columns(table)}
+            for name, ddl in columns.items():
+                if name not in have:
+                    conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {ddl}')
+
+
 def init() -> None:
     config.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     SQLModel.metadata.create_all(engine)
+    _add_missing_columns()
     if engine.dialect.name == "postgresql":
         # Supabase exposes the public schema through its REST API. With row-level security on
         # and no policies, the anon key can't read these tables; the server's own role owns
