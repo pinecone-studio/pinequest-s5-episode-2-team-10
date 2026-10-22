@@ -1,0 +1,14 @@
+# Mongolian filler words and hesitations, one per line (lowercase).
+# Multi-word fillers are allowed. Lines starting with # are ignored.
+ээ
+ээм
+аан
+аа
+мм
+хмм
+нөгөө
+тэгээд тэгээд
+за тэгээд
+юу гэдэг юм
+яахав
+тийм ээ

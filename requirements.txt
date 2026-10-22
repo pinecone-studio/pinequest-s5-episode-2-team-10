@@ -1,0 +1,13 @@
+# API server + light pipeline steps. Python 3.10+.
+fastapi
+uvicorn[standard]
+sqlmodel
+psycopg[binary]  # Postgres (Supabase) driver
+python-multipart
+httpx
+anthropic
+numpy
+praat-parselmouth
+pymupdf
+python-pptx
+imageio-ffmpeg   # bundled ffmpeg binary, used when ffmpeg is not on PATH
