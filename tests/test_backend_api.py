@@ -1,5 +1,7 @@
 """Contract tests for the project fields sent by the web client."""
 
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, create_engine, select
@@ -25,14 +27,11 @@ def client(tmp_path, monkeypatch):
 
 
 def _headers(client: TestClient) -> dict[str, str]:
-    response = client.post("/api/v1/auth/demo")
-    assert response.status_code == 200
-    return {"X-Access-Token": response.json()["access_token"]}
-
-
-def _user_headers(client: TestClient, email: str) -> dict[str, str]:
-    response = client.post("/api/v1/auth/register", json={"email": email, "password": "password1"})
-    assert response.status_code == 201, response.text
+    response = client.post(
+        "/api/v1/auth/register",
+        json={"email": f"test-{uuid.uuid4().hex}@example.com", "password": "test-password"},
+    )
+    assert response.status_code == 201
     return {"X-Access-Token": response.json()["access_token"]}
 
 
@@ -169,13 +168,13 @@ def test_new_attempt_receives_project_fields(client):
 
 
 def test_project_fields_are_not_visible_to_another_user(client):
-    owner_headers = _user_headers(client, "owner@example.com")
+    owner_headers = _headers(client)
     project = client.post(
         "/api/v1/projects",
         headers=owner_headers,
         json={"name": "Private"},
     ).json()
-    other_headers = _user_headers(client, "other@example.com")
+    other_headers = _headers(client)
 
     response = client.get(f"/api/v1/projects/{project['id']}", headers=other_headers)
 
@@ -200,7 +199,7 @@ def test_audio_upload_and_playback_use_private_storage_in_shared_mode(client, mo
     def upload_file(key, path, content_type, *, upsert=True):
         objects[key] = path.read_bytes()
 
-    monkeypatch.setattr(main.storage, "configured", lambda: True)
+    monkeypatch.setattr(main.db, "shared_storage_enabled", lambda: True)
     monkeypatch.setattr(main.audio_tools, "to_wav16k", convert_to_wav)
     monkeypatch.setattr(main.storage, "upload_file", upload_file)
     monkeypatch.setattr(
@@ -261,7 +260,7 @@ def test_slides_upload_download_and_delete_use_private_storage(client, monkeypat
         for key in keys:
             objects.pop(key, None)
 
-    monkeypatch.setattr(main.storage, "configured", lambda: True)
+    monkeypatch.setattr(main.db, "shared_storage_enabled", lambda: True)
     monkeypatch.setattr(main.storage, "upload_file", upload_file)
     monkeypatch.setattr(main.storage, "download_bytes", lambda key: objects[key])
     monkeypatch.setattr(main.storage, "delete_objects", delete_objects)
