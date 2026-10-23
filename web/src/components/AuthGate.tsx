@@ -1,8 +1,9 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { Suspense, useSyncExternalStore } from "react";
 import { setFolderUser } from "@/lib/folderStore";
 import { useAccount } from "@/lib/session";
+import AppShell from "./AppShell";
 import AuthScreen from "./AuthScreen";
 
 function useHydrated(): boolean {
@@ -24,7 +25,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       {signedIn ? null : hydrated ? <AuthScreen /> : <div className="desk" />}
       {/* Keep the page in the tree so Next can prerender the segment. Hide it until sign-in. */}
       <div hidden={!signedIn} inert={!signedIn} key={account?.id ?? "signed-out"}>
-        {children}
+        <Suspense fallback={<div className="app-shell" />}>
+          <AppShell>{children}</AppShell>
+        </Suspense>
       </div>
     </>
   );

@@ -19,9 +19,7 @@ import { streamModelReply } from "@/lib/modelStream";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
-import { AccountMenu } from "./AuthScreen";
 import DevTests from "./DevTests";
-import SayloMark from "./SayloMark";
 import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
@@ -112,11 +110,6 @@ export default function FolderDesk() {
     return (
       <div className="desk">
         <div className="desk-col">
-          <div className="desk-bar">
-            <SayloMark />
-            <span className="desk-brand">SAYLO</span>
-            <AccountMenu />
-          </div>
           <div className="desk-title">
             <div>
               <h1>{tr("folders")}</h1>
@@ -724,11 +717,6 @@ function FolderRoom({
   return (
     <div className="desk">
       <div className="desk-col">
-        <div className="desk-bar">
-          <SayloMark />
-          <span className="desk-brand">SAYLO</span>
-          <AccountMenu />
-        </div>
         <div className="desk-title">
           <div>
             <button type="button" className="desk-back" onClick={onBack}>
