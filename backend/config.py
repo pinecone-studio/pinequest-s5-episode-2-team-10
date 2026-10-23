@@ -17,6 +17,8 @@ RETENTION_DAYS = int(os.environ.get("PITCH_RETENTION_DAYS", "0"))
 # Google sign-in through Supabase Auth. Both unset turns POST /auth/google off.
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
 SUPABASE_PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "").strip()
+SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "").strip()
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
 
 # Upload limits (TDD API table)
 AUDIO_MAX_BYTES = 25 * 1024 * 1024

@@ -1,6 +1,7 @@
 """One background worker: the GPU fits one analysis job at a time."""
 
 import logging
+import tempfile
 import threading
 from collections import deque
 from pathlib import Path
@@ -13,11 +14,12 @@ from pipeline.asr import AsrError
 from pipeline.feedback import FeedbackError
 
 from .db import AnalysisReport, AudioAsset, PitchSession, Slide, Transcript, clear_results, engine, utcnow
+from . import storage
 
 log = logging.getLogger("pitchcoach")
 
 # Errors whose message is safe and useful to show the user as is.
-USER_ERRORS = (AsrError, FeedbackError, ValueError)
+USER_ERRORS = (AsrError, FeedbackError, ValueError, storage.StorageError)
 
 
 class Worker:
@@ -108,14 +110,24 @@ class Worker:
                 for sl in slides
             ]
             backend = s.feedback_backend
-            wav, duration = Path(audio.path), audio.duration_s
+            audio_path, duration = audio.path, audio.duration_s
 
         log.info("Analyzing %s with %s", session_id, backend)
         try:
-            result = run.analyze(
-                wav, duration, session_info, slide_data, backend,
-                on_stage=lambda stage: self._set(session_id, stage=stage),
-            )
+            object_key = storage.key_from_uri(audio_path)
+            if object_key:
+                with tempfile.TemporaryDirectory(prefix="saylo-analysis-") as temp_dir:
+                    wav = Path(temp_dir) / "audio.wav"
+                    wav.write_bytes(storage.download_bytes(object_key))
+                    result = run.analyze(
+                        wav, duration, session_info, slide_data, backend,
+                        on_stage=lambda stage: self._set(session_id, stage=stage),
+                    )
+            else:
+                result = run.analyze(
+                    Path(audio_path), duration, session_info, slide_data, backend,
+                    on_stage=lambda stage: self._set(session_id, stage=stage),
+                )
         except USER_ERRORS as e:
             self._set(session_id, status="failed", stage=None, error=str(e))
             return

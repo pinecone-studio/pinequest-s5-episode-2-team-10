@@ -3,6 +3,7 @@
 import shutil
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from sqlalchemy import JSON, Column, inspect
@@ -32,7 +33,7 @@ class AppUser(SQLModel, table=True):
 
 
 class AccessToken(SQLModel, table=True):
-    """An extra sign-in for the shared demo account, so another computer can stay signed in."""
+    """An additional token authorized for an account, such as a migrated device token."""
 
     __tablename__ = "access_token"
 
@@ -191,6 +192,12 @@ def _ensure_email_unique() -> None:
 
 def init() -> None:
     config.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    from . import storage
+
+    shared_database = engine.dialect.name == "postgresql"
+    storage.validate_configuration(required=shared_database)
+    if not shared_database and storage.configured():
+        raise storage.StorageError("Use Supabase Storage together with the shared PostgreSQL database.")
     SQLModel.metadata.create_all(engine)
     _add_missing_columns()
     _ensure_email_unique()
@@ -215,6 +222,24 @@ def clear_results(db: Session, session_id: str) -> None:
 
 
 def delete_session(db: Session, session_id: str) -> None:
+    audio = db.get(AudioAsset, session_id)
+    storage_keys = []
+    if audio:
+        from . import storage
+
+        storage_keys.extend(
+            key for value in (audio.path, audio.original_path)
+            if (key := storage.key_from_uri(value))
+        )
+    pitch_session = db.get(PitchSession, session_id)
+    if pitch_session and pitch_session.slides_filename:
+        from . import storage
+
+        suffix = Path(pitch_session.slides_filename).suffix.lower()
+        storage_keys.append(f"sessions/{session_id}/slides{suffix}")
+    if storage_keys:
+        storage.delete_objects(storage_keys)
+
     clear_results(db, session_id)
     db.exec(delete(Slide).where(Slide.session_id == session_id))
     db.exec(delete(AudioAsset).where(AudioAsset.session_id == session_id))

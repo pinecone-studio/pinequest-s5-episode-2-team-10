@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from datetime import timezone
 from pathlib import Path
 from typing import Annotated, Literal, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, FastAPI, Header, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,8 +23,8 @@ from pipeline import slides as slide_tools
 from pipeline.feedback import BACKENDS
 from pipeline.points import clean_points
 
-from . import config, db, errors
-from .db import AnalysisReport, AppUser, AudioAsset, PitchSession, Project, Slide, Transcript, utcnow
+from . import config, db, errors, storage
+from .db import AccessToken, AnalysisReport, AppUser, AudioAsset, PitchSession, Project, Slide, Transcript, utcnow
 from .errors import ApiError, not_found
 from .worker import worker
 
@@ -81,7 +82,11 @@ def current_user(database: DB, x_access_token: Annotated[Optional[str], Header()
     """No accounts yet: each browser gets an anonymous user and sends its token on every request."""
     if not x_access_token:
         raise ApiError(401, "unauthorized", "Missing access token.")
-    user = database.exec(select(AppUser).where(AppUser.token_hash == _hash(x_access_token))).first()
+    token_hash = _hash(x_access_token)
+    user = database.exec(select(AppUser).where(AppUser.token_hash == token_hash)).first()
+    if not user:
+        extra_token = database.get(AccessToken, token_hash)
+        user = database.get(AppUser, extra_token.user_id) if extra_token else None
     if not user:
         raise ApiError(401, "unauthorized", "Unknown access token.")
     return user
@@ -140,6 +145,18 @@ def _slides_path(s: PitchSession) -> Optional[Path]:
     if not s.slides_filename:
         return None
     return config.SESSIONS_DIR / s.id / f"slides{Path(s.slides_filename).suffix.lower()}"
+
+
+def _slides_object_key(s: PitchSession) -> Optional[str]:
+    if not s.slides_filename:
+        return None
+    suffix = Path(s.slides_filename).suffix.lower()
+    return f"sessions/{s.id}/slides{suffix}"
+
+
+def _storage_failure(exc: storage.StorageError) -> ApiError:
+    log.error("Supabase Storage operation failed: %s", exc)
+    return ApiError(503, "storage_unavailable", "File storage is temporarily unavailable.")
 
 
 def _attempt(database: Session, s: PitchSession) -> dict:
@@ -319,9 +336,12 @@ def delete_project(p: OwnedProject, database: DB):
     sessions = _sessions(database, p.id)
     if any(worker.current == s.id for s in sessions):
         raise ApiError(409, "busy", "An attempt in this project is being analyzed. Delete it after it finishes.")
+    try:
+        db.delete_project(database, p.id)
+    except storage.StorageError as exc:
+        raise _storage_failure(exc) from exc
     for s in sessions:
         worker.remove(s.id)
-    db.delete_project(database, p.id)
     return Response(status_code=204)
 
 
@@ -340,7 +360,25 @@ def create_attempt(p: OwnedProject, database: DB, body: Optional[NewAttempt] = N
         prev = previous[0]
         s.script = prev.script
         src = _slides_path(prev)
-        if src and src.exists():
+        if storage.configured() and prev.slides_filename:
+            source_key = _slides_object_key(prev)
+            target_key = _slides_object_key(s)
+            if source_key is None or target_key is None:
+                raise ApiError(500, "invalid_file_reference", "The stored slide reference is invalid.")
+            try:
+                content = storage.download_bytes(source_key)
+                storage.upload_bytes(
+                    target_key,
+                    content,
+                    mimetypes.guess_type(prev.slides_filename)[0] or "application/octet-stream",
+                )
+            except storage.StorageError as exc:
+                raise _storage_failure(exc) from exc
+            s.slides_filename = prev.slides_filename
+            for sl in database.exec(select(Slide).where(Slide.session_id == prev.id)).all():
+                database.add(Slide(session_id=s.id, number=sl.number, text=sl.text, notes=sl.notes,
+                                   image_only=sl.image_only, numbers=sl.numbers, key_terms=sl.key_terms))
+        elif src and src.exists():
             shutil.copy(src, db.session_dir(s.id) / src.name)
             s.slides_filename = prev.slides_filename
             for sl in database.exec(select(Slide).where(Slide.session_id == prev.id)).all():
@@ -362,28 +400,66 @@ def upload_audio(s: Owned, database: DB, file: UploadFile):
     folder = db.session_dir(s.id)
     original = folder / f"upload{suffix}"
     wav = folder / "audio.wav"
-    for old in folder.glob("upload.*"):
-        old.unlink(missing_ok=True)
     _save_upload(file, original, config.AUDIO_MAX_BYTES, "Audio file is larger than 25 MB.")
 
     try:
         duration = audio_tools.to_wav16k(original, wav)
     except audio_tools.AudioError as e:
+        original.unlink(missing_ok=True)
         raise ApiError(400, "bad_audio", str(e))
     if duration > config.AUDIO_MAX_S + 1:
         wav.unlink(missing_ok=True)
+        original.unlink(missing_ok=True)
         raise ApiError(413, "too_long", f"Audio is {int(duration // 60)}:{int(duration % 60):02d} long. The limit is 5:00.")
     if duration < 3:
+        wav.unlink(missing_ok=True)
+        original.unlink(missing_ok=True)
         raise ApiError(400, "too_short", "Audio is shorter than 3 seconds.")
 
-    asset = database.get(AudioAsset, s.id) or AudioAsset(session_id=s.id, path="", original_path="", duration_s=0, format="")
-    asset.path, asset.original_path = str(wav), str(original)
+    asset = database.get(AudioAsset, s.id)
+    old_paths = (asset.path, asset.original_path) if asset else ()
+    asset = asset or AudioAsset(session_id=s.id, path="", original_path="", duration_s=0, format="")
+    if storage.configured():
+        original_key = f"sessions/{s.id}/original{suffix}"
+        wav_key = f"sessions/{s.id}/audio.wav"
+        uploaded_keys = []
+        try:
+            storage.upload_file(
+                original_key,
+                original,
+                mimetypes.guess_type(original.name)[0] or "application/octet-stream",
+            )
+            uploaded_keys.append(original_key)
+            storage.upload_file(wav_key, wav, "audio/wav")
+            uploaded_keys.append(wav_key)
+        except storage.StorageError as exc:
+            if uploaded_keys:
+                try:
+                    storage.delete_objects(uploaded_keys)
+                except storage.StorageError as cleanup_error:
+                    log.warning("Could not clean up incomplete audio upload for session %s: %s", s.id, cleanup_error)
+            raise _storage_failure(exc) from exc
+        asset.path, asset.original_path = storage.uri_for(wav_key), storage.uri_for(original_key)
+    else:
+        asset.path, asset.original_path = str(wav), str(original)
     asset.duration_s, asset.format = round(duration, 2), suffix.lstrip(".")
     database.add(asset)
     db.clear_results(database, s.id)  # a new recording makes an old report stale
     s.status, s.stage, s.error = "uploaded", None, None
     database.add(s)
     database.commit()
+    if storage.configured():
+        original.unlink(missing_ok=True)
+        wav.unlink(missing_ok=True)
+        obsolete_keys = [
+            key for value in old_paths
+            if (key := storage.key_from_uri(value)) and key not in (original_key, wav_key)
+        ]
+        if obsolete_keys:
+            try:
+                storage.delete_objects(obsolete_keys)
+            except storage.StorageError as exc:
+                log.warning("Could not remove replaced audio objects for session %s: %s", s.id, exc)
     return {"duration_s": asset.duration_s, "format": asset.format}
 
 
@@ -407,9 +483,23 @@ def upload_slides(s: Owned, database: DB, file: UploadFile):
         path.unlink(missing_ok=True)
         raise ApiError(413, "too_many_slides", f"The deck has {len(extracted)} slides. The limit is {config.SLIDES_MAX_COUNT}.")
 
-    for old in folder.glob("slides.*"):
-        old.unlink(missing_ok=True)
-    path.rename(folder / f"slides{suffix}")
+    old_key = _slides_object_key(s)
+    new_key = f"sessions/{s.id}/slides{suffix}"
+    if storage.configured():
+        try:
+            storage.upload_file(
+                new_key,
+                path,
+                mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            )
+        except storage.StorageError as exc:
+            path.unlink(missing_ok=True)
+            raise _storage_failure(exc) from exc
+        path.unlink(missing_ok=True)
+    else:
+        for old in folder.glob("slides.*"):
+            old.unlink(missing_ok=True)
+        path.rename(folder / f"slides{suffix}")
     for old in database.exec(select(Slide).where(Slide.session_id == s.id)).all():
         database.delete(old)
     for sl in extracted:
@@ -417,6 +507,11 @@ def upload_slides(s: Owned, database: DB, file: UploadFile):
     s.slides_filename = Path(file.filename or f"slides{suffix}").name
     database.add(s)
     database.commit()
+    if storage.configured() and old_key and old_key != new_key:
+        try:
+            storage.delete_objects([old_key])
+        except storage.StorageError as exc:
+            log.warning("Could not remove replaced slide object for session %s: %s", s.id, exc)
     return {
         "slide_count": len(extracted),
         "image_only": [sl["number"] for sl in extracted if sl["image_only"]],
@@ -430,7 +525,13 @@ def remove_slides(s: Owned, database: DB):
     for old in database.exec(select(Slide).where(Slide.session_id == s.id)).all():
         database.delete(old)
     path = _slides_path(s)
-    if path:
+    key = _slides_object_key(s)
+    if storage.configured() and key:
+        try:
+            storage.delete_objects([key])
+        except storage.StorageError as exc:
+            raise _storage_failure(exc) from exc
+    elif path:
         path.unlink(missing_ok=True)
     s.slides_filename = None
     database.add(s)
@@ -453,9 +554,24 @@ def set_script(body: ScriptBody, s: Owned, database: DB):
 @api.get("/sessions/{session_id}/audio")
 def get_audio(s: Owned, database: DB):
     asset = database.get(AudioAsset, s.id)
-    if not asset or not Path(asset.original_path).exists():
+    if not asset:
         raise not_found("Audio")
+    object_key = storage.key_from_uri(asset.original_path)
+    if object_key:
+        try:
+            content = storage.download_bytes(object_key)
+        except storage.StorageNotFound as exc:
+            raise not_found("Audio") from exc
+        except storage.StorageError as exc:
+            raise _storage_failure(exc) from exc
+        filename = Path(object_key).name
+        return Response(
+            content=content,
+            media_type=mimetypes.guess_type(filename)[0] or "application/octet-stream",
+        )
     path = Path(asset.original_path)
+    if not path.exists():
+        raise not_found("Audio")
     return FileResponse(path, media_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream")
 
 
@@ -470,6 +586,20 @@ def get_slides(s: Owned, database: DB):
 
 @api.get("/sessions/{session_id}/slides/file")
 def get_slides_file(s: Owned):
+    object_key = _slides_object_key(s)
+    if storage.configured() and object_key:
+        try:
+            content = storage.download_bytes(object_key)
+        except storage.StorageNotFound as exc:
+            raise not_found("Slides") from exc
+        except storage.StorageError as exc:
+            raise _storage_failure(exc) from exc
+        filename = s.slides_filename or "slides"
+        return Response(
+            content=content,
+            media_type=mimetypes.guess_type(filename)[0] or "application/octet-stream",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}"},
+        )
     path = _slides_path(s)
     if not path or not path.exists():
         raise not_found("Slides")
@@ -578,8 +708,11 @@ def compare(user: User, database: DB, a: Annotated[str, Query()], b: Annotated[s
 def delete_attempt(s: Owned, database: DB):
     if worker.current == s.id:
         raise ApiError(409, "busy", "This attempt is being analyzed. Delete it after it finishes.")
+    try:
+        db.delete_session(database, s.id)
+    except storage.StorageError as exc:
+        raise _storage_failure(exc) from exc
     worker.remove(s.id)
-    db.delete_session(database, s.id)
     return Response(status_code=204)
 
 
