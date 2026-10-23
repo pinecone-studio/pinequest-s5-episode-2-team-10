@@ -47,11 +47,18 @@ body {
 .desk-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
-  height: 48px;
+  min-height: 48px;
+  padding: 8px 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
+}
+
+.desk-bar > span {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .desk-bar svg {
@@ -210,6 +217,8 @@ body {
 }
 
 .desk-panel input[type="text"],
+.desk-panel input[type="email"],
+.desk-panel input[type="password"],
 .desk-field {
   width: 100%;
   height: 40px;
@@ -222,8 +231,57 @@ body {
   outline: none;
 }
 
-.desk-panel input[type="text"]::placeholder {
+.desk-panel input[type="text"]::placeholder,
+.desk-panel input[type="email"]::placeholder,
+.desk-panel input[type="password"]::placeholder {
   color: var(--faint);
+}
+
+.desk-panel input:focus-visible,
+.desk-field:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.auth-panel {
+  max-width: 420px;
+}
+
+.auth-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.auth-actions .desk-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.desk-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.desk-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.desk-account .desk-lang {
+  margin-left: 0;
 }
 
 .desk-file {

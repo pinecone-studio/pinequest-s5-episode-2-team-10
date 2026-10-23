@@ -27,11 +27,11 @@ Feedback is primarily **transcript-based**. Do not claim to evaluate confidence,
 | Speech-to-text | BuzzASR/mongolian (Whisper large-v3) on the GPU machine; `stub` mode for testing | `pipeline/asr.py` |
 | LLM analysis | Claude (Anthropic API) or Gemma 4 through Ollama (base and fine-tuned) | `pipeline/feedback.py` |
 | Validation | Pydantic on the server; shared TypeScript types in the web app | `pipeline/feedback.py`, `web/src/lib/types.ts` |
-| Identity | Anonymous user token per browser (no logins yet) | `backend/main.py` |
+| Identity | Email and password. The browser keeps the access token | `backend/main.py` |
 
 ## Core flow
 
-1. The browser gets an anonymous user token and creates a project.
+1. The user registers or signs in. The browser keeps the access token and creates a project.
 2. Each analysis is an attempt: slides and script are reused from the previous attempt, a new recording is uploaded.
 3. The server validates and converts the audio, and queues the attempt.
 4. The worker transcribes, measures, matches speech to slides, asks the LLM for feedback, verifies it, and scores it in code.

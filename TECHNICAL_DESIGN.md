@@ -4,7 +4,7 @@
 
 ```text
 Browser (Next.js app, web/)
-  |  X-Access-Token (anonymous user)
+  |  X-Access-Token (email account)
   v
 FastAPI (backend/)
   |-- Validate uploads, ownership, limits

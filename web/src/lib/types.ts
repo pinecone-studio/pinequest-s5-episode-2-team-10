@@ -1,6 +1,12 @@
 // Shapes shared with the FastAPI server (TDD v2, /api/v1).
 // Keep in sync with server/ models and the JSON contract.
 
+export interface AuthSession {
+  id: string;
+  email: string;
+  access_token: string;
+}
+
 export type PitchType = "startup" | "academic";
 
 // "rules" is server-side only (no model, offline testing); the UI never offers it.

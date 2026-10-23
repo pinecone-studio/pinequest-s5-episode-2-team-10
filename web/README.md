@@ -24,15 +24,15 @@ The project endpoints are listed in `server/README.md`. In short:
 
 | Item | Choice |
 | --- | --- |
-| Identity | `POST /users` once per browser; token kept in local storage and sent as `X-Access-Token` |
+| Identity | `POST /auth/register` or `POST /auth/login`; token kept in local storage and sent as `X-Access-Token` |
 | Projects | `GET/POST /projects`, `GET/PATCH/DELETE /projects/{id}` |
 | Attempts | `POST /projects/{id}/sessions` copies the last attempt's slides and script, then the usual uploads and `analyze` |
 | Script | `PUT /sessions/{id}/script` |
 | Viewing uploads | `GET /sessions/{id}/audio`, `/slides`, `/slides/file`, fetched as blobs because `<audio>` can't send the token header |
 
-If the server forgets the token (for example after the database is reset), the app creates a new user automatically.
+If the server forgets the token (for example after the database is reset), the app returns to the sign-in screen.
 
 Types are in `src/lib/types.ts`; change them there if the server contract differs.
 Browser recordings are WebM/Opus (MP4 on Safari); the server converts to 16 kHz WAV.
 
-Not built yet: logins. The anonymous token means projects belong to one browser.
+Sign-in is required. Folders saved in this browser are kept per account and do not follow the user to another device.

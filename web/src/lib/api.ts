@@ -2,6 +2,7 @@ import type {
   ApiError,
   Attempt,
   AudioUploadResult,
+  AuthSession,
   FeedbackBackend,
   Project,
   ProjectDetails,
@@ -12,6 +13,7 @@ import type {
   StatusResponse,
 } from "./types";
 import { mockApi } from "./mock";
+import { clearSession, readToken } from "./session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 export const USING_MOCK = !API_URL;
@@ -21,8 +23,6 @@ export const USING_MOCK = !API_URL;
 const BASE = "/api/v1";
 const REQUEST_TIMEOUT_MS = 25_000;
 const UPLOAD_TIMEOUT_MS = 120_000; // a 25 MB recording on a slow connection
-const TOKEN_KEY = "pitchcoach:user-token";
-
 export class ApiRequestError extends Error {
   code: string;
   status: number;
@@ -33,30 +33,13 @@ export class ApiRequestError extends Error {
   }
 }
 
-// No logins yet: this browser gets an anonymous user once and keeps its token.
-let tokenPromise: Promise<string> | null = null;
-
-function storedToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
+function requireToken(): string {
+  const token = readToken();
+  if (!token) {
+    clearSession();
+    throw new ApiRequestError({ code: "unauthorized", message: "Sign in required." }, 401);
   }
-}
-
-function getToken(): Promise<string> {
-  const saved = storedToken();
-  if (saved) return Promise.resolve(saved);
-  tokenPromise ??= (async () => {
-    const res = await send<{ access_token: string }>("/users", { method: "POST" }, null);
-    try {
-      localStorage.setItem(TOKEN_KEY, res.access_token);
-    } catch {}
-    return res.access_token;
-  })().finally(() => {
-    tokenPromise = null;
-  });
-  return tokenPromise;
+  return token;
 }
 
 async function send<T>(path: string, init: RequestInit, token: string | null, as: "json" | "blob" = "json"): Promise<T> {
@@ -87,15 +70,9 @@ async function send<T>(path: string, init: RequestInit, token: string | null, as
 
 async function request<T>(path: string, init: RequestInit = {}, as: "json" | "blob" = "json"): Promise<T> {
   try {
-    return await send<T>(path, init, await getToken(), as);
+    return await send<T>(path, init, requireToken(), as);
   } catch (e) {
-    // Token unknown to the server (e.g. database was reset): start a fresh user once.
-    if (e instanceof ApiRequestError && e.status === 401) {
-      try {
-        localStorage.removeItem(TOKEN_KEY);
-      } catch {}
-      return send<T>(path, init, await getToken(), as);
-    }
+    if (e instanceof ApiRequestError && e.status === 401) clearSession();
     throw e;
   }
 }
@@ -112,6 +89,12 @@ function upload<T>(id: string, kind: "audio" | "slides", file: Blob, filename: s
 }
 
 const realApi = {
+  register: (email: string, password: string) =>
+    send<AuthSession>("/auth/register", json("POST", { email, password }), null),
+  login: (email: string, password: string) => send<AuthSession>("/auth/login", json("POST", { email, password }), null),
+  me: () => request<{ id: string; email: string }>("/auth/me"),
+  logout: () => request<void>("/auth/logout", { method: "POST" }),
+
   listProjects: () => request<ProjectSummary[]>("/projects"),
   createProject: (details: Partial<ProjectDetails> = {}) => request<Project>("/projects", json("POST", details)),
   getProject: (id: string) => request<Project>(`/projects/${id}`),
