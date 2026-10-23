@@ -640,6 +640,7 @@ body {
 .desk-panel input[type="text"],
 .desk-panel input[type="email"],
 .desk-panel input[type="password"],
+.desk-panel input[type="url"],
 .desk-field {
   width: 100%;
   height: 40px;
@@ -654,8 +655,47 @@ body {
 
 .desk-panel input[type="text"]::placeholder,
 .desk-panel input[type="email"]::placeholder,
-.desk-panel input[type="password"]::placeholder {
+.desk-panel input[type="password"]::placeholder,
+.desk-panel input[type="url"]::placeholder {
   color: var(--faint);
+}
+
+/* "Slide" heading with the File | Figma switch for a new folder's slides. */
+.desk-source-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.desk-source {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--control);
+  border-radius: 999px;
+}
+
+.desk-source button {
+  min-width: 56px;
+  padding: 3px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.desk-source button[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.desk-source button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .desk-panel input:focus-visible,

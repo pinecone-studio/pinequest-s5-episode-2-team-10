@@ -64,6 +64,12 @@ export default function FolderDesk() {
   const [slideFile, setSlideFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
   const [newSlideError, setNewSlideError] = useState<string | null>(null);
+  // A new folder's slides come from an uploaded file or a Figma link.
+  const [source, setSource] = useState<"file" | "figma">("file");
+  const [newFigma, setNewFigma] = useState("");
+  const figmaLink = newFigma.trim();
+  const figmaBad = source === "figma" && !!figmaLink && !figmaEmbedUrl(figmaLink);
+  const hasSource = source === "file" ? !!slideFile && !newSlideError : !!figmaLink && !figmaBad;
 
   async function pickNewSlide(file: File | null) {
     setNewSlideError(null);
@@ -84,28 +90,33 @@ export default function FolderDesk() {
   async function createFolder(e: React.FormEvent) {
     e.preventDefault();
     const name = draft.trim();
-    if (!name || !slideFile) return;
-    setCreating(true);
-    setNewSlideError(null);
-    let slide: File;
-    try {
-      slide = await prepareSlide(slideFile); // PowerPoint decks become PDF here
-    } catch (err) {
-      setNewSlideError(err instanceof Error ? err.message : tr("deckConvertFailed"));
+    if (!name || !hasSource) return;
+    let folder: FolderMeta = {
+      id: crypto.randomUUID(),
+      name,
+      slideName: null,
+      audioName: null,
+      figmaUrl: source === "figma" ? figmaLink : null,
+    };
+    if (source === "file" && slideFile) {
+      setCreating(true);
+      setNewSlideError(null);
+      let slide: File;
+      try {
+        slide = await prepareSlide(slideFile); // PowerPoint decks become PDF here
+      } catch (err) {
+        setNewSlideError(err instanceof Error ? err.message : tr("deckConvertFailed"));
+        setCreating(false);
+        return;
+      }
       setCreating(false);
-      return;
+      folder = attachSlide(folder, { name: slide.name, type: slide.type }, new Date().toISOString());
+      await putFolderBlob(slideKey(folder.id), slide);
     }
-    setCreating(false);
-    const id = crypto.randomUUID();
-    const folder = attachSlide(
-      { id, name, slideName: null, audioName: null },
-      { name: slide.name, type: slide.type },
-      new Date().toISOString(),
-    );
-    await putFolderBlob(slideKey(folder.id), slide);
     persist([folder, ...folders]);
     setDraft("");
     setSlideFile(null);
+    setNewFigma("");
     setNaming(false);
     setOpenId(folder.id);
   }
@@ -143,25 +154,54 @@ export default function FolderDesk() {
                     placeholder="figma tdd"
                   />
                 </label>
-                <label>
+                <div className="desk-source-head">
                   <span>{tr("slide")}</span>
-                  <span className="desk-file">
-                    <span>{slideFile ? slideFile.name : tr("uploadSlideHint")}</span>
-                    <span>{slideFile ? tr("change") : tr("upload")}</span>
-                    <input
-                      type="file"
-                      accept={SLIDE_ACCEPT}
-                      className="sr-only"
-                      onChange={(e) => void pickNewSlide(e.target.files?.[0] ?? null)}
-                    />
-                  </span>
-                </label>
-                {newSlideError && <p className="desk-note">{newSlideError}</p>}
+                  <div className="desk-source" role="group" aria-label={tr("slide")}>
+                    <button type="button" aria-pressed={source === "file"} onClick={() => setSource("file")}>
+                      {tr("sourceFile")}
+                    </button>
+                    <button type="button" aria-pressed={source === "figma"} onClick={() => setSource("figma")}>
+                      {tr("sourceLink")}
+                    </button>
+                  </div>
+                </div>
+                {source === "file" ? (
+                  <>
+                    <label>
+                      <span className="desk-file">
+                        <span>{slideFile ? slideFile.name : tr("uploadSlideHint")}</span>
+                        <span>{slideFile ? tr("change") : tr("upload")}</span>
+                        <input
+                          type="file"
+                          accept={SLIDE_ACCEPT}
+                          className="sr-only"
+                          onChange={(e) => void pickNewSlide(e.target.files?.[0] ?? null)}
+                        />
+                      </span>
+                    </label>
+                    {newSlideError && <p className="desk-note">{newSlideError}</p>}
+                  </>
+                ) : (
+                  <>
+                    <label>
+                      <input
+                        type="url"
+                        autoFocus
+                        value={newFigma}
+                        onChange={(e) => setNewFigma(e.target.value)}
+                        placeholder="https://www.figma.com/slides/…"
+                        aria-label={tr("figmaLinkLabel")}
+                        spellCheck={false}
+                      />
+                    </label>
+                    <p className={figmaBad ? "desk-note" : "desk-hint"}>{figmaBad ? tr("figmaBad") : tr("figmaShareHint")}</p>
+                  </>
+                )}
                 <div className="app-modal-actions">
                   <button
                     type="submit"
                     className="desk-primary"
-                    disabled={!draft.trim() || !slideFile || creating || Boolean(newSlideError)}
+                    disabled={!draft.trim() || !hasSource || creating}
                   >
                     {creating ? tr("convertingSlide") : tr("createOpen")}
                   </button>
