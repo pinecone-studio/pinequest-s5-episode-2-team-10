@@ -1,16 +1,50 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { NextResponse } from "next/server";
+import { langOf, t } from "@/lib/i18n";
+import {
+  askClaude,
+  askOllama,
+  isProtoModel,
+  LlmError,
+  replySchema,
+  rulesReply,
+  type Improvement,
+  type ModelReply,
+  type Strength,
+} from "@/lib/server/llm";
+import { measureSpeech, numberCandidates, numberMismatches, numberValue } from "@/lib/server/measure";
+import { parsePartialJson } from "@/lib/server/partialJson";
+import {
+  cleanPoints,
+  cleanQuote,
+  inSpeech,
+  MAX_POINTS,
+  rulesCheck,
+  toSentences,
+  verifyOffTopic,
+  verifyPoints,
+  type MainPoints,
+  type OffTopic,
+} from "@/lib/server/points";
+
+// Vercel stops a function after its time limit; Gemma can take ~30 s and the backend choice is called directly.
+export const maxDuration = 60; // the most every Vercel plan allows
 
 const MAX_TEXT = 20_000;
+const MAX_IDEA = 500;
 const MAX_FILE = 12 * 1024 * 1024;
 const MAX_IMAGE = 4 * 1024 * 1024;
-
-type Point = { title: string; detail: string };
+const NDJSON = "application/x-ndjson";
+const STREAM_EVERY_MS = 200;
 
 type Reply = {
   summary: string;
-  points: Point[];
+  strengths: Strength[];
+  // Measured findings first (from code), then the model's advice, most important first.
+  // A model quote is kept only when it is really in the speech.
+  improvements: Improvement[];
+  offTopic: OffTopic[];
+  model: string;
+  mainPoints: MainPoints | null;
   received: { text: boolean; audio: string | null; slide: string | null };
 };
 
@@ -22,147 +56,296 @@ function fileOf(value: FormDataEntryValue | null): File | null {
   return value instanceof File && value.size > 0 ? value : null;
 }
 
-function parseReply(raw: unknown): { summary: string; points: Point[] } | null {
-  if (!raw || typeof raw !== "object") return null;
-  const body = raw as Record<string, unknown>;
-  if (typeof body.summary !== "string" || !body.summary.trim()) return null;
-  if (!Array.isArray(body.points)) return null;
-  const points: Point[] = [];
-  for (const item of body.points.slice(0, 3)) {
-    if (!item || typeof item !== "object") return null;
-    const point = item as Record<string, unknown>;
-    if (typeof point.title !== "string" || typeof point.detail !== "string") return null;
-    const title = point.title.trim().slice(0, 120);
-    const detail = point.detail.trim().slice(0, 500);
-    if (!title || !detail) return null;
-    points.push({ title, detail });
-  }
-  return { summary: body.summary.trim().slice(0, 800), points };
-}
-
-function apiKey() {
-  const fromEnv = process.env.ANTHROPIC_API_KEY?.trim();
-  if (fromEnv) return fromEnv;
-  const files = [path.join(process.cwd(), ".env.local"), path.join(process.cwd(), ".env"), path.join(process.cwd(), "..", ".env")];
-  for (const file of files) {
-    try {
-      const line = readFileSync(file, "utf8")
-        .split("\n")
-        .find((row) => row.startsWith("ANTHROPIC_API_KEY="));
-      const value = line?.slice("ANTHROPIC_API_KEY=".length).trim().replace(/^["']|["']$/g, "");
-      if (value) return value;
-    } catch {
-      /* This env file is not present. */
-    }
-  }
-  return "";
-}
-
 function jsonError(message: string, status: number) {
   return NextResponse.json({ error: message }, { status });
 }
 
+/** `keyPoints` is a JSON array of strings; anything else counts as no points. */
+function keyPointsOf(value: FormDataEntryValue | null): unknown {
+  if (typeof value !== "string" || !value) return [];
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
+  const lang = langOf(request);
   let form: FormData;
   try {
     form = await request.formData();
   } catch {
-    return jsonError("Илгээсэн өгөгдлийг уншиж чадсангүй.", 400);
+    return jsonError(t(lang, "badForm"), 400);
   }
 
   const text = clip(String(form.get("text") ?? ""), MAX_TEXT);
   const slideText = clip(String(form.get("slideText") ?? ""), MAX_TEXT);
+  const idea = clip(String(form.get("idea") ?? ""), MAX_IDEA);
+  const rawPoints = keyPointsOf(form.get("keyPoints"));
+  if (!Array.isArray(rawPoints) || rawPoints.length > MAX_POINTS) return jsonError(t(lang, "badPoints"), 400);
+  const keyPoints = cleanPoints(rawPoints);
   const audio = fileOf(form.get("audio"));
   const slide = fileOf(form.get("slide"));
   const slideImage = fileOf(form.get("slideImage"));
+  const modelField = form.get("model") ?? "claude";
+  // "backend" is called by the page itself through /api/v1, not through this route.
+  if (!isProtoModel(modelField) || modelField === "backend") return jsonError(t(lang, "unknownModel"), 400);
+  const model = modelField;
 
   if (!text && !slideText && !audio && !slide && !slideImage) {
-    return jsonError("Яриа, аудио, эсвэл слайд алга.", 400);
+    return jsonError(t(lang, "noInput"), 400);
   }
   for (const file of [audio, slide, slideImage]) {
-    if (file && file.size > MAX_FILE) return jsonError("Файл 12 MB-аас том байна.", 413);
+    if (file && file.size > MAX_FILE) return jsonError(t(lang, "fileTooBig"), 413);
   }
-
-  const key = apiKey();
-  if (!key) return jsonError("Сервер дээр ANTHROPIC_API_KEY алга.", 503);
 
   const received = {
     text: Boolean(text),
-    audio: audio ? audio.name || "audio" : null,
-    slide: slide?.name || (slideImage ? "current-slide.jpg" : null),
+    // The page sends only the file names; Vercel rejects request bodies over 4.5 MB.
+    audio: audio ? audio.name || "audio" : clip(String(form.get("audioName") ?? ""), 200) || null,
+    slide: slide?.name || clip(String(form.get("slideName") ?? ""), 200) || (slideImage ? "current-slide.jpg" : null),
   };
 
-  const content: Array<Record<string, unknown>> = [
-    {
-      type: "text",
-      text: [
-        "Prototype check. Use only the transcript and slide text below.",
-        "Do not invent quotes. Do not judge emotion, confidence, intonation, or vocal quality.",
-        "The audio file is stored speech; judge the transcript, not the voice.",
-        `Audio: ${audio ? `${audio.name || "audio"} (${audio.type || "unknown"}, ${audio.size} bytes)` : "none"}.`,
-        `Presentation file: ${slide ? `${slide.name || "slide"} (${slide.type || "unknown"}, ${slide.size} bytes)` : "none"}.`,
-        "",
-        "Saved speech:",
-        text || "(none)",
-        "",
-        "Slide text:",
-        slideText || "(none)",
-        "",
-        'Reply with JSON only: {"summary":"2-3 sentences in Mongolian","points":[{"title":"short","detail":"one concrete note"}]}',
-        "At most 3 points. Each detail must stay within what the transcript or slide text actually says.",
-      ].join("\n"),
-    },
-  ];
+  const sentences = toSentences(text);
+  const checkPoints = keyPoints.length > 0 || Boolean(idea);
+  const language = t(lang, "replyLanguage");
+  // Measured by code for every model, shown first and given to the model so it doesn't repeat them.
+  const measured = [...measureSpeech(text, lang), ...numberMismatches(slideText, text, lang)];
+  const numbers = numberCandidates(slideText, sentences);
+  const prompt = [
+    "You coach a speaker on one practice pitch. Judge the SPEECH: what the speaker said and how they said it in words.",
+    "The slide text is only there to check that the speech agrees with the slides. Do not review the slides,",
+    "and never praise or criticise something that only appears on the slides.",
+    "Do not judge emotion, confidence, intonation or vocal quality. The speech comes from speech recognition and may contain errors.",
+    "",
+    "Speech, as numbered sentences:",
+    sentences.length ? sentences.map((s) => `[${s.id}] ${s.text}`).join("\n") : "(none)",
+    "",
+    "Slide text:",
+    slideText || "(none)",
+    "",
+    ...(measured.length
+      ? [
+          "Already measured by code and shown to the speaker; do not repeat these as improvements:",
+          ...measured.map((m) => `- ${m.title}: ${m.why}`),
+          "",
+        ]
+      : []),
+    ...(checkPoints
+      ? [
+          `The speaker's pitch idea: ${idea || "(not given)"}`,
+          "The main points they wanted to get across:",
+          keyPoints.length ? keyPoints.map((p, i) => `(${i}) ${p}`).join("\n") : "(none)",
+          "",
+          "point_checks: for each main point, judge whether the speech made it. Judge meaning, not wording; one shared word is not enough.",
+          "- point: the number in brackets before that main point. One entry per main point, in the same order.",
+          "- status: covered (clearly made), partial (vague or incomplete), missed (not said or only implied).",
+          "- evidence: the exact words from the speech that make the point; empty when missed.",
+          "- note: one short sentence on what was missing, or empty.",
+          "idea_comment: how well the speech as a whole got the idea across.",
+          "",
+        ]
+      : []),
+    ...(numbers.length
+      ? [
+          `number_checks: these numbers are on the slides but not in the speech as written: ${numbers.join(", ")}.`,
+          "For each, give on_slide (the number), said (the exact words from the speech where the speaker gave this figure,",
+          "even in words, or null if they never gave it) and inconsistent (true only when the speaker gave a different value).",
+          "",
+        ]
+      : []),
+    "What to return:",
+    "- summary: 2-3 sentences on the most important things to change in the speech.",
+    "- strengths: 1-3 things the speaker did well, each with quote: the exact words from the speech that show it.",
+    "- improvements: 2-4 things to improve in what was said, most important first. Look at the opening, a clear problem,",
+    "  the solution, proof (facts, numbers), a clear ask or next step at the end, off-topic parts, and numbers that",
+    "  disagree with the slides. For each: title; why (what in the speech shows it and why it matters to the audience);",
+    "  action (one concrete thing to do); example (a sentence to say instead, keeping the meaning and adding no new facts",
+    "  or numbers); quote (the exact words from the speech where it shows, or empty).",
+    ...(checkPoints ? ["  Include main points that were missed or only partly made."] : []),
+    "- off_topic: sentences that have nothing to do with this pitch (its problem, solution, team, customers or business),",
+    "  such as personal stories that don't support the pitch. Give sentence_id and reason (in your own words; do not",
+    "  repeat the sentence). Empty when everything is on topic.",
+    "",
+    "Reply with JSON only:",
+    JSON.stringify({
+      summary: `2-3 sentences in ${language}`,
+      strengths: [{ text: "specific strength", quote: "exact words" }],
+      improvements: [
+        { title: "short", why: "what shows it and why it matters", action: "what to do", example: "a better sentence", quote: "exact words or empty" },
+      ],
+      off_topic: [{ sentence_id: 0, reason: "short" }],
+      ...(numbers.length ? { number_checks: [{ on_slide: numbers[0], said: "exact words or null", inconsistent: false }] } : {}),
+      ...(checkPoints
+        ? {
+            point_checks: [{ point: 0, status: "covered | partial | missed", evidence: "exact quote", note: "" }],
+            idea_comment: `1-2 sentences in ${language}`,
+          }
+        : {}),
+    }),
+    `Write all text in ${language}, except quotes: copy "quote", "evidence" and "said" word for word from the speech,`,
+    "in the speech's own language, never translated. Use only what the speech and slide text say; never invent quotes or numbers.",
+  ].join("\n");
 
-  if (slideImage && slideImage.type.startsWith("image/") && slideImage.size <= MAX_IMAGE) {
-    const bytes = Buffer.from(await slideImage.arrayBuffer());
-    content.push({
-      type: "image",
-      source: {
-        type: "base64",
-        media_type: slideImage.type === "image/png" ? "image/png" : "image/jpeg",
-        data: bytes.toString("base64"),
-      },
-    });
-  }
-
-  const model = process.env.PITCH_CLAUDE_MODEL?.trim() || "claude-opus-5-5";
-  let response: Response;
-  try {
-    response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: AbortSignal.timeout(50_000),
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 800,
-        messages: [{ role: "user", content }],
-      }),
-    });
-  } catch {
-    return jsonError("LLM рүү хүрч чадсангүй.", 502);
-  }
-
-  if (!response.ok) return jsonError(`LLM алдаа (${response.status}).`, 502);
-  const payload = (await response.json()) as { content?: Array<{ type?: string; text?: string }> };
-  const rawText = payload.content?.find((block) => block.type === "text")?.text ?? "";
-  const jsonStart = rawText.indexOf("{");
-  const jsonEnd = rawText.lastIndexOf("}");
-  let parsed: unknown = null;
-  if (jsonStart >= 0 && jsonEnd > jsonStart) {
-    try {
-      parsed = JSON.parse(rawText.slice(jsonStart, jsonEnd + 1));
-    } catch {
-      parsed = null;
+  /** Number mismatches the model found, kept only when its quote of what was said is in the speech. */
+  function numberFindings(raw: unknown): Improvement[] {
+    const out: Improvement[] = [];
+    for (const item of Array.isArray(raw) ? raw : []) {
+      if (!item || typeof item !== "object") continue;
+      const n = item as Record<string, unknown>;
+      // Models often add the unit ("0.96 AUC"); compare the numeric value with the candidates.
+      const value = numberValue(typeof n.on_slide === "string" ? n.on_slide : String(n.on_slide ?? ""));
+      const onSlide = numbers.find((c) => numberValue(c) === value);
+      const said = cleanQuote(n.said);
+      if (n.inconsistent !== true || !onSlide || !said || !inSpeech(said, sentences)) continue;
+      out.push({
+        source: "measured",
+        title: t(lang, "numberTitle"),
+        why: t(lang, "numberWhy", { slide: onSlide }),
+        action: t(lang, "numberAction"),
+        example: "",
+        quote: said,
+      });
     }
+    const known = new Set(measured.filter((m) => m.title === t(lang, "numberTitle")).map((m) => numberValue(m.why)));
+    return out.filter((f) => !known.has(numberValue(f.why))).slice(0, 3);
   }
-  const reply = parseReply(parsed);
-  if (!reply) return jsonError("LLM-ийн хариу хэлбэр таарсангүй.", 502);
 
-  const body: Reply = { ...reply, received };
-  return NextResponse.json(body);
+  /** Runs the chosen model and checks its answer. `onPartial` gets progress while Ollama writes. */
+  async function analyze(onPartial?: (partial: Partial<Reply>) => void): Promise<Reply> {
+    let reply: ModelReply;
+    let mainPoints: MainPoints | null = null;
+    let offTopic: OffTopic[] = [];
+    let numberIssues: Improvement[] = [];
+    // The measured findings are known before the model starts; show them straight away.
+    onPartial?.({ improvements: measured });
+    if (model === "rules") {
+      if (checkPoints) mainPoints = verifyPoints(rulesCheck(keyPoints, sentences), keyPoints, sentences, "", "words");
+      reply = rulesReply(text, slideText, lang, mainPoints?.points ?? []);
+    } else {
+      if (model === "ollama" || model === "ollama-think") {
+        const onText = onPartial
+          ? throttle((soFar: string) => {
+              const partial = partialReply(soFar);
+              onPartial({ ...partial, improvements: [...measured, ...(partial.improvements ?? [])] });
+            }, STREAM_EVERY_MS)
+          : undefined;
+        reply = await askOllama(prompt, lang, replySchema(checkPoints, numbers.length > 0), onText, model === "ollama-think");
+      } else {
+        let image: { mediaType: string; data: string } | null = null;
+        if (slideImage && slideImage.type.startsWith("image/") && slideImage.size <= MAX_IMAGE) {
+          image = {
+            mediaType: slideImage.type === "image/png" ? "image/png" : "image/jpeg",
+            data: Buffer.from(await slideImage.arrayBuffer()).toString("base64"),
+          };
+        }
+        reply = await askClaude(prompt, image, lang);
+      }
+      if (checkPoints) {
+        mainPoints = verifyPoints(reply.raw.point_checks, keyPoints, sentences, reply.raw.idea_comment, "llm");
+      }
+      offTopic = verifyOffTopic(reply.raw.off_topic, sentences, idea, keyPoints);
+      numberIssues = numberFindings(reply.raw.number_checks);
+    }
+
+    // A quote the model made up is dropped; the advice itself stays. A strength must quote the speech.
+    const quoted = (q: string) => {
+      const c = cleanQuote(q);
+      return c && inSpeech(c, sentences) ? c : "";
+    };
+    // Small models repeat measured number mismatches despite the prompt; drop advice about a figure already flagged.
+    const flaggedFigures = [...measured, ...numberIssues]
+      .filter((m) => m.title === t(lang, "numberTitle"))
+      .map((m) => numberValue(m.why))
+      .filter(Boolean);
+    const modelAdvice = reply.improvements
+      .filter((i) => i.source !== "model" || !flaggedFigures.some((v) => `${i.title} ${i.why}`.includes(v)))
+      .map((i) => ({ ...i, quote: i.source === "model" ? quoted(i.quote) : i.quote }));
+    const strengths = reply.strengths
+      .map((st) => ({ ...st, quote: quoted(st.quote) }))
+      .filter((st) => st.quote);
+    return {
+      summary: reply.summary,
+      strengths,
+      improvements: [...measured, ...numberIssues, ...modelAdvice],
+      offTopic,
+      model,
+      mainPoints,
+      received,
+    };
+  }
+
+  const failure = (err: unknown) =>
+    err instanceof LlmError ? { message: err.message, status: err.status } : { message: t(lang, "sendFail"), status: 500 };
+
+  // Streaming: one JSON object per line. {"type":"partial",...} while the model writes (not checked yet),
+  // then {"type":"done",...} with the checked reply, or {"type":"error","error":"..."}.
+  if (request.headers.get("accept")?.includes(NDJSON)) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let closed = false;
+        // A throttled progress update may fire after the final line; ignore it then.
+        const send = (line: object) => {
+          if (!closed) controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+        };
+        try {
+          const body = await analyze((partial) => send({ type: "partial", ...partial }));
+          send({ type: "done", ...body });
+        } catch (err) {
+          send({ type: "error", error: failure(err).message });
+        } finally {
+          closed = true;
+          controller.close();
+        }
+      },
+    });
+    return new Response(stream, { headers: { "content-type": NDJSON, "cache-control": "no-store" } });
+  }
+
+  try {
+    return NextResponse.json(await analyze());
+  } catch (err) {
+    const { message, status } = failure(err);
+    return jsonError(message, status);
+  }
+}
+
+/** What the model has written so far, in the reply's shape. Unchecked; only for showing progress. */
+function partialReply(soFar: string): Partial<Reply> {
+  const raw = parsePartialJson(soFar);
+  if (!raw || typeof raw !== "object") return {};
+  const body = raw as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  return {
+    summary: str(body.summary),
+    strengths: (Array.isArray(body.strengths) ? body.strengths : [])
+      .map((v) => (typeof v === "string" ? { text: v, quote: "" } : { text: str(v?.text), quote: "" }))
+      .filter((v) => v.text),
+    improvements: (Array.isArray(body.improvements) ? body.improvements : [])
+      .filter((i): i is Record<string, unknown> => Boolean(i) && typeof i === "object" && Boolean(str(i.title)))
+      .map((i) => ({ source: "model" as const, title: str(i.title), why: str(i.why), action: str(i.action), example: str(i.example), quote: "" })),
+  };
+}
+
+/** Calls `fn` at most every `ms`, always with the latest value; the last call is never dropped. */
+function throttle<T>(fn: (value: T) => void, ms: number): (value: T) => void {
+  let last = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: T;
+  return (value: T) => {
+    pending = value;
+    const wait = last + ms - Date.now();
+    if (wait <= 0) {
+      last = Date.now();
+      fn(value);
+    } else if (!timer) {
+      timer = setTimeout(() => {
+        timer = null;
+        last = Date.now();
+        fn(pending);
+      }, wait);
+    }
+  };
 }

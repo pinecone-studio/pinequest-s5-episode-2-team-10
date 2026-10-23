@@ -147,6 +147,8 @@ export const mockApi = {
       name: details.name?.trim() || "Untitled project",
       goal: details.goal ?? "",
       audience: details.audience ?? "",
+      idea: details.idea ?? "",
+      key_points: details.key_points ?? [],
       planned_s: details.planned_s ?? 180,
       pitch_type: details.pitch_type ?? "startup",
       created_at: now(),
@@ -249,7 +251,7 @@ export const mockApi = {
     return { duration_s: s.durationS, format: file.type || "unknown" };
   },
 
-  async analyze(id: string, backend: FeedbackBackend) {
+  async analyze(id: string, backend: FeedbackBackend = "rules") {
     await wait();
     const store = load();
     const s = getSession(store, id);

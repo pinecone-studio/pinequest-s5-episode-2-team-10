@@ -3,6 +3,9 @@ export interface FolderMeta {
   name: string;
   slideName: string | null;
   audioName: string | null;
+  /** The pitch idea and main points the speech should get across (optional, added later). */
+  idea?: string;
+  keyPoints?: string[];
 }
 
 const LIST_KEY = "pitchcoach:folders";

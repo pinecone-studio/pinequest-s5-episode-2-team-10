@@ -14,40 +14,22 @@ import {
   type FolderMeta,
 } from "@/lib/folderStore";
 import { openPdf, paintPage, readSlideText } from "@/lib/slidePdf";
+import { runBackendAnalysis } from "@/lib/backendAnalysis";
+import { streamModelReply } from "@/lib/modelStream";
+import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
+import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
+import { langHeaders, useLang } from "@/lib/i18nClient";
+import DevTests from "./DevTests";
+import LangToggle from "./LangToggle";
+import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
+import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
+import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
 
-interface SpeechResultLike {
-  isFinal: boolean;
-  0: { transcript: string };
-}
+type Live = { stream: MediaStream; ctx: AudioContext };
 
-interface SpeechEventLike {
-  resultIndex: number;
-  results: ArrayLike<SpeechResultLike>;
-}
-
-interface SpeechRec {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((ev: SpeechEventLike) => void) | null;
-  onerror: ((ev: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-function getRecognizer(): SpeechRec | null {
-  const w = window as Window & {
-    SpeechRecognition?: new () => SpeechRec;
-    webkitSpeechRecognition?: new () => SpeechRec;
-  };
-  const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-  if (!Ctor) return null;
-  const rec = new Ctor();
-  rec.lang = "mn-MN";
-  rec.continuous = true;
-  rec.interimResults = true;
-  return rec;
+function closeLive(live: Live | null) {
+  live?.stream.getTracks().forEach((track) => track.stop());
+  void live?.ctx.close();
 }
 
 function formatClock(seconds: number) {
@@ -66,12 +48,21 @@ function isCancel(err: unknown) {
 }
 
 export default function FolderDesk() {
+  const { tr } = useLang();
   const [ready, setReady] = useState(false);
   const [folders, setFolders] = useState<FolderMeta[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [naming, setNaming] = useState(false);
   const [draft, setDraft] = useState("");
   const [slideFile, setSlideFile] = useState<File | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newSlideError, setNewSlideError] = useState<string | null>(null);
+
+  async function pickNewSlide(file: File | null) {
+    setNewSlideError(null);
+    setSlideFile(file);
+    if (file && !(await slideKind(file))) setNewSlideError(tr("slideWrongType"));
+  }
 
   useEffect(() => {
     setFolders(loadFolders());
@@ -87,13 +78,24 @@ export default function FolderDesk() {
     e.preventDefault();
     const name = draft.trim();
     if (!name || !slideFile) return;
+    setCreating(true);
+    setNewSlideError(null);
+    let slide: File;
+    try {
+      slide = await prepareSlide(slideFile); // PowerPoint decks become PDF here
+    } catch (err) {
+      setNewSlideError(err instanceof Error ? err.message : tr("deckConvertFailed"));
+      setCreating(false);
+      return;
+    }
+    setCreating(false);
     const folder: FolderMeta = {
       id: crypto.randomUUID(),
       name,
-      slideName: slideFile.name,
+      slideName: slide.name,
       audioName: null,
     };
-    await putFolderBlob(slideKey(folder.id), slideFile);
+    await putFolderBlob(slideKey(folder.id), slide);
     persist([folder, ...folders]);
     setDraft("");
     setSlideFile(null);
@@ -112,17 +114,18 @@ export default function FolderDesk() {
           <div className="desk-bar">
             <WaveMark />
             <span>Pitch Coach</span>
+            {process.env.NODE_ENV === "development" && <LangToggle />}
           </div>
           <div className="desk-title">
             <div>
-              <h1>Хавтаснууд</h1>
+              <h1>{tr("folders")}</h1>
               <p className="desk-sub">
-                {folders.length === 0 ? "Одоогоор хавтас алга." : `${folders.length} хавтас.`}
+                {folders.length === 0 ? tr("foldersNone") : tr("foldersCount", { n: folders.length })}
               </p>
             </div>
             {!naming && (
               <button type="button" className="desk-primary" onClick={() => setNaming(true)}>
-                Хавтас нэмэх
+                {tr("addFolder")}
               </button>
             )}
           </div>
@@ -130,7 +133,7 @@ export default function FolderDesk() {
           {naming && (
             <form onSubmit={createFolder} className="desk-panel">
               <label>
-                <span>Хавтасны нэр</span>
+                <span>{tr("folderName")}</span>
                 <input
                   type="text"
                   autoFocus
@@ -140,26 +143,31 @@ export default function FolderDesk() {
                 />
               </label>
               <label>
-                <span>Слайд</span>
+                <span>{tr("slide")}</span>
                 <span className="desk-file">
-                  <span>{slideFile ? slideFile.name : "TDD слайдаа оруул"}</span>
-                  <span>{slideFile ? "Солих" : "Оруулах"}</span>
+                  <span>{slideFile ? slideFile.name : tr("uploadSlideHint")}</span>
+                  <span>{slideFile ? tr("change") : tr("upload")}</span>
                   <input
                     type="file"
-                    accept="image/*,.pdf"
+                    accept={SLIDE_ACCEPT}
                     className="sr-only"
-                    onChange={(e) => setSlideFile(e.target.files?.[0] ?? null)}
+                    onChange={(e) => void pickNewSlide(e.target.files?.[0] ?? null)}
                   />
                 </span>
               </label>
-              <button type="submit" className="desk-primary" disabled={!draft.trim() || !slideFile}>
-                Үүсгээд орох
+              {newSlideError && <p className="desk-note">{newSlideError}</p>}
+              <button
+                type="submit"
+                className="desk-primary"
+                disabled={!draft.trim() || !slideFile || creating || Boolean(newSlideError)}
+              >
+                {creating ? tr("convertingSlide") : tr("createOpen")}
               </button>
             </form>
           )}
 
           {folders.length === 0 ? (
-            <p className="desk-empty">Хавтас алга. Нэр өгөөд слайдаа оруул.</p>
+            <p className="desk-empty">{tr("foldersEmpty")}</p>
           ) : (
             <ul className="desk-list">
               {folders.map((folder) => (
@@ -168,7 +176,7 @@ export default function FolderDesk() {
                     <FolderMark />
                     <span>
                       <strong>{folder.name}</strong>
-                      <em>{folder.slideName ?? "Слайд оруулаагүй"}</em>
+                      <em>{folder.slideName ?? tr("noSlide")}</em>
                     </span>
                   </button>
                 </li>
@@ -198,8 +206,12 @@ function FolderRoom({
   onBack: () => void;
   onChange: (folder: FolderMeta) => void;
 }) {
+  const { tr } = useLang();
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const recRef = useRef<SpeechRec | null>(null);
+  const recRef = useRef<PieceRecorder | null>(null);
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const takeBaseRef = useRef("");
+  const aliveRef = useRef(true);
   const playingRef = useRef(false);
   const sttGen = useRef(0);
   const pdfRef = useRef<PDFDocumentProxy | null>(null);
@@ -207,7 +219,10 @@ function FolderRoom({
   const frameRef = useRef<HTMLDivElement | null>(null);
   const slideGen = useRef(0);
   const slideUrlRef = useRef<string | null>(null);
-  const liveRef = useRef<{ stream: MediaStream; ctx: AudioContext } | null>(null);
+  const liveRef = useRef<Live | null>(null);
+  const [model, setModel] = useFeedbackModel();
+  const [pending, setPending] = useState(0);
+  const [fileBusy, setFileBusy] = useState(false);
 
   const [slideUrl, setSlideUrl] = useState<string | null>(null);
   const [slidePdf, setSlidePdf] = useState(false);
@@ -222,18 +237,22 @@ function FolderRoom({
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [finalText, setFinalText] = useState("");
-  const [interim, setInterim] = useState("");
   const textRef = useRef("");
-  const interimRef = useRef("");
   const [sttNote, setSttNote] = useState<string | null>(null);
-  const [slideNote, setSlideNote] = useState<string | null>(null);
+  const [slideNote, setSlideNote] = useState<"pdfOpenFail" | "slideDrawFail" | null>(null);
+  const [slideMsg, setSlideMsg] = useState<string | null>(null); // converting, or why a picked file was refused
   const [full, setFull] = useState(false);
   const [probing, setProbing] = useState(false);
   const [probeNote, setProbeNote] = useState<string | null>(null);
   const [probeResult, setProbeResult] = useState<{
     summary: string;
-    points: { title: string; detail: string }[];
-    received: { text: boolean; audio: string | null; slide: string | null };
+    strengths: Strength[];
+    improvements: Improvement[];
+    offTopic: OffTopic[];
+    model: string;
+    mainPoints: MainPointsResult | null;
+    received: { text: boolean; audio: string | null; slide: string | null } | null;
+    writing: boolean; // true while the model is still writing (shown as it arrives, not checked yet)
   } | null>(null);
 
   function rememberUrl(next: string | null) {
@@ -274,13 +293,14 @@ function FolderRoom({
       setPdfEpoch((n) => n + 1);
     } catch {
       if (slideGen.current !== gen) return;
-      setSlideNote("PDF-г нээж чадсангүй.");
+      setSlideNote("pdfOpenFail");
     }
   }
 
   useEffect(() => {
     let audioObject: string | null = null;
     let cancelled = false;
+    aliveRef.current = true;
 
     (async () => {
       const [slide, audio] = await Promise.all([
@@ -311,10 +331,12 @@ function FolderRoom({
       if (slideUrlRef.current) URL.revokeObjectURL(slideUrlRef.current);
       slideUrlRef.current = null;
       if (audioObject) URL.revokeObjectURL(audioObject);
-      recRef.current?.stop();
+      aliveRef.current = false;
+      sttGen.current += 1;
+      playingRef.current = false;
+      void recRef.current?.stop();
       recRef.current = null;
-      liveRef.current?.stream.getTracks().forEach((track) => track.stop());
-      void liveRef.current?.ctx.close();
+      closeLive(liveRef.current);
       liveRef.current = null;
     };
     // loadSlide closes over stable setters; reload only when the folder changes.
@@ -325,8 +347,6 @@ function FolderRoom({
     const saved = loadSpeech(folder.id);
     textRef.current = saved ? `${saved} ` : "";
     setFinalText(textRef.current);
-    interimRef.current = "";
-    setInterim("");
   }, [folder.id]);
 
   useEffect(() => {
@@ -348,7 +368,7 @@ function FolderRoom({
         }
         await rendered.promise;
       } catch (err) {
-        if (!cancelled && !isCancel(err)) setSlideNote("Слайдыг зурж чадсангүй.");
+        if (!cancelled && !isCancel(err)) setSlideNote("slideDrawFail");
       }
     };
 
@@ -398,14 +418,6 @@ function FolderRoom({
     return () => window.removeEventListener("keydown", onKey);
   }, [pageCount]);
 
-  function releaseMic() {
-    const live = liveRef.current;
-    liveRef.current = null;
-    live?.stream.getTracks().forEach((track) => track.stop());
-    void live?.ctx.close();
-    setAnalyser(null);
-  }
-
   function writeSpeech(next: string) {
     const cleaned = next.replace(/\s+/g, " ").trim();
     textRef.current = cleaned ? `${cleaned} ` : "";
@@ -413,99 +425,144 @@ function FolderRoom({
     setFinalText(textRef.current);
   }
 
-  function stopStt() {
-    const pending = interimRef.current.trim();
-    sttGen.current += 1;
-    playingRef.current = false;
-    recRef.current?.stop();
-    recRef.current = null;
-    releaseMic();
-    setListening(false);
-    interimRef.current = "";
-    setInterim("");
-    if (pending) writeSpeech(`${textRef.current} ${pending}`);
+  /** Pieces are transcribed one after another so the text stays in speaking order. */
+  function queueTranscript(blob: Blob, name: string) {
+    setPending((n) => n + 1);
+    queueRef.current = queueRef.current.then(async () => {
+      try {
+        const reply = await transcribeBlob(blob, name);
+        if (aliveRef.current && reply.text.trim()) writeSpeech(`${textRef.current} ${reply.text}`);
+      } catch (err) {
+        if (aliveRef.current) setSttNote(err instanceof Error ? err.message : tr("sttFail"));
+      } finally {
+        if (aliveRef.current) setPending((n) => n - 1);
+      }
+    });
   }
 
-  function beginStt() {
+  /** Saves the whole take as the folder's audio, then replaces the live text with a full transcription. */
+  async function finishTake(take: Blob, extension: string, base: string, gen: number) {
+    if (take.size < 2_000) return; // shorter than a moment of sound
+    const name = `${tr("recordingName")}.${extension}`;
+    await putFolderBlob(audioKey(folder.id), take);
+    if (!aliveRef.current) return;
+    onChange({ ...folder, audioName: name });
+    setAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(take);
+    });
+    setTime(0);
+
+    // The live pieces were cut short; the whole take reads better with full context.
+    setFileBusy(true);
+    try {
+      await queueRef.current;
+      const reply = await transcribeBlob(take, name);
+      if (aliveRef.current && sttGen.current === gen && reply.text.trim()) writeSpeech(`${base} ${reply.text}`);
+    } catch {
+      /* keep the live text */
+    } finally {
+      if (aliveRef.current) setFileBusy(false);
+    }
+  }
+
+  function stopStt() {
+    sttGen.current += 1;
+    playingRef.current = false;
+    setListening(false);
+    setAnalyser(null);
+    const rec = recRef.current;
+    const live = liveRef.current;
+    recRef.current = null;
+    liveRef.current = null;
+    if (!rec) {
+      closeLive(live);
+      return;
+    }
+    const gen = sttGen.current;
+    const base = takeBaseRef.current;
+    void rec.stop().then((take) => {
+      closeLive(live);
+      if (take && aliveRef.current) void finishTake(take, rec.extension, base, gen);
+    });
+  }
+
+  async function beginStt() {
     stopStt();
     const mine = sttGen.current;
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setSttNote(tr("browserNoRecord"));
+      return;
+    }
     playingRef.current = true;
     setListening(true);
     setSttNote(null);
+    takeBaseRef.current = textRef.current;
     const ctx = new AudioContext();
     void ctx.resume();
-    navigator.mediaDevices
-      .getUserMedia({ audio: true })
-      .then((stream) => {
-        if (sttGen.current !== mine) {
-          stream.getTracks().forEach((track) => track.stop());
-          void ctx.close();
-          return;
-        }
-        const node = ctx.createAnalyser();
-        node.fftSize = 2048;
-        ctx.createMediaStreamSource(stream).connect(node);
-        liveRef.current = { stream, ctx };
-        setAnalyser(node);
-      })
-      .catch(() => {
-        void ctx.close();
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        // Call-style processing (noise suppression, auto gain) distorts speech for the speech model.
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
-    const rec = getRecognizer();
-    if (!rec) {
-      sttGen.current += 1;
-      playingRef.current = false;
-      setListening(false);
-      setSttNote("Энэ хөтөч яриаг текст болгохгүй. Chrome дээр нээнэ үү.");
-      return;
-    }
-    rec.onresult = (ev) => {
-      if (sttGen.current !== mine) return;
-      let done = "";
-      let live = "";
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const piece = ev.results[i][0].transcript;
-        if (ev.results[i].isFinal) done += piece + " ";
-        else live += piece;
-      }
-      if (done) writeSpeech(`${textRef.current} ${done}`);
-      interimRef.current = live;
-      setInterim(live);
-    };
-    rec.onerror = (ev) => {
-      if (sttGen.current !== mine) return;
-      if (ev.error === "not-allowed") {
-        sttGen.current += 1;
+    } catch {
+      void ctx.close();
+      if (sttGen.current === mine) {
         playingRef.current = false;
         setListening(false);
-        releaseMic();
-        setSttNote("Микрофон хаагдсан. Зөвшөөрсний дараа Ярих дээр дахин дар.");
-      } else if (ev.error !== "aborted" && ev.error !== "no-speech") {
-        setSttNote("Яриаг текст болгож чадсангүй.");
+        setSttNote(tr("micBlocked"));
       }
-    };
-    rec.onend = () => {
-      if (sttGen.current !== mine || !playingRef.current) return;
-      try {
-        rec.start();
-      } catch {
-        /* already running */
-      }
-    };
-    recRef.current = rec;
+      return;
+    }
+    if (sttGen.current !== mine) {
+      closeLive({ stream, ctx });
+      return;
+    }
+    const node = ctx.createAnalyser();
+    node.fftSize = 2048;
+    ctx.createMediaStreamSource(stream).connect(node);
+    liveRef.current = { stream, ctx };
+    setAnalyser(node);
+    const rec = new PieceRecorder(stream, node, queueTranscript);
     try {
       rec.start();
+      recRef.current = rec;
     } catch {
-      sttGen.current += 1;
-      playingRef.current = false;
-      setListening(false);
-      releaseMic();
-      setSttNote("Яриаг текст болгож эхлүүлж чадсангүй.");
+      stopStt();
+      setSttNote(tr("recordStartFail"));
     }
   }
 
-  async function chooseSlide(file: File | undefined) {
-    if (!file) return;
+  /** Re-transcribes the whole saved audio file and replaces the text with it. */
+  async function transcribeAudioFile() {
+    const audio = await getFolderBlob(audioKey(folder.id));
+    if (!audio) return;
+    setFileBusy(true);
+    setSttNote(null);
+    try {
+      const reply = await transcribeBlob(audio, folder.audioName ?? "audio.webm");
+      if (!aliveRef.current) return;
+      if (reply.text.trim()) writeSpeech(reply.text);
+      else setSttNote(tr("noSpeechInAudio"));
+    } catch (err) {
+      if (aliveRef.current) setSttNote(err instanceof Error ? err.message : tr("sttFail"));
+    } finally {
+      if (aliveRef.current) setFileBusy(false);
+    }
+  }
+
+  async function chooseSlide(picked: File | undefined) {
+    if (!picked) return;
+    setSlideMsg(tr("convertingSlide"));
+    let file: File;
+    try {
+      file = await prepareSlide(picked); // PowerPoint decks become PDF here
+    } catch (err) {
+      setSlideMsg(err instanceof Error ? err.message : tr("deckConvertFailed"));
+      return;
+    }
+    setSlideMsg(null);
     await putFolderBlob(slideKey(folder.id), file);
     onChange({ ...folder, slideName: file.name });
     await loadSlide(file);
@@ -522,13 +579,28 @@ function FolderRoom({
     setTime(0);
   }
 
+  /** Local test: uses the bundled Mongolian sample as the folder audio and transcribes it. */
+  async function loadSample(audio: Blob): Promise<string> {
+    stopStt();
+    await putFolderBlob(audioKey(folder.id), audio);
+    onChange({ ...folder, audioName: tr("sampleName") });
+    setAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(audio);
+    });
+    setTime(0);
+    const reply = await transcribeBlob(audio, "mn-sample.webm");
+    if (aliveRef.current) writeSpeech(reply.text);
+    return tr("sampleLoaded", { n: reply.text.split(/\s+/).filter(Boolean).length });
+  }
+
   function toggleSpeak() {
     if (playingRef.current) stopStt();
-    else beginStt();
+    else void beginStt();
   }
 
   async function sendToModel() {
-    const speech = `${textRef.current}${interimRef.current}`.trim();
+    const speech = textRef.current.trim();
     setProbing(true);
     setProbeNote(null);
     setProbeResult(null);
@@ -537,6 +609,20 @@ function FolderRoom({
         getFolderBlob(audioKey(folder.id)),
         getFolderBlob(slideKey(folder.id)),
       ]);
+      if (model === "backend") {
+        // The full FastAPI pipeline; it reports stages instead of streaming text.
+        const result = await runBackendAnalysis({
+          folder,
+          speech,
+          audio,
+          slide,
+          onStage: (stage) => setProbeNote(tr(stage === "connecting" ? "backendConnecting" : stage === "uploading" ? "backendUploading" : "backendAnalyzing")),
+          messages: { noAudio: tr("backendNoAudio"), slideSkipped: tr("backendSlideSkipped") },
+        });
+        setProbeNote(result.notes.length ? result.notes.join(" ") : null);
+        setProbeResult({ ...result, model, writing: false });
+        return;
+      }
       const slideText = pdfRef.current ? await readSlideText(pdfRef.current) : "";
       const slideImage = await new Promise<Blob | null>((resolve) => {
         const canvas = canvasRef.current;
@@ -549,23 +635,48 @@ function FolderRoom({
       const body = new FormData();
       body.set("text", speech);
       body.set("slideText", slideText);
-      if (audio) body.set("audio", audio, folder.audioName ?? "audio");
-      if (slide) body.set("slide", slide, folder.slideName ?? "slide");
+      body.set("model", model);
+      body.set("idea", folder.idea ?? "");
+      body.set("keyPoints", JSON.stringify((folder.keyPoints ?? []).filter((p) => p.trim())));
+      // Names only: the route needs the text, and hosts like Vercel reject bodies over 4.5 MB.
+      if (audio) body.set("audioName", folder.audioName ?? "audio");
+      if (slide) body.set("slideName", folder.slideName ?? "slide");
       if (slideImage) body.set("slideImage", slideImage, "current-slide.jpg");
-      const res = await fetch("/api/prototype", { method: "POST", body });
-      const payload = (await res.json()) as {
-        error?: string;
-        summary?: string;
-        points?: { title: string; detail: string }[];
-        received?: { text: boolean; audio: string | null; slide: string | null };
-      };
-      if (!res.ok || !payload.summary || !payload.points || !payload.received) {
-        setProbeNote(payload.error || "LLM рүү илгээж чадсангүй.");
+      // Streamed: the summary and list fill in while the model writes; the checked reply replaces them.
+      const payload = await streamModelReply(
+        body,
+        langHeaders(),
+        (partial) =>
+          setProbeResult({
+            summary: partial.summary ?? "",
+            strengths: partial.strengths ?? [],
+            improvements: partial.improvements ?? [],
+            offTopic: [],
+            model,
+            mainPoints: null,
+            received: null,
+            writing: true,
+          }),
+        tr("sendFail"),
+      );
+      if (!payload.summary || !payload.improvements || !payload.received) {
+        setProbeResult(null);
+        setProbeNote(tr("sendFail"));
         return;
       }
-      setProbeResult({ summary: payload.summary, points: payload.points, received: payload.received });
-    } catch {
-      setProbeNote("LLM рүү илгээж чадсангүй.");
+      setProbeResult({
+        summary: payload.summary,
+        strengths: payload.strengths ?? [],
+        improvements: payload.improvements,
+        offTopic: payload.offTopic ?? [],
+        model: payload.model ?? model,
+        mainPoints: (payload.mainPoints as MainPointsResult | null) ?? null,
+        received: payload.received,
+        writing: false,
+      });
+    } catch (err) {
+      setProbeResult(null);
+      setProbeNote(err instanceof Error && err.message ? err.message : tr("sendFail"));
     } finally {
       setProbing(false);
     }
@@ -574,21 +685,16 @@ function FolderRoom({
   function toggleAudio() {
     const el = audioRef.current;
     if (!el) return;
-    if (el.paused) {
-      beginStt();
-      void el.play();
-    } else {
-      el.pause();
-      stopStt();
-    }
+    if (el.paused) void el.play();
+    else el.pause();
   }
 
-  const spoken = `${finalText}${interim}`.trim();
+  const spoken = finalText.trim();
   function speakButton() {
     return (
       <button type="button" className={listening ? "desk-ghost" : "desk-primary"} onClick={toggleSpeak}>
         {listening && <span className="desk-rec" aria-hidden />}
-        {listening ? "Зогсоох" : "Ярих"}
+        {listening ? tr("stop") : tr("speak")}
       </button>
     );
   }
@@ -597,7 +703,7 @@ function FolderRoom({
     return (
       <>
         <button type="button" className="desk-ghost" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-          Өмнөх
+          {tr("prev")}
         </button>
         <span className="desk-count">
           {page} / {pageCount}
@@ -608,7 +714,7 @@ function FolderRoom({
           disabled={page >= pageCount}
           onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
         >
-          Дараах
+          {tr("next")}
         </button>
       </>
     );
@@ -620,6 +726,7 @@ function FolderRoom({
         <div className="desk-bar">
           <WaveMark />
           <span>Pitch Coach</span>
+          {process.env.NODE_ENV === "development" && <LangToggle />}
         </div>
         <div className="desk-title">
           <div>
@@ -627,17 +734,17 @@ function FolderRoom({
               <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
                 <path d="M8.5 2.5 4 7l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Хавтаснууд
+              {tr("folders")}
             </button>
             <h1>{folder.name}</h1>
-            <p className="desk-sub">{pageCount > 1 ? `Слайд ${page} / ${pageCount}` : "Ярь. Текст баруун талд бичигдэнэ."}</p>
+            <p className="desk-sub">{pageCount > 1 ? tr("slideOf", { page, count: pageCount }) : tr("speakHint")}</p>
           </div>
         </div>
         <div className="desk-actions" hidden={full && hasSlide}>
           {speakButton()}
           {hasSlide && (
             <button type="button" className="desk-ghost" onClick={() => setFull(true)}>
-              Бүтэн дэлгэц
+              {tr("fullscreen")}
             </button>
           )}
         </div>
@@ -651,14 +758,14 @@ function FolderRoom({
                 </div>
               ) : slideUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img className="desk-slide" src={slideUrl} alt={folder.slideName ?? "Figma слайд"} />
+                <img className="desk-slide" src={slideUrl} alt={folder.slideName ?? tr("figmaSlide")} />
               ) : (
                 <label className="desk-slide-empty">
-                  <span>Figma слайд</span>
-                  Зураг оруулах
+                  <span>{tr("figmaSlide")}</span>
+                  {tr("addImage")}
                   <input
                     type="file"
-                    accept="image/*,.pdf"
+                    accept={SLIDE_ACCEPT}
                     className="sr-only"
                     onChange={(e) => chooseSlide(e.target.files?.[0])}
                   />
@@ -669,7 +776,7 @@ function FolderRoom({
                   {speakButton()}
                   {pageButtons()}
                   <button type="button" className="desk-ghost" onClick={() => setFull(false)}>
-                    Хаах
+                    {tr("close")}
                   </button>
                 </div>
               )}
@@ -678,55 +785,92 @@ function FolderRoom({
               <div className="desk-tools">
                 <div className="desk-pages">{pageButtons()}</div>
                 <label className="desk-link">
-                  Слайд солих
-                  <input type="file" accept="image/*,.pdf" className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
+                  {tr("changeSlide")}
+                  <input type="file" accept={SLIDE_ACCEPT} className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
                 </label>
               </div>
             )}
-            {slideNote && <p className="desk-note">{slideNote}</p>}
+            {slideNote && <p className="desk-note">{tr(slideNote)}</p>}
+            {slideMsg && <p className="desk-note" aria-live="polite">{slideMsg}</p>}
           </div>
           <aside className="desk-speech">
-            <h2>Ярианы текст</h2>
-            <p className="desk-sub">
-              {listening ? "Сонсож байна" : spoken ? "Яриа хадгалагдсан" : "Ярих дээр дараад ярь"}
+            <h2>{tr("speechText")}</h2>
+            <p className="desk-sub" aria-live="polite">
+              {listening
+                ? tr("listeningLong")
+                : pending > 0 || fileBusy
+                  ? tr("transcribing")
+                  : spoken
+                    ? tr("speechSaved")
+                    : tr("pressSpeak")}
             </p>
-            <p>
-              {spoken || <span className="desk-missing">Хоосон</span>}
+            <p className="desk-transcript">
+              {spoken || (pending === 0 && <span className="desk-missing">{tr("empty")}</span>)}
+              {pending > 0 && <span className="desk-missing"> …</span>}
             </p>
             {sttNote && <p className="desk-note">{sttNote}</p>}
+            <div className="desk-speech-tools">
+              <button
+                type="button"
+                className="desk-link"
+                disabled={!folder.audioName || fileBusy || listening}
+                onClick={() => void transcribeAudioFile()}
+              >
+                {fileBusy ? tr("transcribingAudio") : tr("retranscribeAudio")}
+              </button>
+              <button
+                type="button"
+                className="desk-link"
+                disabled={!spoken || listening}
+                onClick={() => writeSpeech("")}
+              >
+                {tr("clearText")}
+              </button>
+            </div>
             <div className="desk-probe">
+              <FeedbackModelSelect value={model} onChange={setModel} />
               <button
                 type="button"
                 className="desk-ghost"
                 disabled={probing || (!spoken && !folder.audioName && !hasSlide)}
                 onClick={() => void sendToModel()}
               >
-                {probing ? "Илгээж байна" : "LLM рүү илгээх"}
+                {probing ? tr("sending") : tr("sendToModel")}
               </button>
               {probeNote && <p className="desk-note">{probeNote}</p>}
               {probeResult && (
                 <>
                   <p>
-                    {probeResult.received.text ? "Текст" : "Текст алга"}
-                    {probeResult.received.audio ? ` · Аудио ${probeResult.received.audio}` : ""}
-                    {probeResult.received.slide ? ` · Слайд ${probeResult.received.slide}` : ""}
+                    {probeResult.model}
+                    {probeResult.writing && ` · ${tr("writing")}`}
+                    {probeResult.received && (
+                      <>
+                        {" · "}
+                        {probeResult.received.text ? tr("text") : tr("noText")}
+                        {probeResult.received.audio ? ` · ${tr("audio")} ${probeResult.received.audio}` : ""}
+                        {probeResult.received.slide ? ` · ${tr("slide")} ${probeResult.received.slide}` : ""}
+                      </>
+                    )}
                   </p>
                   <h3>{probeResult.summary}</h3>
-                  {probeResult.points.length > 0 && (
-                    <ul>
-                      {probeResult.points.map((point) => (
-                        <li key={point.title}>
-                          <strong>{point.title}</strong>
-                          {point.detail}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <ImprovementList
+                    strengths={probeResult.strengths}
+                    improvements={probeResult.improvements}
+                    offTopic={probeResult.offTopic}
+                  />
+                  {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} />}
                 </>
               )}
             </div>
+            {process.env.NODE_ENV === "development" && <DevTests model={model} onLoadSample={loadSample} />}
           </aside>
         </div>
+
+        <PitchPointsEditor
+          idea={folder.idea ?? ""}
+          points={folder.keyPoints ?? []}
+          onChange={({ idea, points }) => onChange({ ...folder, idea, keyPoints: points })}
+        />
 
         <div>
         <WaveAudio
@@ -746,7 +890,7 @@ function FolderRoom({
           className="hidden"
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
-          onEnded={() => stopStt()}
+          onEnded={() => setPlaying(false)}
           onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         />
@@ -805,7 +949,7 @@ function PlayMark() {
 
 function livePeaksFrom(analyser: AnalyserNode, data: Uint8Array<ArrayBuffer>) {
   analyser.getByteTimeDomainData(data);
-  const count = 96;
+  const count = 32;
   const block = Math.floor(data.length / count);
   const next: number[] = [];
   for (let i = 0; i < count; i++) {
@@ -834,6 +978,7 @@ function WaveAudio({
   onToggle: () => void;
   onPick: (file: File | undefined) => void;
 }) {
+  const { tr } = useLang();
   const clipId = useId().replace(/:/g, "");
   const [peaks, setPeaks] = useState<number[]>(SAMPLE_WAVE);
   const [spoken, setSpoken] = useState<number[] | null>(null);
@@ -882,7 +1027,7 @@ function WaveAudio({
     let last = 0;
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
-      if (now - last < 70) return;
+      if (now - last < 180) return;
       last = now;
       setSpoken(livePeaksFrom(live, data));
     };
@@ -916,12 +1061,12 @@ function WaveAudio({
         </span>
       </button>
       <div className="flex items-center justify-between gap-3 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
-        <span className="truncate">{name ?? "Аудио"}</span>
+        <span className="truncate">{name ?? tr("audio")}</span>
         <span className="shrink-0 tabular-nums">
-          {live ? "Сонсож байна" : url ? `${formatClock(time)} / ${formatClock(duration)}` : "Файл оруулаагүй"}
+          {live ? tr("listening") : url ? `${formatClock(time)} / ${formatClock(duration)}` : tr("noFile")}
         </span>
         <label className="shrink-0 cursor-pointer underline">
-          {url ? "Солих" : "Оруулах"}
+          {url ? tr("change") : tr("upload")}
           <input
             type="file"
             accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg"

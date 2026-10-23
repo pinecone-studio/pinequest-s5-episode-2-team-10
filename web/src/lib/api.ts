@@ -16,7 +16,11 @@ import { mockApi } from "./mock";
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 export const USING_MOCK = !API_URL;
 
-const BASE = `${API_URL}/api/v1`;
+// The browser calls this app. next.config forwards /api/v1 to NEXT_PUBLIC_API_URL,
+// so a deployed site can reach the API without that host allowing our origin.
+const BASE = "/api/v1";
+const REQUEST_TIMEOUT_MS = 25_000;
+const UPLOAD_TIMEOUT_MS = 120_000; // a 25 MB recording on a slow connection
 const TOKEN_KEY = "pitchcoach:user-token";
 
 export class ApiRequestError extends Error {
@@ -62,9 +66,13 @@ async function send<T>(path: string, init: RequestInit, token: string | null, as
 
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, { ...init, headers });
-  } catch {
-    throw new ApiRequestError({ code: "network", message: "Could not reach the server. Is the backend running?" });
+    res = await fetch(`${BASE}${path}`, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+  } catch (err) {
+    const timedOut = err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError");
+    throw new ApiRequestError({
+      code: timedOut ? "timeout" : "network",
+      message: timedOut ? "The backend took too long to answer. Try again." : "Could not reach the server. Is the backend running?",
+    });
   }
   if (!res.ok) {
     let err: ApiError = { code: String(res.status), message: res.statusText || "Request failed." };
@@ -100,7 +108,7 @@ const json = (method: string, body?: unknown): RequestInit => ({
 function upload<T>(id: string, kind: "audio" | "slides", file: Blob, filename: string) {
   const form = new FormData();
   form.append("file", file, filename);
-  return request<T>(`/sessions/${id}/${kind}`, { method: "POST", body: form });
+  return request<T>(`/sessions/${id}/${kind}`, { method: "POST", body: form, signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS) });
 }
 
 const realApi = {
@@ -118,8 +126,9 @@ const realApi = {
   setScript: (id: string, text: string) => request<{ words: number }>(`/sessions/${id}/script`, json("PUT", { text })),
   uploadAudio: (id: string, file: Blob, filename: string) => upload<AudioUploadResult>(id, "audio", file, filename),
 
-  analyze: (id: string, feedback_backend: FeedbackBackend) =>
-    request<void>(`/sessions/${id}/analyze`, json("POST", { feedback_backend })),
+  // Without a model, the backend uses its default (PITCH_DEFAULT_BACKEND).
+  analyze: (id: string, feedback_backend?: FeedbackBackend) =>
+    request<void>(`/sessions/${id}/analyze`, json("POST", feedback_backend ? { feedback_backend } : {})),
   status: (id: string) => request<StatusResponse>(`/sessions/${id}/status`),
   report: (id: string) => request<Report>(`/sessions/${id}/report`),
 

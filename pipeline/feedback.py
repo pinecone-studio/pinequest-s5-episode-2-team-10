@@ -18,12 +18,13 @@ from typing import Literal, Optional
 import httpx
 from pydantic import BaseModel, ConfigDict
 
-from . import config
+from . import config, fillers, points
 
 Backend = Literal["claude", "gemma4-ft", "gemma4-base", "rules"]
 BACKENDS: tuple[str, ...] = ("claude", "gemma4-ft", "gemma4-base", "rules")
 
 PROMPT = (Path(__file__).parent / "prompts" / "feedback_v2.md").read_text(encoding="utf-8")
+PROMPT_VERSION = "v2.2-points"  # stored with each report; bump when the prompt or schema changes
 MAX_RECOMMENDATIONS = 5
 SLIDE_WORDS = 60  # trim slide text so a 3-minute pitch plus 10 slides fits in 6144 tokens
 SCRIPT_WORDS = 600  # about 4 minutes of speech
@@ -76,6 +77,23 @@ class Recommendation(_Strict):
     impact: Literal["high", "medium", "low"]
 
 
+class FillerOccurrence(_Strict):
+    sentence_id: int
+    word: str
+
+
+class PointCheck(_Strict):
+    point: int
+    status: Literal["covered", "partial", "missed"]
+    evidence: str
+    note: str
+
+
+class OffTopic(_Strict):
+    sentence_id: int
+    reason: str
+
+
 class Feedback(_Strict):
     summary: str
     strengths: list[str]
@@ -83,6 +101,10 @@ class Feedback(_Strict):
     slide_feedback: list[SlideFeedback]
     number_checks: list[NumberCheck]
     recommendations: list[Recommendation]
+    filler_occurrences: list[FillerOccurrence]
+    point_checks: list[PointCheck]
+    off_topic: list[OffTopic]
+    idea_comment: str
 
 
 def _inline_refs(schema: dict) -> dict:
@@ -108,11 +130,17 @@ SCHEMA = _inline_refs(Feedback.model_json_schema())
 
 
 def build_input(session: dict, sentences: list[dict], metrics: dict, wording: dict, slides: list[dict], alignment: dict) -> dict:
-    info = {k: v for k, v in session.items() if k != "script"}
+    info = {k: v for k, v in session.items() if k not in ("script", "idea", "key_points")}
     script = " ".join((session.get("script") or "").split()[:SCRIPT_WORDS])
+    key_points = points.clean_points(session.get("key_points"))
     return {
         "session": info,
         "script": script or None,
+        # The speaker's own pitch idea and main points; the model checks each against the transcript.
+        "pitch": {
+            "idea": " ".join((session.get("idea") or "").split())[:500] or None,
+            "key_points": [{"id": i, "text": p} for i, p in enumerate(key_points)],
+        },
         "criteria": CRITERIA.get(session.get("pitch_type", "startup"), CRITERIA["startup"]),
         "transcript": [{"id": i, **s} for i, s in enumerate(sentences)],
         "metrics": metrics,
@@ -126,6 +154,8 @@ def build_input(session: dict, sentences: list[dict], metrics: dict, wording: di
             for a in alignment.get("slides", [])
         ],
         "number_candidates": alignment.get("number_candidates", []),
+        # Every listed filler word found by code; the model confirms each one in context.
+        "filler_candidates": fillers.find_candidates(sentences),
     }
 
 
@@ -138,6 +168,9 @@ def generate(backend: str, data: dict) -> dict:
         raw = _ollama(config.OLLAMA_MODEL_BASE, data)
     elif backend == "rules":
         raw = _rules(data)
+    elif backend.startswith("ollama:"):
+        # Any local Ollama model, for trying the analysis (scripts/try_analysis.py). Not offered in the app.
+        raw = _ollama(backend.split(":", 1)[1], data)
     else:
         raise FeedbackError(f"Unknown feedback model: {backend}")
 
@@ -145,7 +178,7 @@ def generate(backend: str, data: dict) -> dict:
         fb = Feedback.model_validate(raw)
     except Exception as e:
         raise FeedbackError("The feedback model returned output that does not match the schema.") from e
-    return _sanitize(fb.model_dump(), data)
+    return _sanitize(fb.model_dump(), data, filler_method="list" if backend == "rules" else "llm")
 
 
 # ---- Backends --------------------------------------------------------------
@@ -195,6 +228,7 @@ def _ollama(model: str, data: dict) -> dict:
         "model": model,
         "stream": False,
         "format": SCHEMA,
+        "keep_alive": config.OLLAMA_KEEP_ALIVE,
         "options": {"temperature": 0, "num_ctx": 8192},
         "messages": [
             {"role": "system", "content": PROMPT},
@@ -202,7 +236,8 @@ def _ollama(model: str, data: dict) -> dict:
         ],
     }
     try:
-        r = httpx.post(f"{config.OLLAMA_URL}/api/chat", json=payload, timeout=config.OLLAMA_TIMEOUT_S)
+        headers = {"Authorization": f"Bearer {config.OLLAMA_TOKEN}"} if config.OLLAMA_TOKEN else None
+        r = httpx.post(f"{config.OLLAMA_URL}/api/chat", json=payload, headers=headers, timeout=config.OLLAMA_TIMEOUT_S)
     except httpx.HTTPError as e:
         raise FeedbackError("Could not reach Ollama. Is it running on this machine?") from e
     if r.status_code == 404:
@@ -229,6 +264,10 @@ def _rules(data: dict) -> dict:
         recs.append(("delivery", f"Минутанд {m['wpm']:.0f} үг хэлсэн нь удаан байна.", "Өгүүлбэр хоорондын завсарлагыг богиносго.", "medium"))
     if w.get("fillers_per_100") and w["fillers_per_100"] > 2:
         recs.append(("delivery", f"100 үг тутамд {w['fillers_per_100']} дүүргэгч үг хэлсэн.", "Дүүргэгч үгийн оронд чимээгүй завсарла.", "high"))
+    point_checks = points.rules_check([p["text"] for p in data["pitch"]["key_points"]], data["transcript"])
+    for c in [c for c in point_checks if c["status"] != "covered"][:2]:
+        text = data["pitch"]["key_points"][c["point"]]["text"]
+        recs.append(("content", f"Гол санаа ярианд тод сонсогдсонгүй: «{text}».", "Энэ санааг нэг тодорхой өгүүлбэрээр, баримт эсвэл жишээтэй хэл.", "high"))
     missed = [a["slide"] for a in data["alignment"] if a["status"] == "missed"]
     if missed:
         recs.append(("slides", f"{', '.join(map(str, missed))}-р слайдын агуулгыг яриандаа хэлээгүй.", "Слайд бүрийн гол санааг нэг өгүүлбэрээр хэл.", "high"))
@@ -246,13 +285,19 @@ def _rules(data: dict) -> dict:
             {"area": area, "problem": problem, "start_s": None, "slide": None, "why": "", "action": action, "example_sentence": "", "impact": impact}
             for area, problem, action, impact in recs
         ],
+        # Without a model, every listed filler counts.
+        "filler_occurrences": data["filler_candidates"],
+        # Without a model, main points are matched by key words.
+        "point_checks": point_checks,
+        "off_topic": [],
+        "idea_comment": "",
     }
 
 
 # ---- Checks on model output ------------------------------------------------
 
 
-def _sanitize(fb: dict, data: dict) -> dict:
+def _sanitize(fb: dict, data: dict, filler_method: str = "llm") -> dict:
     starts = [s["start"] for s in data["transcript"]]
     slide_numbers = {s["number"] for s in data["slides"]}
     criteria = data["criteria"]
@@ -284,4 +329,21 @@ def _sanitize(fb: dict, data: dict) -> dict:
         if r["slide"] not in slide_numbers:
             r["slide"] = None
     fb["recommendations"] = recs
+
+    # Fillers: keep only occurrences that exist in the named sentence; counts come from code.
+    sentences = data["transcript"]
+    reported = len(fb["filler_occurrences"])
+    fb["filler_occurrences"] = fillers.verify(fb["filler_occurrences"], sentences)
+    fb["fillers"] = fillers.summarize(
+        fb["filler_occurrences"], sentences, data["wording"].get("word_count") or 0, filler_method
+    )
+    # How many occurrences the model claimed before verification; the gap is what it invented.
+    fb["fillers"]["model_reported"] = reported
+
+    # Main points: quotes are checked against the transcript and coverage is computed in code.
+    fb["main_points"] = points.verify(
+        fb["point_checks"], [p["text"] for p in data["pitch"]["key_points"]], sentences,
+        fb["off_topic"], fb["idea_comment"], "words" if filler_method == "list" else "llm",
+        idea=data["pitch"]["idea"] or "",
+    )
     return fb
