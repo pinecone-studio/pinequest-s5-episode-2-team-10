@@ -70,6 +70,21 @@ function keyPointsOf(value: FormDataEntryValue | null): unknown {
   }
 }
 
+/** `pointSlides` is a JSON array, one slide number (or null) per point; anything else means none. */
+function pointSlidesOf(value: FormDataEntryValue | null, count: number): (number | null)[] {
+  let raw: unknown = null;
+  try {
+    raw = typeof value === "string" && value ? JSON.parse(value) : null;
+  } catch {
+    /* no slides */
+  }
+  const list = Array.isArray(raw) ? raw : [];
+  return Array.from({ length: count }, (_, i) => {
+    const n = list[i];
+    return typeof n === "number" && Number.isInteger(n) && n > 0 && n < 1000 ? n : null;
+  });
+}
+
 export async function POST(request: Request) {
   const lang = langOf(request);
   let form: FormData;
@@ -85,6 +100,8 @@ export async function POST(request: Request) {
   const rawPoints = keyPointsOf(form.get("keyPoints"));
   if (!Array.isArray(rawPoints) || rawPoints.length > MAX_POINTS) return jsonError(t(lang, "badPoints"), 400);
   const keyPoints = cleanPoints(rawPoints);
+  // The page sends only non-empty points, so the slides line up with keyPoints.
+  const pointSlides = pointSlidesOf(form.get("pointSlides"), keyPoints.length);
   const audio = fileOf(form.get("audio"));
   const slide = fileOf(form.get("slide"));
   const slideImage = fileOf(form.get("slideImage"));
@@ -136,7 +153,12 @@ export async function POST(request: Request) {
       ? [
           `The speaker's pitch idea: ${idea || "(not given)"}`,
           "The main points they wanted to get across:",
-          keyPoints.length ? keyPoints.map((p, i) => `(${i}) ${p}`).join("\n") : "(none)",
+          keyPoints.length
+            ? keyPoints.map((p, i) => `(${i})${pointSlides[i] ? ` [slide ${pointSlides[i]}]` : ""} ${p}`).join("\n")
+            : "(none)",
+          ...(pointSlides.some(Boolean)
+            ? ["A point marked [slide N] is what the speaker meant to say on slide N of the slide text above."]
+            : []),
           "",
           "point_checks: for each main point, judge whether the speech made it. Judge meaning, not wording; one shared word is not enough.",
           "- point: the number in brackets before that main point. One entry per main point, in the same order.",

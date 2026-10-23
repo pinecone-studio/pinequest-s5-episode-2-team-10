@@ -28,6 +28,8 @@ export interface FolderMeta {
   /** The pitch idea and main points the speech should get across (optional, added later). */
   idea?: string;
   keyPoints?: string[];
+  /** Each main point's slide number (as on screen), in the same order; null = no slide. */
+  pointSlides?: (number | null)[];
   /** Figma Slides (or prototype) share link, played live with its animations (optional). */
   figmaUrl?: string | null;
 }

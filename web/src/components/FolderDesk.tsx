@@ -29,7 +29,7 @@ import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import Modal from "./Modal";
 import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
-import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
+import { PitchPointsEditor, PitchPointsResult, pointsToSend, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
 
 type Live = { stream: MediaStream; ctx: AudioContext };
@@ -64,6 +64,12 @@ export default function FolderDesk() {
   const [slideFile, setSlideFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
   const [newSlideError, setNewSlideError] = useState<string | null>(null);
+  // A new folder's slides come from an uploaded file or a Figma link.
+  const [source, setSource] = useState<"file" | "figma">("file");
+  const [newFigma, setNewFigma] = useState("");
+  const figmaLink = newFigma.trim();
+  const figmaBad = source === "figma" && !!figmaLink && !figmaEmbedUrl(figmaLink);
+  const hasSource = source === "file" ? !!slideFile && !newSlideError : !!figmaLink && !figmaBad;
 
   async function pickNewSlide(file: File | null) {
     setNewSlideError(null);
@@ -84,28 +90,33 @@ export default function FolderDesk() {
   async function createFolder(e: React.FormEvent) {
     e.preventDefault();
     const name = draft.trim();
-    if (!name || !slideFile) return;
-    setCreating(true);
-    setNewSlideError(null);
-    let slide: File;
-    try {
-      slide = await prepareSlide(slideFile); // PowerPoint decks become PDF here
-    } catch (err) {
-      setNewSlideError(err instanceof Error ? err.message : tr("deckConvertFailed"));
+    if (!name || !hasSource) return;
+    let folder: FolderMeta = {
+      id: crypto.randomUUID(),
+      name,
+      slideName: null,
+      audioName: null,
+      figmaUrl: source === "figma" ? figmaLink : null,
+    };
+    if (source === "file" && slideFile) {
+      setCreating(true);
+      setNewSlideError(null);
+      let slide: File;
+      try {
+        slide = await prepareSlide(slideFile); // PowerPoint decks become PDF here
+      } catch (err) {
+        setNewSlideError(err instanceof Error ? err.message : tr("deckConvertFailed"));
+        setCreating(false);
+        return;
+      }
       setCreating(false);
-      return;
+      folder = attachSlide(folder, { name: slide.name, type: slide.type }, new Date().toISOString());
+      await putFolderBlob(slideKey(folder.id), slide);
     }
-    setCreating(false);
-    const id = crypto.randomUUID();
-    const folder = attachSlide(
-      { id, name, slideName: null, audioName: null },
-      { name: slide.name, type: slide.type },
-      new Date().toISOString(),
-    );
-    await putFolderBlob(slideKey(folder.id), slide);
     persist([folder, ...folders]);
     setDraft("");
     setSlideFile(null);
+    setNewFigma("");
     setNaming(false);
     setOpenId(folder.id);
   }
@@ -143,25 +154,54 @@ export default function FolderDesk() {
                     placeholder="figma tdd"
                   />
                 </label>
-                <label>
+                <div className="desk-source-head">
                   <span>{tr("slide")}</span>
-                  <span className="desk-file">
-                    <span>{slideFile ? slideFile.name : tr("uploadSlideHint")}</span>
-                    <span>{slideFile ? tr("change") : tr("upload")}</span>
-                    <input
-                      type="file"
-                      accept={SLIDE_ACCEPT}
-                      className="sr-only"
-                      onChange={(e) => void pickNewSlide(e.target.files?.[0] ?? null)}
-                    />
-                  </span>
-                </label>
-                {newSlideError && <p className="desk-note">{newSlideError}</p>}
+                  <div className="desk-source" role="group" aria-label={tr("slide")}>
+                    <button type="button" aria-pressed={source === "file"} onClick={() => setSource("file")}>
+                      {tr("sourceFile")}
+                    </button>
+                    <button type="button" aria-pressed={source === "figma"} onClick={() => setSource("figma")}>
+                      {tr("sourceLink")}
+                    </button>
+                  </div>
+                </div>
+                {source === "file" ? (
+                  <>
+                    <label>
+                      <span className="desk-file">
+                        <span>{slideFile ? slideFile.name : tr("uploadSlideHint")}</span>
+                        <span>{slideFile ? tr("change") : tr("upload")}</span>
+                        <input
+                          type="file"
+                          accept={SLIDE_ACCEPT}
+                          className="sr-only"
+                          onChange={(e) => void pickNewSlide(e.target.files?.[0] ?? null)}
+                        />
+                      </span>
+                    </label>
+                    {newSlideError && <p className="desk-note">{newSlideError}</p>}
+                  </>
+                ) : (
+                  <>
+                    <label>
+                      <input
+                        type="url"
+                        autoFocus
+                        value={newFigma}
+                        onChange={(e) => setNewFigma(e.target.value)}
+                        placeholder="https://www.figma.com/slides/…"
+                        aria-label={tr("figmaLinkLabel")}
+                        spellCheck={false}
+                      />
+                    </label>
+                    <p className={figmaBad ? "desk-note" : "desk-hint"}>{figmaBad ? tr("figmaBad") : tr("figmaShareHint")}</p>
+                  </>
+                )}
                 <div className="app-modal-actions">
                   <button
                     type="submit"
                     className="desk-primary"
-                    disabled={!draft.trim() || !slideFile || creating || Boolean(newSlideError)}
+                    disabled={!draft.trim() || !hasSource || creating}
                   >
                     {creating ? tr("convertingSlide") : tr("createOpen")}
                   </button>
@@ -227,6 +267,7 @@ function FolderRoom({
   const [pageCount, setPageCount] = useState(0);
   const [shownPages, setShownPages] = useState<number[]>([]); // PDF page numbers on screen; empty = all
   const [hiddenPages, setHiddenPages] = useState(0); // animation steps and empty pages left out
+  const [transitions, setTransitions] = useState<number[]>([]); // shown slides with hardly any text
   // A Figma link plays the deck live (with its animations); the PDF still feeds the analysis.
   const [figmaEditing, setFigmaEditing] = useState(false);
   const [figmaDraft, setFigmaDraft] = useState("");
@@ -257,6 +298,7 @@ function FolderRoom({
     offTopic: OffTopic[];
     model: string;
     mainPoints: MainPointsResult | null;
+    pointSlides: (number | null)[]; // the slide of each point sent, in the reply's order
     received: { text: boolean; audio: string | null; slide: string | null } | null;
     writing: boolean; // true while the model is still writing (shown as it arrives, not checked yet)
   } | null>(null);
@@ -279,6 +321,7 @@ function FolderRoom({
       setPageCount(0);
       setShownPages([]);
       setHiddenPages(0);
+      setTransitions([]);
       setPage(1);
       rememberUrl(URL.createObjectURL(file));
       setSlideNote(null);
@@ -299,9 +342,11 @@ function FolderRoom({
       setPageCount(doc.numPages);
       setShownPages([]);
       setHiddenPages(0);
+      setTransitions([]);
       setPage(1);
       setPdfEpoch((n) => n + 1);
       const picked = await pickSlides(doc).catch(() => null);
+      if (picked && slideGen.current === gen) setTransitions(picked.transitions);
       if (picked && slideGen.current === gen && picked.hidden > 0) {
         setShownPages(picked.pages);
         setHiddenPages(picked.hidden);
@@ -333,6 +378,7 @@ function FolderRoom({
         setPageCount(0);
         setShownPages([]);
         setHiddenPages(0);
+        setTransitions([]);
         rememberUrl(null);
         setSlideNote(null);
       }
@@ -691,6 +737,7 @@ function FolderRoom({
     setProbing(true);
     setProbeNote(null);
     setProbeResult(null);
+    const sent = pointsToSend(folder.keyPoints, folder.pointSlides);
     try {
       const saved = selectedAudio(folder);
       const [audio, slide] = await Promise.all([
@@ -708,7 +755,7 @@ function FolderRoom({
           messages: { noAudio: tr("backendNoAudio"), slideSkipped: tr("backendSlideSkipped") },
         });
         setProbeNote(result.notes.length ? result.notes.join(" ") : null);
-        setProbeResult({ ...result, model, writing: false });
+        setProbeResult({ ...result, model, pointSlides: sent.slides, writing: false });
         return;
       }
       const slideText = pdfRef.current ? await readSlideText(pdfRef.current, 8, shownPages) : "";
@@ -725,7 +772,8 @@ function FolderRoom({
       body.set("slideText", slideText);
       body.set("model", model);
       body.set("idea", folder.idea ?? "");
-      body.set("keyPoints", JSON.stringify((folder.keyPoints ?? []).filter((p) => p.trim())));
+      body.set("keyPoints", JSON.stringify(sent.texts));
+      body.set("pointSlides", JSON.stringify(sent.slides));
       // Names only: the route needs the text, and hosts like Vercel reject bodies over 4.5 MB.
       if (audio) body.set("audioName", folder.audioName ?? "audio");
       if (slide) body.set("slideName", folder.slideName ?? "slide");
@@ -742,6 +790,7 @@ function FolderRoom({
             offTopic: [],
             model,
             mainPoints: null,
+            pointSlides: sent.slides,
             received: null,
             writing: true,
           }),
@@ -759,6 +808,7 @@ function FolderRoom({
         offTopic: payload.offTopic ?? [],
         model: payload.model ?? model,
         mainPoints: (payload.mainPoints as MainPointsResult | null) ?? null,
+        pointSlides: sent.slides,
         received: payload.received,
         writing: false,
       });
@@ -992,6 +1042,15 @@ function FolderRoom({
             )}
             {slideNote && <p className="desk-note">{tr(slideNote)}</p>}
             {slideMsg && <p className="desk-note" aria-live="polite">{slideMsg}</p>}
+            <PitchPointsEditor
+              idea={folder.idea ?? ""}
+              points={folder.keyPoints ?? []}
+              slides={folder.pointSlides ?? []}
+              slideCount={showFigma ? 0 : pageCount}
+              currentSlide={!showFigma && pageCount > 0 ? page : null}
+              transitions={showFigma ? [] : transitions}
+              onChange={({ idea, points, slides }) => onChange({ ...folder, idea, keyPoints: points, pointSlides: slides })}
+            />
           </div>
           <aside className="desk-speech">
             <h2>{tr("speechText")}</h2>
@@ -1055,18 +1114,12 @@ function FolderRoom({
                     improvements={probeResult.improvements}
                     offTopic={probeResult.offTopic}
                   />
-                  {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} />}
+                  {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} slides={probeResult.pointSlides} />}
                 </>
               )}
             </div>
           </aside>
         </div>
-
-        <PitchPointsEditor
-          idea={folder.idea ?? ""}
-          points={folder.keyPoints ?? []}
-          onChange={({ idea, points }) => onChange({ ...folder, idea, keyPoints: points })}
-        />
 
         <div>
         <WaveAudio

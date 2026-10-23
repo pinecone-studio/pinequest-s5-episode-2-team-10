@@ -646,6 +646,7 @@ body {
 .desk-panel input[type="text"],
 .desk-panel input[type="email"],
 .desk-panel input[type="password"],
+.desk-panel input[type="url"],
 .desk-field {
   width: 100%;
   height: 40px;
@@ -660,8 +661,47 @@ body {
 
 .desk-panel input[type="text"]::placeholder,
 .desk-panel input[type="email"]::placeholder,
-.desk-panel input[type="password"]::placeholder {
+.desk-panel input[type="password"]::placeholder,
+.desk-panel input[type="url"]::placeholder {
   color: var(--faint);
+}
+
+/* "Slide" heading with the File | Figma switch for a new folder's slides. */
+.desk-source-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.desk-source {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--control);
+  border-radius: 999px;
+}
+
+.desk-source button {
+  min-width: 56px;
+  padding: 3px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.desk-source button[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.desk-source button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .desk-panel input:focus-visible,
@@ -1242,59 +1282,6 @@ body {
   font-size: 12px;
 }
 
-.desk-tests {
-  margin-top: 16px;
-  padding: 14px;
-  border: 1px dashed var(--control);
-  border-radius: var(--radius-lg);
-}
-
-.desk-tests h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.desk-tests .desk-sub {
-  margin: 2px 0 0;
-  font-size: 12px;
-}
-
-.desk-tests-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.desk-tests ul {
-  display: grid;
-  gap: 8px;
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.desk-tests li {
-  display: grid;
-  gap: 2px;
-  font-size: 12px;
-  line-height: 18px;
-  overflow-wrap: anywhere;
-}
-
-.desk-tests li.is-ok strong {
-  color: var(--positive);
-}
-
-.desk-tests li.is-fail strong {
-  color: var(--negative);
-}
-
-.desk-tests li span {
-  color: var(--muted);
-}
-
 .desk-probe {
   margin-top: 16px;
   padding-top: 14px;
@@ -1443,6 +1430,15 @@ body {
   gap: 10px;
 }
 
+/* Each main point's slide picker sits before its text. */
+.desk-points li .desk-point-slide {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 96px;
+  padding-right: 8px;
+  cursor: pointer;
+}
+
 .desk-points li .desk-link {
   flex-shrink: 0;
   border: 0;
@@ -1464,6 +1460,11 @@ body {
 .desk-points-result li {
   display: grid;
   gap: 4px;
+}
+
+.desk-points-result .desk-point-slide-tag {
+  justify-self: start;
+  font-size: 12px;
 }
 
 .desk-points-result q,
@@ -2174,6 +2175,14 @@ textarea.ui-input {
 
 .app-modal-card .desk-lang {
   margin-left: 0;
+}
+
+/* The card is about the same grey as --control, so borders inside it need to be lighter to show. */
+.app-modal-card .desk-source,
+.app-modal-card .desk-file,
+.app-modal-card .desk-panel input[type="text"],
+.app-modal-card .desk-panel input[type="url"] {
+  border-color: #4a4b4d;
 }
 
 .account-panel-backdrop {
