@@ -8,7 +8,7 @@ Browser (Next.js app, web/)
   v
 FastAPI (backend/)
   |-- Validate uploads, ownership, limits
-  |-- Save files under data/sessions/<attempt id>/
+  |-- Save files locally in SQLite mode or to a private Supabase Storage bucket in shared mode
   |-- Store projects, attempts, results in Supabase Postgres (SQLite locally)
   |-- Queue the attempt
   v
@@ -21,10 +21,11 @@ Background worker (one job at a time; the GPU fits one)
   |-- Verify model output against the transcript
   |-- Score in code
   v
-Supabase Postgres --> web app polls status and shows the report
+Supabase Postgres + private Storage --> web app polls status and fetches files through FastAPI
 ```
 
 Everything runs in one FastAPI process. Analysis takes 20 to 60 seconds, so it runs in a background worker and the browser polls `GET /sessions/{id}/status` every 2 seconds.
+For team-shared use, clients must call the same FastAPI process; the in-memory worker queue is not coordinated across multiple API instances.
 
 ## 2. Implementation choices
 
@@ -34,7 +35,7 @@ Everything runs in one FastAPI process. Analysis takes 20 to 60 seconds, so it r
 | Backend | FastAPI (Python) | `backend/main.py`; the only backend, no Next.js API routes |
 | ORM | SQLModel (SQLAlchemy) | Tables created on startup; no migrations yet |
 | Database | Supabase Postgres in hosted setups, SQLite locally | Set `PITCH_DB_URL`; see `DATABASE.md` |
-| File storage | Server disk (`PITCH_DATA_DIR`) | Move to Supabase Storage when the API leaves the demo laptop |
+| File storage | Local disk for SQLite; private Supabase Storage for shared Postgres | FastAPI checks ownership before serving objects |
 | Identity | Anonymous user token, hashed in the database | Supabase Auth or similar can replace it later |
 | Validation | Pydantic for API input and LLM output | TypeScript types mirror the API in `web/src/lib/types.ts` |
 | Speech-to-text | BuzzASR/mongolian via transformers | Needs the GPU machine; `PITCH_ASR=stub` for testing |
@@ -76,10 +77,10 @@ Status is persisted, so the UI recovers after a refresh. Attempts still `process
 - **Web app:** Vercel (or any Next.js host) with `NEXT_PUBLIC_API_URL` pointing at the API.
 - **API and worker:** the RTX 4060 laptop, exposed with a tunnel (Cloudflare Tunnel or ngrok), with `PITCH_CORS_ORIGINS` set to the web app's URL. A CPU-only host is too slow for Mongolian Whisper.
 - **Database:** Supabase Postgres through `PITCH_DB_URL` (session pooler, port 5432).
-- **Files:** on the laptop's disk for now.
+- **Files:** private Supabase Storage bucket for shared Postgres; local `PITCH_DATA_DIR` for SQLite development.
 
 ## 7. Open decisions
 
 - Whether pace, pauses, pitch range, and volume drop are shown as scores, given the transcript-first MVP boundary.
-- When to move uploads to Supabase Storage and add database migrations (Alembic).
+- Adding database migrations (Alembic) for future schema changes.
 - Whether to add logins (for example Supabase Auth) so projects follow a user across devices.

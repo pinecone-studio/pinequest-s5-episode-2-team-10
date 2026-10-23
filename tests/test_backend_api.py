@@ -2,7 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session, create_engine
+from sqlmodel import Session, create_engine, select
 
 from backend import main
 from backend.db import PitchSession
@@ -175,3 +175,118 @@ def test_project_fields_are_not_visible_to_another_user(client):
 
     assert response.status_code == 404
     assert response.json()["code"] == "not_found"
+
+
+def test_audio_upload_and_playback_use_private_storage_in_shared_mode(client, monkeypatch):
+    headers = _headers(client)
+    project = client.post("/api/v1/projects", headers=headers, json={"name": "Shared"}).json()
+    attempt = client.post(
+        f"/api/v1/projects/{project['id']}/sessions",
+        headers=headers,
+        json={"copy_inputs": False},
+    ).json()
+    objects = {}
+
+    def convert_to_wav(source, destination):
+        destination.write_bytes(b"converted-audio")
+        return 12.5
+
+    def upload_file(key, path, content_type, *, upsert=True):
+        objects[key] = path.read_bytes()
+
+    monkeypatch.setattr(main.storage, "configured", lambda: True)
+    monkeypatch.setattr(main.audio_tools, "to_wav16k", convert_to_wav)
+    monkeypatch.setattr(main.storage, "upload_file", upload_file)
+    monkeypatch.setattr(
+        main.storage,
+        "download_bytes",
+        lambda key: objects[key],
+    )
+
+    response = client.post(
+        f"/api/v1/sessions/{attempt['id']}/audio",
+        headers=headers,
+        files={"file": ("practice.wav", b"original-audio", "audio/wav")},
+    )
+
+    assert response.status_code == 200
+    assert objects[f"sessions/{attempt['id']}/original.wav"] == b"original-audio"
+    assert objects[f"sessions/{attempt['id']}/audio.wav"] == b"converted-audio"
+    playback = client.get(f"/api/v1/sessions/{attempt['id']}/audio", headers=headers)
+    assert playback.status_code == 200
+    assert playback.content == b"original-audio"
+
+    with Session(main.db.engine) as database:
+        asset = database.get(main.AudioAsset, attempt["id"])
+    assert asset.path == f"storage://sessions/{attempt['id']}/audio.wav"
+    assert asset.original_path == f"storage://sessions/{attempt['id']}/original.wav"
+
+
+def test_migrated_access_token_alias_authenticates_as_mapped_owner(client):
+    from backend.db import AccessToken, AppUser
+
+    token = "an-existing-member-token"
+    headers = _headers(client)
+    with Session(main.db.engine) as database:
+        user = database.exec(select(AppUser)).first()
+        database.add(AccessToken(token_hash=main._hash(token), user_id=user.id))
+        database.commit()
+
+    response = client.get("/api/v1/projects", headers={"X-Access-Token": token})
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_slides_upload_download_and_delete_use_private_storage(client, monkeypatch):
+    headers = _headers(client)
+    project = client.post("/api/v1/projects", headers=headers, json={"name": "Slides"}).json()
+    attempt = client.post(
+        f"/api/v1/projects/{project['id']}/sessions",
+        headers=headers,
+        json={"copy_inputs": False},
+    ).json()
+    objects = {}
+
+    def upload_file(key, path, content_type, *, upsert=True):
+        objects[key] = path.read_bytes()
+
+    def delete_objects(keys):
+        for key in keys:
+            objects.pop(key, None)
+
+    monkeypatch.setattr(main.storage, "configured", lambda: True)
+    monkeypatch.setattr(main.storage, "upload_file", upload_file)
+    monkeypatch.setattr(main.storage, "download_bytes", lambda key: objects[key])
+    monkeypatch.setattr(main.storage, "delete_objects", delete_objects)
+    monkeypatch.setattr(
+        main.slide_tools,
+        "extract",
+        lambda _path: [
+            {
+                "number": 1,
+                "text": "Slide content",
+                "notes": "",
+                "image_only": False,
+                "numbers": [],
+                "key_terms": ["Slide"],
+            }
+        ],
+    )
+
+    upload = client.post(
+        f"/api/v1/sessions/{attempt['id']}/slides",
+        headers=headers,
+        files={"file": ("deck.pdf", b"pdf-content", "application/pdf")},
+    )
+
+    assert upload.status_code == 200
+    key = f"sessions/{attempt['id']}/slides.pdf"
+    assert objects[key] == b"pdf-content"
+    downloaded = client.get(f"/api/v1/sessions/{attempt['id']}/slides/file", headers=headers)
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"pdf-content"
+
+    removed = client.delete(f"/api/v1/sessions/{attempt['id']}/slides", headers=headers)
+    assert removed.status_code == 204
+    assert key not in objects

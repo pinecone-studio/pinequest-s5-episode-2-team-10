@@ -3,6 +3,7 @@ fastapi
 uvicorn[standard]
 sqlmodel
 psycopg[binary]  # Postgres (Supabase) driver
+python-dotenv
 python-multipart
 httpx
 anthropic

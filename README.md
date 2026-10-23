@@ -23,7 +23,7 @@ Feedback is primarily **transcript-based**. Do not claim to evaluate confidence,
 | API | FastAPI (Python 3.10+), one background worker | `backend/` |
 | Analysis pipeline | Python modules: ASR, metrics, slides, fillers, LLM feedback, scoring | `pipeline/` |
 | Database | PostgreSQL on **Supabase** (SQLite for local development), via SQLModel | `backend/db.py` |
-| File storage | Server disk under `data/sessions/` (Supabase Storage is planned) | `backend/config.py` |
+| File storage | Local disk with SQLite; private Supabase Storage with shared Postgres | `backend/storage.py` |
 | Speech-to-text | BuzzASR/mongolian (Whisper large-v3) on the GPU machine; `stub` mode for testing | `pipeline/asr.py` |
 | LLM analysis | Claude (Anthropic API) or Gemma 4 through Ollama (base and fine-tuned) | `pipeline/feedback.py` |
 | Validation | Pydantic on the server; shared TypeScript types in the web app | `pipeline/feedback.py`, `web/src/lib/types.ts` |
@@ -44,7 +44,8 @@ Feedback is primarily **transcript-based**. Do not claim to evaluate confidence,
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt          # add requirements-ml.txt on the GPU machine
 # If backend/.env.local does not exist, copy backend/.env.example to that path.
-# Set PITCH_DB_URL to the Supabase session pooler URI in a loaded env file.
+# For team-shared use, set PITCH_DB_URL, SUPABASE_URL, SUPABASE_STORAGE_BUCKET,
+# and the server-only SUPABASE_SERVICE_ROLE_KEY in a loaded env file.
 uvicorn backend.main:app --reload --port 8000
 
 # Web app
