@@ -1975,10 +1975,17 @@ textarea.ui-input {
   margin: 0;
   padding: 0;
   list-style: none;
+  align-items: stretch;
+}
+
+.folder-grid > li {
+  display: flex;
+  min-width: 0;
 }
 
 .folder-card {
   display: flex;
+  flex: 1;
   flex-direction: column;
   width: 100%;
   padding: 0;
@@ -2017,6 +2024,7 @@ textarea.ui-input {
 
 .folder-card-body {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 6px;
   padding: 12px 14px 14px;
@@ -2037,6 +2045,8 @@ textarea.ui-input {
 }
 
 .folder-card time {
+  min-height: 1.2em;
+  margin-top: auto;
   color: var(--text-helper);
   font-size: 12px;
 }

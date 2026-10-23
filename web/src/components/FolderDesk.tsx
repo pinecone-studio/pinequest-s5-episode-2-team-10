@@ -1210,7 +1210,7 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
             <FolderGlyph />
             <span>{tr("audioCount", { n: folder.audios?.length ?? 0 })}</span>
           </span>
-          {updated && <time dateTime={updated}>{updated}</time>}
+          <time dateTime={updated ?? undefined}>{updated ?? "\u00a0"}</time>
         </span>
       </button>
     </li>
