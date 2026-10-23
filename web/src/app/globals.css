@@ -1225,9 +1225,12 @@ body {
   line-height: 1.45;
 }
 
+/* When the panel is capped at the screen height, long text scrolls here instead of spilling
+   over the buttons under it. */
 .desk-speech-body {
   display: flex;
   flex: 1;
+  overflow-y: auto;
   flex-direction: column;
   min-height: 148px;
   margin-top: 16px;
@@ -1276,6 +1279,34 @@ body {
   color: var(--muted);
   font-size: 14px;
   line-height: 1.45;
+}
+
+/* "See more": the speech text fills the panel down to the buttons under it and scrolls there.
+   On one-column screens the panel has no fixed height, so the text is capped instead. */
+.desk-speech .desk-transcript-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 6px;
+  overscroll-behavior: contain;
+}
+
+.desk-speech .desk-transcript-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.desk-speech .desk-transcript-toggle {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .desk-speech-tools {
@@ -1404,6 +1435,10 @@ body {
   .desk-slide-slot {
     grid-column: 1;
     grid-row: 1;
+  }
+
+  .desk-speech .desk-transcript-scroll {
+    max-height: none;
   }
 
   .desk-speech {
@@ -1625,6 +1660,23 @@ body {
 .desk-improve li em {
   color: var(--faint);
   font-style: normal;
+}
+
+/* An improvement's quote, why and example, opened with "More info". */
+.desk-improve-more {
+  display: grid;
+  gap: 3px;
+}
+
+.desk-improve .desk-improve-toggle {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .desk-tag {
@@ -2174,6 +2226,34 @@ textarea.ui-input {
   border-radius: 12px;
   background: var(--card);
   color: var(--text-primary);
+}
+
+.app-modal-card-wide {
+  display: flex;
+  width: min(720px, 100%);
+  max-height: calc(100vh - 48px);
+  flex-direction: column;
+}
+
+/* The analysis result inside its dialog: no divider above it, and it scrolls under the title. */
+.desk-probe.desk-probe-dialog {
+  min-height: 0;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+  overflow-y: auto;
+}
+
+.desk-probe .desk-result-link {
+  display: block;
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .app-modal-bar {

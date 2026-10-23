@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   attachAudio,
@@ -44,6 +45,21 @@ function formatClock(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
   const s = Math.floor(seconds);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+const TRANSCRIPT_PREVIEW_WORDS = 60; // longer speech text is cut until "See more"
+
+/**
+ * The speech text to show: all of it when open or short; otherwise the first words, or the
+ * latest ones while speech is still coming in, so new words stay in view.
+ */
+function transcriptPreview(text: string, open: boolean, live: boolean): { text: string; long: boolean } {
+  const words = text.split(/\s+/).filter(Boolean);
+  const long = words.length > TRANSCRIPT_PREVIEW_WORDS;
+  if (open || !long) return { text, long };
+  return live
+    ? { text: `… ${words.slice(-TRANSCRIPT_PREVIEW_WORDS).join(" ")}`, long }
+    : { text: `${words.slice(0, TRANSCRIPT_PREVIEW_WORDS).join(" ")} …`, long };
 }
 
 function isPdf(file: Blob) {
@@ -285,8 +301,12 @@ function FolderRoom({
   const [slideNote, setSlideNote] = useState<"pdfOpenFail" | "slideDrawFail" | null>(null);
   const [slideMsg, setSlideMsg] = useState<string | null>(null); // converting, or why a picked file was refused
   const [full, setFull] = useState(false);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const transcriptRef = useRef<HTMLParagraphElement | null>(null);
   const [probing, setProbing] = useState(false);
   const [probeNote, setProbeNote] = useState<string | null>(null);
+  const [resultOpen, setResultOpen] = useState(false); // the analysis dialog
+  const resultShownRef = useRef(false); // opened once per analysis, so closing it while it streams sticks
   const [probeResult, setProbeResult] = useState<{
     summary: string;
     strengths: Strength[];
@@ -698,11 +718,20 @@ function FolderRoom({
     setFigmaError(false);
   }
 
+  /** Opens the analysis dialog the first time this analysis has something to show. */
+  function showResultOnce() {
+    if (resultShownRef.current) return;
+    resultShownRef.current = true;
+    setResultOpen(true);
+  }
+
   async function sendToModel() {
     const speech = textRef.current.trim();
     setProbing(true);
     setProbeNote(null);
     setProbeResult(null);
+    setResultOpen(false);
+    resultShownRef.current = false;
     const sent = pointsToSend(folder.keyPoints, folder.pointSlides);
     try {
       const saved = selectedAudio(folder);
@@ -722,6 +751,7 @@ function FolderRoom({
         });
         setProbeNote(result.notes.length ? result.notes.join(" ") : null);
         setProbeResult({ ...result, model, pointSlides: sent.slides, writing: false });
+        showResultOnce();
         return;
       }
       const slideText = pdfRef.current ? await readSlideText(pdfRef.current, 8, shownPages) : "";
@@ -748,7 +778,8 @@ function FolderRoom({
       const payload = await streamModelReply(
         body,
         langHeaders(),
-        (partial) =>
+        (partial) => {
+          showResultOnce(); // opens when the model starts writing
           setProbeResult({
             summary: partial.summary ?? "",
             strengths: partial.strengths ?? [],
@@ -759,7 +790,8 @@ function FolderRoom({
             pointSlides: sent.slides,
             received: null,
             writing: true,
-          }),
+          });
+        },
         tr("sendFail"),
       );
       if (!payload.summary || !payload.improvements || !payload.received) {
@@ -778,6 +810,7 @@ function FolderRoom({
         received: payload.received,
         writing: false,
       });
+      showResultOnce();
     } catch (err) {
       setProbeResult(null);
       setProbeNote(err instanceof Error && err.message ? err.message : tr("sendFail"));
@@ -787,6 +820,13 @@ function FolderRoom({
   }
 
   const spoken = finalText.trim();
+  const transcript = transcriptPreview(spoken, transcriptOpen, listening || pending > 0);
+
+  // The opened text scrolls in its box; while speech comes in, keep the newest words in view.
+  useEffect(() => {
+    const box = transcriptRef.current;
+    if (box && transcriptOpen && (listening || pending > 0)) box.scrollTop = box.scrollHeight;
+  }, [spoken, transcriptOpen, listening, pending]);
   function speakButton() {
     return (
       <button
@@ -1026,12 +1066,30 @@ function FolderRoom({
           <aside className="desk-speech">
             <h2>{tr("speechText")}</h2>
             {spoken && !listening && pending === 0 && !fileBusy && <p className="desk-sub">{tr("speechSaved")}</p>}
-            <div className="desk-speech-body" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, marginTop: 16 }}>
+            <div className="desk-speech-body" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, marginTop: 16, overflowY: transcriptOpen ? "hidden" : "auto" }}>
               {spoken ? (
-                <p className="desk-transcript">
-                  {spoken}
-                  {(listening || pending > 0) && <span className="desk-speech-pending"> …</span>}
-                </p>
+                <>
+                  <p
+                    ref={transcriptRef}
+                    className={transcriptOpen ? "desk-transcript desk-transcript-scroll" : "desk-transcript"}
+                    id={`${folder.id}-transcript`}
+                    tabIndex={transcriptOpen ? 0 : undefined}
+                  >
+                    {transcript.text}
+                    {(listening || pending > 0) && <span className="desk-speech-pending"> …</span>}
+                  </p>
+                  {transcript.long && (
+                    <button
+                      type="button"
+                      className="desk-link desk-transcript-toggle"
+                      aria-expanded={transcriptOpen}
+                      aria-controls={`${folder.id}-transcript`}
+                      onClick={() => setTranscriptOpen((open) => !open)}
+                    >
+                      {transcriptOpen ? tr("lessInfo") : tr("seeMore")}
+                    </button>
+                  )}
+                </>
               ) : (
                 <div className="desk-speech-empty">
                   <SpeechMark />
@@ -1065,30 +1123,40 @@ function FolderRoom({
                 {probing ? tr("sending") : tr("sendToModel")}
               </button>
               {probeNote && <p className="desk-note">{probeNote}</p>}
-              {probeResult && (
-                <>
-                  <p>
-                    {probeResult.model}
-                    {probeResult.writing && ` · ${tr("writing")}`}
-                    {probeResult.received && (
-                      <>
-                        {" · "}
-                        {probeResult.received.text ? tr("text") : tr("noText")}
-                        {probeResult.received.audio ? ` · ${tr("audio")} ${probeResult.received.audio}` : ""}
-                        {probeResult.received.slide ? ` · ${tr("slide")} ${probeResult.received.slide}` : ""}
-                      </>
-                    )}
-                  </p>
-                  <h3>{probeResult.summary}</h3>
-                  <ImprovementList
-                    strengths={probeResult.strengths}
-                    improvements={probeResult.improvements}
-                    offTopic={probeResult.offTopic}
-                  />
-                  {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} slides={probeResult.pointSlides} />}
-                </>
+              {probeResult && !resultOpen && (
+                <button type="button" className="desk-link desk-result-link" onClick={() => setResultOpen(true)}>
+                  {tr("showResult")}
+                </button>
               )}
             </div>
+            {probeResult &&
+              resultOpen &&
+              createPortal(
+                <Modal title={tr("analysisResult")} onClose={() => setResultOpen(false)} wide>
+                  <div className="desk-probe desk-probe-dialog" aria-live="polite">
+                    <p>
+                      {probeResult.model}
+                      {probeResult.writing && ` · ${tr("writing")}`}
+                      {probeResult.received && (
+                        <>
+                          {" · "}
+                          {probeResult.received.text ? tr("text") : tr("noText")}
+                          {probeResult.received.audio ? ` · ${tr("audio")} ${probeResult.received.audio}` : ""}
+                          {probeResult.received.slide ? ` · ${tr("slide")} ${probeResult.received.slide}` : ""}
+                        </>
+                      )}
+                    </p>
+                    <h3>{probeResult.summary}</h3>
+                    <ImprovementList
+                      strengths={probeResult.strengths}
+                      improvements={probeResult.improvements}
+                      offTopic={probeResult.offTopic}
+                    />
+                    {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} slides={probeResult.pointSlides} />}
+                  </div>
+                </Modal>,
+                document.body,
+              )}
           </aside>
         </div>
 
