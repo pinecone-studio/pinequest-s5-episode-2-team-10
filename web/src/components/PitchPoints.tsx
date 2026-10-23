@@ -9,7 +9,6 @@ export interface MainPointsResult {
   method: "llm" | "words";
   points: { point: number; text: string; status: "covered" | "partial" | "missed"; verified: boolean; evidence: string; note: string }[];
   coverage: number | null;
-  offTopic: { sentenceId: number; text: string; reason: string }[];
   ideaComment: string;
 }
 
@@ -106,19 +105,6 @@ export function PitchPointsResult({ result }: { result: MainPointsResult }) {
           );
         })}
       </ul>
-      {result.offTopic.length > 0 && (
-        <>
-          <h3>{tr("offTopic")}</h3>
-          <ul>
-            {result.offTopic.map((o) => (
-              <li key={o.sentenceId}>
-                <q>{o.text}</q>
-                {o.reason && <span>{o.reason}</span>}
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
     </div>
   );
 }

@@ -4,8 +4,9 @@
 
 export interface StreamedReply {
   summary?: string;
-  strengths?: string[];
-  improvements?: { title: string; why: string; action: string; example: string; quote: string }[];
+  strengths?: { text: string; quote: string }[];
+  improvements?: { source: "measured" | "model"; title: string; why: string; action: string; example: string; quote: string }[];
+  offTopic?: { sentenceId: number; text: string; reason: string }[];
   model?: string;
   mainPoints?: unknown;
   received?: { text: boolean; audio: string | null; slide: string | null };

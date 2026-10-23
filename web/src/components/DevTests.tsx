@@ -131,13 +131,14 @@ async function pointsCheck(model: ProtoModel): Promise<string> {
   body.set("keyPoints", JSON.stringify(SAMPLE_POINTS));
   const res = await fetch("/api/prototype", { method: "POST", body, headers: langHeaders() });
   const payload = (await res.json().catch(() => null)) as {
-    mainPoints?: { coverage: number | null; points: { status: string; verified: boolean }[]; offTopic: unknown[] } | null;
+    mainPoints?: { coverage: number | null; points: { status: string; verified: boolean }[] } | null;
+    offTopic?: unknown[];
     error?: string;
   } | null;
   const mp = payload?.mainPoints;
   if (!res.ok || !mp) throw new Error(payload?.error ?? `HTTP ${res.status}`);
   const marks = mp.points.map((p, i) => `${i + 1}:${p.verified ? p.status : `${p.status}?`}`).join(" ");
-  return `${tr("coverage", { pct: mp.coverage ?? 0 })} · ${marks} · ${tr("offTopic")}: ${mp.offTopic.length}`;
+  return `${tr("coverage", { pct: mp.coverage ?? 0 })} · ${marks} · ${tr("offTopic")}: ${payload?.offTopic?.length ?? 0}`;
 }
 
 let nextId = 0;
