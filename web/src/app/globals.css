@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* The app is dark regardless of the operating system theme. */
+/* Dark is the default. html.light swaps the same tokens. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
@@ -12,7 +12,16 @@
   --text-secondary: #a0a1a3;
   --text-helper: #8b8c8e;
   --line: #333436;
+  --line-strong: #4a4b4d;
   --on-primary: #151617;
+  --hover: rgba(255, 255, 255, 0.04);
+  --hover-strong: rgba(255, 255, 255, 0.08);
+  --chip-bg: rgba(255, 255, 255, 0.03);
+  --field-bg: rgba(255, 255, 255, 0.02);
+  --field-border: rgba(255, 255, 255, 0.12);
+  --overlay: rgba(0, 0, 0, 0.55);
+  --danger: #e7b4bc;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
   --font-size-title: 21px;
   --font-size-section: 16px;
   --font-size-body: 14px;
@@ -75,6 +84,31 @@
 
 html {
   color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
+  --bg: #f3f3f4;
+  --sidebar: #ffffff;
+  --card: #ffffff;
+  --inset: #ececee;
+  --text-primary: #1c1b1d;
+  --text-secondary: #5e5f63;
+  --text-helper: #6f7074;
+  --line: #e3e3e5;
+  --line-strong: #c8c8cc;
+  --on-primary: #f7f7f8;
+  --hover: rgba(0, 0, 0, 0.04);
+  --hover-strong: rgba(0, 0, 0, 0.08);
+  --chip-bg: rgba(0, 0, 0, 0.03);
+  --field-bg: #ffffff;
+  --field-border: rgba(0, 0, 0, 0.12);
+  --overlay: rgba(0, 0, 0, 0.4);
+  --danger: #9c3d4a;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --status-positive: #2f6f4e;
+  --status-negative: #9c3d4a;
+  --status-warning: #8a6a2f;
 }
 
 body {
@@ -143,7 +177,7 @@ body {
 
 .app-account:hover,
 .app-account[aria-expanded="true"] {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 
 .app-avatar {
@@ -211,7 +245,7 @@ body {
 }
 
 .app-account-menu button[role="menuitem"]:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 
 .app-nav {
@@ -239,7 +273,7 @@ body {
 }
 
 .app-nav a:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
   color: var(--text);
 }
 
@@ -322,7 +356,7 @@ body {
     inset: 0;
     display: block;
     border: 0;
-    background: rgba(0, 0, 0, 0.45);
+    background: var(--overlay);
     cursor: pointer;
   }
 
@@ -430,7 +464,7 @@ body {
 }
 
 .desk-primary:hover {
-  background: #e8e8e8;
+  filter: brightness(1.12);
 }
 
 .desk-ghost:hover:not(:disabled) {
@@ -713,8 +747,8 @@ body {
 .auth-screen {
   position: relative;
   min-height: 100vh;
-  background: #1c1b1d;
-  color: #f5f5f5;
+  background: var(--bg);
+  color: var(--text-primary);
 }
 
 .auth-screen::before {
@@ -737,10 +771,10 @@ body {
   gap: 6px;
   height: 36px;
   padding: 0 12px 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--field-border);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  color: #f5f5f5;
+  background: var(--chip-bg);
+  color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
 }
@@ -749,7 +783,7 @@ body {
 .auth-screen button:focus-visible,
 .auth-screen input:focus-visible,
 .auth-screen a:focus-visible {
-  outline: 2px solid #f5f5f5;
+  outline: 2px solid var(--text-primary);
   outline-offset: 2px;
 }
 
@@ -774,10 +808,10 @@ body {
   height: 64px;
   margin: 0 auto 36px;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--field-border);
   border-radius: 18px;
-  background: #242326;
-  color: #f5f5f5;
+  background: var(--card);
+  color: var(--text-primary);
 }
 
 .auth-form h1 {
@@ -790,7 +824,7 @@ body {
 
 .auth-sub {
   margin: 10px 0 0;
-  color: #a3a3a3;
+  color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -798,7 +832,7 @@ body {
 .auth-sub button {
   border: 0;
   background: none;
-  color: #f5f5f5;
+  color: var(--text-primary);
   font: inherit;
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -816,15 +850,15 @@ body {
   width: 100%;
   height: 46px;
   padding: 0 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--field-border);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.02);
-  color: #f5f5f5;
+  background: var(--field-bg);
+  color: var(--text-primary);
   font-size: 14px;
 }
 
 .auth-fields input::placeholder {
-  color: #8a8a8a;
+  color: var(--text-helper);
 }
 
 .auth-primary,
@@ -839,12 +873,12 @@ body {
 .auth-primary {
   margin-top: 14px;
   border: 0;
-  background: #f5f5f5;
-  color: #1c1b1d;
+  background: var(--text-primary);
+  color: var(--on-primary);
 }
 
 .auth-primary:hover:not(:disabled) {
-  background: #ffffff;
+  filter: brightness(1.12);
 }
 
 .auth-primary:disabled,
@@ -856,7 +890,7 @@ body {
 .auth-demo {
   border: 0;
   background: none;
-  color: #f5f5f5;
+  color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
 }
@@ -866,7 +900,7 @@ body {
   align-items: center;
   gap: 12px;
   margin: 16px 0;
-  color: #8a8a8a;
+  color: var(--text-helper);
   font-size: 13px;
 }
 
@@ -875,7 +909,7 @@ body {
   content: "";
   height: 1px;
   flex: 1;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--line);
 }
 
 .auth-sso {
@@ -883,13 +917,13 @@ body {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid var(--field-border);
   background: transparent;
-  color: #f5f5f5;
+  color: var(--text-primary);
 }
 
 .auth-sso:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 
 .auth-note,
@@ -900,23 +934,23 @@ body {
 }
 
 .auth-note {
-  color: #a3a3a3;
+  color: var(--text-secondary);
 }
 
 .auth-alert {
-  color: #e7b4bc;
+  color: var(--danger);
 }
 
 .auth-demo {
   margin-top: 14px;
-  color: #a3a3a3;
+  color: var(--text-secondary);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
 .auth-legal {
   margin: 22px 0 0;
-  color: #8a8a8a;
+  color: var(--text-helper);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -1677,7 +1711,7 @@ textarea.ui-input {
 .ui-choice:hover,
 .ui-drop:hover,
 .ui-row:hover {
-  border-color: #4a4b4d;
+  border-color: var(--line-strong);
 }
 
 .ui-btn {
@@ -1709,7 +1743,7 @@ textarea.ui-input {
 }
 
 .ui-btn-primary:hover:not(:disabled) {
-  background: #f4f4f4;
+  filter: brightness(1.12);
 }
 
 .ui-btn-block {
@@ -1757,12 +1791,12 @@ textarea.ui-input {
 .ui-drop:hover,
 .ui-choice:hover,
 .ui-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--chip-bg);
 }
 
 .ui-choice.is-on {
   border-color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hover);
 }
 
 .ui-row {
@@ -1781,7 +1815,7 @@ textarea.ui-input {
 }
 
 .ui-row.is-on {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-strong);
 }
 
 .ui-badge {
@@ -1789,7 +1823,7 @@ textarea.ui-input {
   align-items: center;
   padding: 1px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-strong);
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 500;
@@ -1816,7 +1850,7 @@ textarea.ui-input {
   border: 1px solid color-mix(in srgb, var(--status-negative) 40%, var(--line));
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--status-negative) 12%, var(--card));
-  color: #e7b4bc;
+  color: var(--danger);
   font-size: 14px;
   line-height: 1.45;
 }
@@ -1831,7 +1865,7 @@ textarea.ui-input {
   overflow: hidden;
   height: 6px;
   border-radius: 999px;
-  background: #333436;
+  background: var(--line);
 }
 
 .ui-meter > span {
@@ -1901,7 +1935,7 @@ textarea.ui-input {
   min-height: 100vh;
   margin: -36px -40px -44px;
   padding: 36px 40px 44px;
-  background: #292929;
+  background: var(--inset);
 }
 
 .folder-grid {
@@ -1919,27 +1953,27 @@ textarea.ui-input {
   width: 100%;
   padding: 0;
   overflow: hidden;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: #323232;
-  color: #e6e6e6;
+  background: var(--card);
+  color: var(--text-primary);
   text-align: left;
   cursor: pointer;
 }
 
 .folder-card:hover {
-  border-color: #4a4a4a;
+  border-color: var(--line-strong);
 }
 
 .folder-card:focus-visible {
-  outline: 2px solid #e6e6e6;
+  outline: 2px solid var(--text-primary);
   outline-offset: 2px;
 }
 
 .folder-card-preview {
   display: block;
   height: 132px;
-  background: #242424;
+  background: var(--inset);
 }
 
 .folder-card-preview img,
@@ -1968,12 +2002,12 @@ textarea.ui-input {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #a0a1a3;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
 .folder-card time {
-  color: #8b8c8e;
+  color: var(--text-helper);
   font-size: 12px;
 }
 
@@ -2009,13 +2043,13 @@ textarea.ui-input {
   flex-direction: column;
   gap: 6px;
   padding: 12px;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: #323232;
+  background: var(--card);
 }
 
 .folder-audios li.is-on {
-  border-color: #4a4a4a;
+  border-color: var(--line-strong);
 }
 
 .folder-audio-head {
@@ -2030,7 +2064,7 @@ textarea.ui-input {
   overflow: hidden;
   border: 0;
   background: none;
-  color: #e6e6e6;
+  color: var(--text-primary);
   font-size: 14px;
   text-align: left;
   text-overflow: ellipsis;
@@ -2046,9 +2080,9 @@ textarea.ui-input {
 .folder-audio-empty {
   margin: 0;
   padding: 16px;
-  border: 1px dashed #3a3a3a;
+  border: 1px dashed var(--line);
   border-radius: 12px;
-  color: #a0a1a3;
+  color: var(--text-secondary);
   font-size: 14px;
 }
 
@@ -2088,7 +2122,7 @@ textarea.ui-input {
   position: absolute;
   inset: 0;
   border: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--overlay);
   cursor: pointer;
 }
 
@@ -2096,10 +2130,10 @@ textarea.ui-input {
   position: relative;
   width: min(420px, 100%);
   padding: 18px;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: #323232;
-  color: #e6e6e6;
+  background: var(--card);
+  color: var(--text-primary);
 }
 
 .app-modal-bar {
@@ -2119,16 +2153,16 @@ textarea.ui-input {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #e6e6e6;
+  color: var(--text-primary);
   cursor: pointer;
 }
 
 .app-modal-x:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--hover-strong);
 }
 
 .app-modal-x:focus-visible {
-  outline: 2px solid #e6e6e6;
+  outline: 2px solid var(--text-primary);
   outline-offset: 2px;
 }
 
@@ -2145,7 +2179,7 @@ textarea.ui-input {
 
 .app-modal-email {
   margin: 0 0 14px;
-  color: #a0a1a3;
+  color: var(--text-secondary);
   font-size: 13px;
   overflow-wrap: anywhere;
 }
@@ -2156,7 +2190,7 @@ textarea.ui-input {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
-  color: #a0a1a3;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
@@ -2200,21 +2234,21 @@ textarea.ui-input {
   max-height: calc(100vh - 24px);
   overflow: auto;
   padding: 8px;
-  border: 1px solid #3a3a3a;
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: #2b2b2b;
-  color: #e6e6e6;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  background: var(--card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow);
 }
 
 .account-panel-section {
   padding: 10px 4px 8px;
-  border-bottom: 1px solid #3a3a3a;
+  border-bottom: 1px solid var(--line);
 }
 
 .account-panel-section > p {
   margin: 0 8px 6px;
-  color: #a0a1a3;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -2246,7 +2280,7 @@ textarea.ui-input {
 }
 
 .account-panel-user span span {
-  color: #a0a1a3;
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
@@ -2265,13 +2299,13 @@ textarea.ui-input {
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #e6e6e6;
+  color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
 }
 
 .account-panel-logout:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover);
 }
 
 .account-panel-logout:disabled {

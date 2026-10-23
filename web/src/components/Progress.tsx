@@ -29,10 +29,10 @@ export default function Progress({ status }: { status: StatusResponse | null }) 
               <span
                 className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${
                   done
-                    ? "bg-[#8eae9b] text-[#151617]"
+                    ? "bg-[var(--status-positive)] text-[var(--on-primary)]"
                     : active
-                      ? "animate-pulse bg-[#e6e6e6] text-[#151617]"
-                      : "border border-[#333436]"
+                      ? "animate-pulse bg-[var(--text-primary)] text-[var(--on-primary)]"
+                      : "border border-[var(--line)]"
                 }`}
               >
                 {done ? "✓" : ""}

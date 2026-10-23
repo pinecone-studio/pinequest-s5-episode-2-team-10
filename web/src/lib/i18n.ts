@@ -210,6 +210,9 @@ const mn = {
   authFailed: "Нэвтэрч чадсангүй. Дахин оролдоно уу.",
   logOut: "Гарах",
   currentAccount: "Одоогийн бүртгэл",
+  theme: "Горим",
+  lightMode: "Гэрэл",
+  darkMode: "Харанхуй",
 };
 
 export type MessageKey = keyof typeof mn;
@@ -414,6 +417,9 @@ const en: Record<MessageKey, string> = {
   authFailed: "Could not sign in. Try again.",
   logOut: "Log out",
   currentAccount: "Current account",
+  theme: "Theme",
+  lightMode: "Light",
+  darkMode: "Dark",
 };
 
 const DICTS: Record<Lang, Record<MessageKey, string>> = { mn, en };

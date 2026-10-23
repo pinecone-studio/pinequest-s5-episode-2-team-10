@@ -6,7 +6,7 @@ const FIGMA_HOST = /(^|\.)figma\.com$/;
 const TYPES = new Set(["slides", "deck", "proto", "design", "board"]);
 
 /** The embed URL for a Figma share link, or null when it isn't a Figma file link. */
-export function figmaEmbedUrl(input: string): string | null {
+export function figmaEmbedUrl(input: string, theme: "dark" | "light" = "dark"): string | null {
   let url: URL;
   try {
     url = new URL(input.trim());
@@ -27,6 +27,6 @@ export function figmaEmbedUrl(input: string): string | null {
   const node = url.searchParams.get("node-id");
   if (node) embed.searchParams.set("node-id", node);
   embed.searchParams.set("footer", "false");
-  embed.searchParams.set("theme", "dark");
+  embed.searchParams.set("theme", theme);
   return embed.toString();
 }

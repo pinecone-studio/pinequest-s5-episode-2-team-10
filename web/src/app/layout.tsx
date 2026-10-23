@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import AuthGate from "@/components/AuthGate";
+import { ThemeSync } from "@/lib/theme";
 import "./globals.css";
+import "./theme.css";
 
 const inter = Inter({
   subsets: ["latin", "cyrillic"],
@@ -16,8 +18,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="mn" className={`${inter.variable} dark h-full antialiased`}>
+    <html lang="mn" className={`${inter.variable} dark h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem("pitchcoach:theme")==="light"){document.documentElement.classList.remove("dark");document.documentElement.classList.add("light");document.documentElement.style.colorScheme="light"}}catch(e){}`,
+          }}
+        />
+      </head>
       <body className={`${inter.className} min-h-full flex flex-col`}>
+        <ThemeSync />
         <AuthGate>{children}</AuthGate>
       </body>
     </html>
