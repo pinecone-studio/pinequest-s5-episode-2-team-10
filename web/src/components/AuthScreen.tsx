@@ -18,6 +18,8 @@ function authMessage(err: unknown, tr: (key: "authEmailTaken" | "authBadLogin" |
   return tr("authFailed");
 }
 
+const UNAVAILABLE = "This sign-in method isn't available yet.";
+
 export default function AuthScreen() {
   const { tr } = useLang();
   const emailId = useId();
@@ -28,18 +30,46 @@ export default function AuthScreen() {
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const registering = mode === "register";
 
   function switchMode(next: Mode) {
     setMode(next);
     setError(null);
+    setNotice(null);
     setAgain("");
+  }
+
+  function goBack() {
+    if (registering) {
+      switchMode("login");
+      return;
+    }
+    if (window.history.length > 1) window.history.back();
+  }
+
+  function showUnavailable() {
+    setError(null);
+    setNotice(UNAVAILABLE);
+  }
+
+  async function enterDemo() {
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      saveSession(await api.demo());
+    } catch (err) {
+      setError(authMessage(err, tr));
+      setBusy(false);
+    }
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     if (registering && password !== again) {
       setError(tr("authMismatch"));
       return;
@@ -55,27 +85,42 @@ export default function AuthScreen() {
   }
 
   return (
-    <div className="desk">
-      <div className="desk-col">
-        <div className="desk-bar">
-          <WaveMark />
-          <span>Pitch Coach</span>
-          {process.env.NODE_ENV === "development" && <LangToggle />}
-        </div>
-        <div className="desk-title">
-          <div>
-            <h1>{registering ? tr("signUp") : tr("signIn")}</h1>
-            <p className="desk-sub">{tr("authBlurb")}</p>
+    <div className="auth-screen">
+      <button type="button" className="auth-back" onClick={goBack}>
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+          <path d="M8.5 2.5 4 7l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Back
+      </button>
+      <div className="auth-frame">
+        <form className="auth-form" onSubmit={submit}>
+          <div className="auth-logo" aria-hidden>
+            <WaveMark />
           </div>
-        </div>
-        <form className="desk-panel auth-panel" onSubmit={submit}>
+          <h1>{registering ? "Create your account" : "Yooo, welcome back!"}</h1>
+          <p className="auth-sub">
+            {registering ? (
+              <>
+                Already have an account?{" "}
+                <button type="button" onClick={() => switchMode("login")}>
+                  Sign in
+                </button>
+              </>
+            ) : (
+              <>
+                First time here?{" "}
+                <button type="button" onClick={() => switchMode("register")}>
+                  Sign up for free
+                </button>
+              </>
+            )}
+          </p>
           {error && (
-            <p className="desk-note" role="alert">
+            <p className="auth-alert" role="alert">
               {error}
             </p>
           )}
-          <label htmlFor={emailId}>
-            <span>{tr("email")}</span>
+          <div className="auth-fields">
             <input
               id={emailId}
               type="email"
@@ -83,12 +128,11 @@ export default function AuthScreen() {
               autoFocus
               required
               maxLength={254}
+              placeholder="Your email"
+              aria-label="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-          </label>
-          <label htmlFor={passwordId}>
-            <span>{tr("password")}</span>
             <input
               id={passwordId}
               type="password"
@@ -96,13 +140,12 @@ export default function AuthScreen() {
               required
               minLength={8}
               maxLength={128}
+              placeholder="Password"
+              aria-label="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-          </label>
-          {registering && (
-            <label htmlFor={againId}>
-              <span>{tr("passwordAgain")}</span>
+            {registering && (
               <input
                 id={againId}
                 type="password"
@@ -110,20 +153,40 @@ export default function AuthScreen() {
                 required
                 minLength={8}
                 maxLength={128}
+                placeholder="Repeat password"
+                aria-label="Repeat password"
                 value={again}
                 onChange={(e) => setAgain(e.target.value)}
               />
-            </label>
-          )}
-          <div className="auth-actions">
-            <button type="submit" className="desk-primary" disabled={busy}>
-              {busy ? tr("authWorking") : registering ? tr("signUp") : tr("signIn")}
-            </button>
-            <button type="button" className="desk-link" onClick={() => switchMode(registering ? "login" : "register")}>
-              {registering ? tr("authHaveAccount") : tr("authNeedAccount")}{" "}
-              {registering ? tr("signIn") : tr("signUp")}
-            </button>
+            )}
           </div>
+          <button type="submit" className="auth-primary" disabled={busy}>
+            {busy ? "Please wait…" : registering ? "Create account" : "Sign in"}
+          </button>
+          {!registering && (
+            <>
+              <button type="button" className="auth-text" onClick={showUnavailable} disabled={busy}>
+                Sign in using magic link
+              </button>
+              <div className="auth-or" role="separator">
+                or
+              </div>
+              <button type="button" className="auth-sso" onClick={showUnavailable} disabled={busy}>
+                Single sign-on (SSO)
+              </button>
+              {notice && (
+                <p className="auth-note" role="status">
+                  {notice}
+                </p>
+              )}
+              <button type="button" className="auth-demo" onClick={enterDemo} disabled={busy}>
+                {tr("signInDemo")}
+              </button>
+            </>
+          )}
+          <p className="auth-legal">
+            You acknowledge that you read, and agree, to our Terms of Service and our Privacy Policy.
+          </p>
         </form>
       </div>
     </div>
@@ -158,7 +221,7 @@ export function AccountMenu() {
 
 function WaveMark() {
   return (
-    <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden>
+    <svg width="30" height="18" viewBox="0 0 22 14" aria-hidden>
       <path
         d="M1 7h2l2-5 3 10 3-8 2 3h8"
         fill="none"
