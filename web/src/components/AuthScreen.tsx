@@ -158,7 +158,7 @@ export default function AuthScreen() {
           <div className="auth-logo" aria-hidden>
             <SayloMark />
           </div>
-          <h1>{registering ? "Create your account" : "Yooo, welcome back!"}</h1>
+          <h1>{registering ? "Create your account" : "Yooo, welcome!"}</h1>
           <p className="auth-sub">
             {registering ? (
               <>
