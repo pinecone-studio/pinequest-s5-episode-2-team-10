@@ -86,15 +86,256 @@ body {
   line-height: 1.5;
 }
 
-.desk {
+.app-shell {
+  display: flex;
+  flex: 1;
   min-height: 100vh;
-  background: var(--ground);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app-top {
+  display: none;
+}
+
+.app-side {
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  flex-shrink: 0;
+  padding: 12px 10px 16px;
+  border-right: 1px solid var(--line);
+  background: var(--sidebar);
+}
+
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 8px 8px;
+  color: var(--text);
+}
+
+.app-side-top {
+  position: relative;
+}
+
+.app-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-account:hover,
+.app-account[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.app-avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.app-account-copy {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+}
+
+.app-account-copy strong,
+.app-account-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-account-copy strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.app-account-copy span {
+  color: var(--text-secondary);
+  font-size: var(--font-size-helper);
+}
+
+.app-account > svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.app-account-menu {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--card);
+}
+
+.app-account-menu button[role="menuitem"] {
+  height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--font-size-nav);
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-account-menu button[role="menuitem"]:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.app-nav {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  margin-top: 14px;
+}
+
+.app-nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-nav);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.app-nav a svg {
+  flex-shrink: 0;
+}
+
+.app-nav a:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.app-nav a[aria-current="page"] {
+  background: var(--card);
+  color: var(--text);
+}
+
+.app-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 36px 40px 44px;
+}
+
+.app-menu,
+.app-account:focus-visible,
+.app-nav a:focus-visible,
+.app-account-menu button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.app-backdrop {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  .app-shell {
+    display: block;
+  }
+
+  .app-top {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 52px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--line);
+    background: var(--sidebar);
+    font-size: var(--font-size-nav);
+    font-weight: 500;
+  }
+
+  .app-menu {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 40px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-size: var(--font-size-nav);
+    cursor: pointer;
+  }
+
+  .app-side {
+    position: fixed;
+    z-index: 40;
+    top: 52px;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-105%);
+    transition: transform 160ms ease;
+  }
+
+  .app-side.is-open {
+    transform: none;
+  }
+
+  .app-backdrop {
+    position: fixed;
+    z-index: 30;
+    inset: 0;
+    display: block;
+    border: 0;
+    background: rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+  }
+
+  .app-main {
+    padding: 20px 16px 32px;
+  }
+}
+
+.desk {
+  flex: 1;
+  min-height: 0;
+  background: transparent;
   color: var(--text);
 }
 
 .desk-col {
-  width: min(1150px, calc(100% - 32px));
-  margin: 0 auto;
+  width: min(1150px, 100%);
+  margin: 0;
   padding: 0 0 40px;
 }
 
@@ -130,7 +371,7 @@ body {
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin: 28px 0 24px;
+  margin: 0 0 24px;
 }
 
 .desk h1 {
