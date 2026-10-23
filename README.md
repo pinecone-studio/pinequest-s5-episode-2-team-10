@@ -52,14 +52,13 @@ cd web && npm install
 NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 ```
 
+Without a GPU, set `PITCH_ASR=stub PITCH_EMBEDDINGS=none`. Without `NEXT_PUBLIC_API_URL`, the web app runs in demo mode with sample data. To try only the AI analysis on a transcript, see `TESTING.md`.
+
+Do not commit `.env` or real API keys.
 The backend automatically loads `backend/.env.local`, `backend/.env`, then the
 repository-root `.env`; shell environment variables take precedence. The backend
 example selects Gemma through local Ollama; keep Ollama running and ensure the
 configured model is available. Do not overwrite existing `.env` files.
-
-Without a GPU, set `PITCH_ASR=stub PITCH_EMBEDDINGS=none`. Without `NEXT_PUBLIC_API_URL`, the web app runs in demo mode with sample data. To try only the AI analysis on a transcript, see `TESTING.md`.
-
-Do not commit `.env` or real API keys.
 
 ## Project documents
 
@@ -71,4 +70,4 @@ Do not commit `.env` or real API keys.
 - `AGENTS.md`: instructions for AI coding assistants
 - `TASKS.md`: MVP work breakdown
 - `TESTING.md`: tests, how to try the analysis, and acceptance criteria
-- `server/README.md`, `web/README.md`: setup details for each part
+- `backend/README.md`, `web/README.md`: setup details for each part
