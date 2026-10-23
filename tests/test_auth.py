@@ -1,4 +1,4 @@
-"""Register, login, logout, and project ownership."""
+"""Register, login, Google sign-in, logout, and project ownership."""
 
 import os
 import tempfile
@@ -8,10 +8,12 @@ _root = Path(tempfile.mkdtemp(prefix="pitchcoach-auth-"))
 os.environ["PITCH_DATA_DIR"] = str(_root)
 os.environ["PITCH_DB_URL"] = f"sqlite:///{_root / 'auth.db'}"
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
+from backend import config, supabase_auth
 from backend.db import AppUser, engine
 from backend.main import app
 
@@ -90,6 +92,86 @@ def test_demo_login_opens_the_same_account(client: TestClient):
     assert client.get("/api/v1/auth/me", headers={"X-Access-Token": second.json()["access_token"]}).status_code == 200
     blocked = client.post("/api/v1/auth/register", json={"email": "demo@pitchcoach.local", "password": PASSWORD})
     assert blocked.status_code == 409
+
+
+def _supabase_user(email: str, providers=("google",), confirmed=True) -> dict:
+    return {
+        "email": email,
+        "email_confirmed_at": "2026-01-01T00:00:00Z" if confirmed else None,
+        "app_metadata": {"providers": list(providers)},
+    }
+
+
+@pytest.fixture
+def supabase(monkeypatch):
+    """Points the server at a fake Supabase. Set `.reply` to the response /auth/v1/user should give."""
+    monkeypatch.setattr(config, "SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setattr(config, "SUPABASE_PUBLISHABLE_KEY", "sb_publishable_test")
+    fake = type("FakeSupabase", (), {"reply": httpx.Response(401), "calls": []})()
+
+    def get(url, headers, timeout):
+        fake.calls.append((url, headers))
+        if isinstance(fake.reply, Exception):
+            raise fake.reply
+        return fake.reply
+
+    monkeypatch.setattr(supabase_auth.httpx, "get", get)
+    return fake
+
+
+def _google(client: TestClient, token: str = "supabase-token"):
+    return client.post("/api/v1/auth/google", json={"access_token": token})
+
+
+def test_google_creates_an_account_without_a_password(client: TestClient, supabase):
+    supabase.reply = httpx.Response(200, json=_supabase_user("New.Person@Gmail.com"))
+    res = _google(client)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["email"] == "new.person@gmail.com"
+    url, headers = supabase.calls[-1]
+    assert url == "https://example.supabase.co/auth/v1/user"
+    assert headers["Authorization"] == "Bearer supabase-token"
+    assert client.get("/api/v1/auth/me", headers={"X-Access-Token": body["access_token"]}).status_code == 200
+
+    with Session(engine) as db:
+        user = db.exec(select(AppUser).where(AppUser.email == "new.person@gmail.com")).one()
+    assert user.password_hash is None
+    no_password = client.post("/api/v1/auth/login", json={"email": "new.person@gmail.com", "password": PASSWORD})
+    assert no_password.status_code == 401
+
+
+def test_google_reuses_the_account_with_that_email(client: TestClient, supabase):
+    created = _register(client, "linked@example.com")
+    supabase.reply = httpx.Response(200, json=_supabase_user("linked@example.com"))
+    res = _google(client)
+    assert res.status_code == 200, res.text
+    assert res.json()["id"] == created["id"]
+
+
+def test_google_rejects_bad_or_unverified_tokens(client: TestClient, supabase):
+    supabase.reply = httpx.Response(401, json={"msg": "invalid JWT"})
+    assert _google(client).json()["code"] == "invalid_google_token"
+    supabase.reply = httpx.Response(200, json=_supabase_user("pw@example.com", providers=("email",)))
+    assert _google(client).status_code == 401
+    supabase.reply = httpx.Response(200, json=_supabase_user("late@example.com", confirmed=False))
+    assert _google(client).status_code == 401
+    supabase.reply = httpx.Response(200, json=_supabase_user("demo@pitchcoach.local"))
+    assert _google(client).status_code == 401
+
+
+def test_google_reports_an_unreachable_supabase(client: TestClient, supabase):
+    supabase.reply = httpx.ConnectError("down")
+    res = _google(client)
+    assert res.status_code == 502
+    assert res.json()["code"] == "google_unreachable"
+
+
+def test_google_is_off_without_supabase_settings(client: TestClient, monkeypatch):
+    monkeypatch.setattr(config, "SUPABASE_URL", "")
+    res = _google(client)
+    assert res.status_code == 503
+    assert res.json()["code"] == "google_disabled"
 
 
 def test_other_users_project_is_hidden(client: TestClient):

@@ -14,6 +14,10 @@ DEFAULT_BACKEND = os.environ.get("PITCH_DEFAULT_BACKEND", "claude")
 # Projects untouched for this many days are deleted; 0 keeps them until the user deletes them.
 RETENTION_DAYS = int(os.environ.get("PITCH_RETENTION_DAYS", "0"))
 
+# Google sign-in through Supabase Auth. Both unset turns POST /auth/google off.
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "").strip()
+
 # Upload limits (TDD API table)
 AUDIO_MAX_BYTES = 25 * 1024 * 1024
 AUDIO_MAX_S = 5 * 60
