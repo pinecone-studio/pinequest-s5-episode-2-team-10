@@ -26,12 +26,18 @@ def client():
         yield c
 
 
+@pytest.fixture(autouse=True)
+def clear_admin_allowlist(monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_EMAILS", set())
+
+
 def _register(client: TestClient, email: str) -> dict:
     res = client.post("/api/v1/auth/register", json={"email": email, "password": PASSWORD})
     assert res.status_code == 201, res.text
     body = res.json()
     assert body["access_token"] and body["id"]
     assert body["email"] == email.strip().lower()
+    assert body["role"] == "member"
     return body
 
 
@@ -39,7 +45,7 @@ def test_register_stores_a_hash_and_answers_me(client: TestClient):
     created = _register(client, "Ada@Example.com")
     me = client.get("/api/v1/auth/me", headers={"X-Access-Token": created["access_token"]})
     assert me.status_code == 200
-    assert me.json() == {"id": created["id"], "email": "ada@example.com"}
+    assert me.json() == {"id": created["id"], "email": "ada@example.com", "role": "member"}
 
     with Session(engine) as db:
         user = db.exec(select(AppUser).where(AppUser.email == "ada@example.com")).one()
@@ -69,6 +75,11 @@ def test_short_password_and_bad_email_rejected(client: TestClient):
     assert short.status_code == 422
     assert bad.status_code == 422
     assert bad.json()["code"] == "invalid_email"
+    self_admin = client.post(
+        "/api/v1/auth/register",
+        json={"email": "self-admin@example.com", "password": PASSWORD, "role": "admin"},
+    )
+    assert self_admin.status_code == 422
 
 
 def test_login_then_logout_kills_token(client: TestClient):
@@ -136,6 +147,7 @@ def test_google_creates_an_account_without_a_password(client: TestClient, supaba
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["email"] == "new.person@gmail.com"
+    assert body["role"] == "member"
     url, headers = supabase.calls[-1]
     assert url == "https://example.supabase.co/auth/v1/user"
     assert headers["Authorization"] == "Bearer supabase-token"
@@ -154,6 +166,117 @@ def test_google_reuses_the_account_with_that_email(client: TestClient, supabase)
     res = _google(client)
     assert res.status_code == 200, res.text
     assert res.json()["id"] == created["id"]
+    assert res.json()["role"] == "member"
+
+
+def test_allowlisted_google_account_is_admin_but_password_registration_is_not(client: TestClient, supabase, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_EMAILS", {"admin@example.com"})
+    registered = _register(client, "admin@example.com")
+    assert registered["role"] == "member"
+
+    supabase.reply = httpx.Response(200, json=_supabase_user("ADMIN@example.com"))
+    response = _google(client)
+
+    assert response.status_code == 200
+    assert response.json()["role"] == "admin"
+    with Session(engine) as db:
+        user = db.exec(select(AppUser).where(AppUser.email == "admin@example.com")).one()
+    assert user.role == "admin"
+
+
+def test_admin_can_manage_roles_disable_accounts_and_access_other_projects(client: TestClient, supabase, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_EMAILS", {"admin@example.com"})
+    supabase.reply = httpx.Response(200, json=_supabase_user("admin@example.com"))
+    admin = _google(client).json()
+    admin_headers = {"X-Access-Token": admin["access_token"]}
+
+    member = _register(client, "member@example.com")
+    member_headers = {"X-Access-Token": member["access_token"]}
+    project = client.post("/api/v1/projects", headers=member_headers, json={"name": "Private"}).json()
+    assert client.get(f"/api/v1/projects/{project['id']}", headers=admin_headers).status_code == 200
+    assert client.get(f"/api/v1/projects/{project['id']}", headers=member_headers).status_code == 200
+    assert client.get("/api/v1/admin/users", headers=member_headers).status_code == 403
+
+    projects = client.get("/api/v1/projects", headers=admin_headers)
+    assert projects.status_code == 200
+    assert any(row["id"] == project["id"] and row["owner_email"] == "member@example.com" for row in projects.json())
+
+    users = client.get("/api/v1/admin/users", headers=admin_headers)
+    assert users.status_code == 200
+    assert any(row["id"] == member["id"] and row["role"] == "member" for row in users.json())
+
+    promoted = client.patch(
+        f"/api/v1/admin/users/{member['id']}",
+        headers=admin_headers,
+        json={"role": "admin"},
+    )
+    assert promoted.status_code == 200
+    assert promoted.json()["role"] == "admin"
+
+    disabled = client.patch(
+        f"/api/v1/admin/users/{member['id']}",
+        headers=admin_headers,
+        json={"is_active": False},
+    )
+    assert disabled.status_code == 200
+    assert client.get("/api/v1/auth/me", headers=member_headers).status_code == 401
+
+    enabled = client.patch(
+        f"/api/v1/admin/users/{member['id']}",
+        headers=admin_headers,
+        json={"is_active": True},
+    )
+    assert enabled.status_code == 200
+    assert client.get("/api/v1/auth/me", headers=member_headers).status_code == 401
+
+
+def test_admin_cannot_change_self_or_remove_configured_admin(client: TestClient, supabase, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_EMAILS", {"admin@example.com"})
+    supabase.reply = httpx.Response(200, json=_supabase_user("admin@example.com"))
+    admin = _google(client).json()
+    headers = {"X-Access-Token": admin["access_token"]}
+
+    own_change = client.patch(
+        f"/api/v1/admin/users/{admin['id']}",
+        headers=headers,
+        json={"is_active": False},
+    )
+    assert own_change.status_code == 409
+
+    member = _register(client, "another-member@example.com")
+    remove_configured = client.patch(
+        f"/api/v1/admin/users/{admin['id']}",
+        headers=headers,
+        json={"role": "member"},
+    )
+    assert remove_configured.status_code == 409
+
+    assert client.patch(f"/api/v1/admin/users/{member['id']}", headers=headers, json={}).status_code == 422
+    assert (
+        client.patch(
+            f"/api/v1/admin/users/{member['id']}",
+            headers=headers,
+            json={"role": None, "is_active": False},
+        ).status_code
+        == 422
+    )
+
+
+def test_shared_demo_account_cannot_be_promoted_to_admin(client: TestClient, supabase, monkeypatch):
+    monkeypatch.setattr(config, "ADMIN_EMAILS", {"admin@example.com"})
+    supabase.reply = httpx.Response(200, json=_supabase_user("admin@example.com"))
+    admin = _google(client).json()
+    demo = client.post("/api/v1/auth/demo").json()
+
+    response = client.patch(
+        f"/api/v1/admin/users/{demo['id']}",
+        headers={"X-Access-Token": admin["access_token"]},
+        json={"role": "admin"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "demo_cannot_be_admin"
+    assert client.post("/api/v1/auth/demo").status_code == 200
 
 
 def test_google_rejects_bad_or_unverified_tokens(client: TestClient, supabase):

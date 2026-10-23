@@ -57,6 +57,13 @@ The analysis queue is in-process, so do not run multiple API/worker instances
 against the shared database yet. Each developer can still use SQLite and a
 local API for isolated work.
 
+To bootstrap trusted administrators, set `PITCH_ADMIN_EMAILS` to a
+comma-separated list of Google account emails in the API's private environment,
+then restart the API. A listed account must complete Google sign-in before it
+receives the admin role. Admins can access and manage all user content and
+manage account roles/statuses through the admin endpoints in `/docs`; grant this
+only to trusted team members. See `ROLE_ACCESS_UPDATE.md`.
+
 Changing `PITCH_DB_URL` does not copy old SQLite data. Back up each teammate's
 database and matching `data/sessions/`, then import one backup at a time with
 `scripts/migrate_local_data.py`. Start the API once to initialize the shared

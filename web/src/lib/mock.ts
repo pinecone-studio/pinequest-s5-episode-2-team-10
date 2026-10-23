@@ -197,7 +197,7 @@ export const mockApi = {
     };
     users.push(user);
     saveUsers(users);
-    return { id: user.id, email: user.email, access_token: user.token };
+    return { id: user.id, email: user.email, role: "member", access_token: user.token };
   },
 
   async demo(): Promise<AuthSession> {
@@ -219,7 +219,7 @@ export const mockApi = {
       user.token = crypto.randomUUID();
     }
     saveUsers(users);
-    return { id: user.id, email: user.email, access_token: user.token };
+    return { id: user.id, email: user.email, role: "member", access_token: user.token };
   },
 
   /** Demo mode has no server to verify the Supabase token, so it trusts the email inside it. */
@@ -242,7 +242,7 @@ export const mockApi = {
       user.token = crypto.randomUUID();
     }
     saveUsers(users);
-    return { id: user.id, email: user.email, access_token: user.token };
+    return { id: user.id, email: user.email, role: "member", access_token: user.token };
   },
 
   async login(email: string, password: string): Promise<AuthSession> {
@@ -254,13 +254,13 @@ export const mockApi = {
     if (!user || hash !== user.password_hash) throw { code: "invalid_credentials", message: "Email or password is wrong." };
     user.token = crypto.randomUUID();
     saveUsers(users);
-    return { id: user.id, email: user.email, access_token: user.token };
+    return { id: user.id, email: user.email, role: "member", access_token: user.token };
   },
 
   async me() {
     await wait(50);
     const user = currentMockUser();
-    return { id: user.id, email: user.email };
+    return { id: user.id, email: user.email, role: "member" as const };
   },
 
   async logout() {

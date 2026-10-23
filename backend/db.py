@@ -29,6 +29,8 @@ class AppUser(SQLModel, table=True):
     token_hash: str = Field(index=True, unique=True)
     email: Optional[str] = Field(default=None, index=True, unique=True)
     password_hash: Optional[str] = None
+    role: str = "member"
+    is_active: bool = True
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -156,7 +158,12 @@ engine = _engine()
 # Columns added after the first release. create_all() doesn't change existing tables, so these
 # are added on startup when missing. Additive only: existing rows get the default.
 ADDED_COLUMNS = {
-    "app_user": {"email": "TEXT", "password_hash": "TEXT"},
+    "app_user": {
+        "email": "TEXT",
+        "password_hash": "TEXT",
+        "role": "TEXT NOT NULL DEFAULT 'member'",
+        "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
+    },
     "project": {"idea": "TEXT NOT NULL DEFAULT ''", "key_points": "JSON"},
     "session": {"idea": "TEXT NOT NULL DEFAULT ''", "key_points": "JSON"},
 }

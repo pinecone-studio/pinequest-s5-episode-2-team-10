@@ -1,10 +1,21 @@
 // Shapes shared with the FastAPI server (TDD v2, /api/v1).
 // Keep in sync with server/ models and the JSON contract.
 
+export type AppRole = "member" | "admin";
+
 export interface AuthSession {
   id: string;
   email: string;
+  role: AppRole;
   access_token: string;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string | null;
+  role: AppRole;
+  is_active: boolean;
+  created_at: string;
 }
 
 export type PitchType = "startup" | "academic";
@@ -38,6 +49,8 @@ export interface ProjectDetails {
 
 export interface ProjectSummary extends ProjectDetails {
   id: string;
+  owner_id?: string;
+  owner_email?: string | null;
   created_at: string;
   updated_at: string;
   attempt_count: number;

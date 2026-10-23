@@ -6,7 +6,8 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 
 - JSON bodies, except uploads, which are `multipart/form-data` with one `file` field.
 - Identity: `POST /auth/register`, `POST /auth/login`, `POST /auth/demo`, or `POST /auth/google` returns an access token. The browser sends it as `X-Access-Token` on every other request. A missing or unknown token returns `401`. Login and Google sign-in replace the previous token, so an older sign-in on another device stops working. Demo sign-in does not: each computer keeps its own token for the shared account. `POST /auth/logout` forgets only the token that was sent.
-- Ownership is checked on every project and attempt; anything owned by another user returns `404`, so IDs can't be probed.
+- Members can access only their own projects and attempts; another user's IDs return `404`. Admins can access all projects and attempts.
+- Admin-only user management endpoints list users and update roles or account status. Admin status never comes from user input at registration.
 - In shared Postgres mode, audio and slide files are read from a private Supabase Storage bucket by FastAPI after ownership checks. Storage errors return the standard error body with `503 storage_unavailable`.
 - Errors always use this shape, with a message safe to show the user:
 
@@ -18,15 +19,17 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 
 | Method and path | Does | Response |
 | --- | --- | --- |
-| `POST /auth/register` | Create an account. `{email, password}` (password 8–128 characters). Email is stored in lowercase | `201 {id, email, access_token}`; `409 email_taken`; `422` for a bad email or short password |
-| `POST /auth/login` | Sign in. Same body. Wrong email and wrong password return the same error | `200 {id, email, access_token}`; `401 invalid_credentials` |
-| `POST /auth/demo` | Sign in to the shared demo account from any browser. Creates it the first time. No body. Earlier demo sign-ins stay valid | `200 {id, email, access_token}` |
-| `POST /auth/google` | Sign in with Google. `{access_token}` is the Supabase Auth token from the Google redirect; the server checks it with Supabase (`GET /auth/v1/user`) and accepts only a confirmed email from the `google` provider. An existing account with that email is reused, otherwise one is created without a password | `200 {id, email, access_token}`; `401 invalid_google_token`; `502 google_unreachable`; `503 google_disabled` when `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY` are unset |
-| `GET /auth/me` | The signed-in account | `{id, email}` |
+| `POST /auth/register` | Create an account. `{email, password}` (password 8–128 characters). Email is stored in lowercase; role is always `member` | `201 {id, email, role, access_token}`; `409 email_taken`; `422` for a bad email or short password |
+| `POST /auth/login` | Sign in. Same body. Wrong email and wrong password return the same error | `200 {id, email, role, access_token}`; `401 invalid_credentials` |
+| `POST /auth/demo` | Sign in to the shared demo account from any browser. Creates it the first time. No body. Earlier demo sign-ins stay valid | `200 {id, email, role, access_token}` |
+| `POST /auth/google` | Sign in with Google. `{access_token}` is the Supabase Auth token from the Google redirect; the server checks it with Supabase (`GET /auth/v1/user`) and accepts only a confirmed email from the `google` provider. An existing account with that email is reused, otherwise one is created without a password | `200 {id, email, role, access_token}`; `401 invalid_google_token`; `502 google_unreachable`; `503 google_disabled` when `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY` are unset |
+| `GET /auth/me` | The signed-in account | `{id, email, role}` |
 | `POST /auth/logout` | Forget the current token | `204` |
-| `GET /projects` | The user's projects, most recently used first | `[{id, name, goal, audience, idea, key_points, planned_s, pitch_type, created_at, updated_at, attempt_count, latest_overall, processing}]` |
+| `GET /admin/users` | List accounts (admin only) | `[{id, email, role, is_active, created_at}]`; `403 admin_required` |
+| `PATCH /admin/users/{user_id}` | Set `{role?: "member" \| "admin", is_active?: boolean}` (admin only). Disabling an account revokes its app tokens; it must sign in again after reactivation. An admin cannot change their own account, remove a configured admin, or deactivate/demote the last active admin | updated user; `404` unknown account; `409` protected admin update; `403 admin_required` |
+| `GET /projects` | A member's own projects, or all projects for admins, most recently used first | `[{id, name, goal, audience, idea, key_points, planned_s, pitch_type, created_at, updated_at, attempt_count, latest_overall, processing}]`; admin results also include `owner_id, owner_email` |
 | `POST /projects` | Create a project; every field optional (`name, goal, audience, idea` up to 500 characters, `key_points` up to 6 strings of up to 200 characters (blank ones dropped), `planned_s 30–900, pitch_type startup/academic`) | `201` project with `attempts` and `current` |
-| `GET /projects/{id}` | Project, `attempts` (newest first), and `current` = slides and script the next attempt will reuse | project |
+| `GET /projects/{id}` | Project, `attempts` (newest first), and `current` = slides and script the next attempt will reuse | project; admin responses also include `owner_id, owner_email` |
 | `PATCH /projects/{id}` | Update any detail | project |
 | `DELETE /projects/{id}` | Delete the project, attempts, and files | `204`; `409` while an attempt is running; `503` storage unavailable |
 | `POST /projects/{id}/sessions` | New attempt; copies slides and script from the latest attempt unless `{"copy_inputs": false}` | `201` attempt; `503` storage unavailable |
@@ -94,6 +97,12 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 ```
 
 Category scores are `null` when there is no data (for example no slides); `overall` is then reweighted over the categories that exist, and `categories_used` says how many.
+
+## Roles
+
+Accounts default to `member`. Only a server-configured comma-separated `PITCH_ADMIN_EMAILS` allowlist can bootstrap admins, and the email must be verified by Supabase Google sign-in. Admins may also promote/demote other users and enable/disable accounts through the admin endpoint. Allowlisted admins cannot be demoted through the API; remove an email from server configuration and then use the admin endpoint to change its stored role. At least one active admin must remain.
+
+Admin access bypasses project ownership checks and includes private audio, slides, transcripts, and reports. Treat admin membership as trusted access to all user content. The browser never assigns roles; all authorization is enforced by FastAPI.
 
 ## Changing the contract
 

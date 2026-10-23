@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { setFolderUser } from "./folderStore";
+import type { AppRole } from "./types";
 
 const TOKEN_KEY = "pitchcoach:user-token";
 const ACCOUNT_KEY = "pitchcoach:account";
@@ -9,6 +10,7 @@ const ACCOUNT_KEY = "pitchcoach:account";
 export interface Account {
   id: string;
   email: string;
+  role: AppRole;
 }
 
 let account: Account | null | undefined;
@@ -19,9 +21,9 @@ function readStored(): Account | null {
     const token = localStorage.getItem(TOKEN_KEY);
     const raw = localStorage.getItem(ACCOUNT_KEY);
     if (!token || !raw) return null;
-    const parsed = JSON.parse(raw) as Account;
+    const parsed = JSON.parse(raw) as Partial<Account>;
     if (!parsed?.id || !parsed.email) return null;
-    return { id: parsed.id, email: parsed.email };
+    return { id: parsed.id, email: parsed.email, role: parsed.role === "admin" ? "admin" : "member" };
   } catch {
     return null;
   }
@@ -47,7 +49,7 @@ function publish(next: Account | null) {
 }
 
 export function saveSession(session: Account & { access_token: string }) {
-  const next = { id: session.id, email: session.email };
+  const next = { id: session.id, email: session.email, role: session.role };
   try {
     localStorage.setItem(TOKEN_KEY, session.access_token);
     localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next));

@@ -27,7 +27,7 @@ Feedback is primarily **transcript-based**. Do not claim to evaluate confidence,
 | Speech-to-text | BuzzASR/mongolian (Whisper large-v3) on the GPU machine; `stub` mode for testing | `pipeline/asr.py` |
 | LLM analysis | Claude (Anthropic API) or Gemma 4 through Ollama (base and fine-tuned) | `pipeline/feedback.py` |
 | Validation | Pydantic on the server; shared TypeScript types in the web app | `pipeline/feedback.py`, `web/src/lib/types.ts` |
-| Identity | Email and password. The browser keeps the access token | `backend/main.py` |
+| Identity | Email/password or Supabase Google sign-in; backend-enforced `member`/`admin` roles | `backend/main.py` |
 
 ## Core flow
 
