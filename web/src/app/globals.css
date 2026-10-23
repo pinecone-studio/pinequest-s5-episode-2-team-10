@@ -702,22 +702,16 @@ body {
 
 .auth-primary:disabled,
 .auth-sso:disabled,
-.auth-text:disabled,
 .auth-demo:disabled {
   opacity: 0.55;
 }
 
-.auth-text,
 .auth-demo {
   border: 0;
   background: none;
   color: #f5f5f5;
   font-size: 14px;
   cursor: pointer;
-}
-
-.auth-text {
-  margin-top: 14px;
 }
 
 .auth-or {

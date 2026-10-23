@@ -26,7 +26,7 @@ from pipeline.points import clean_points
 
 from . import config, db, errors, supabase_auth
 from .passwords import hash_password, verify_password
-from .db import AnalysisReport, AppUser, AudioAsset, PitchSession, Project, Slide, Transcript, utcnow
+from .db import AccessToken, AnalysisReport, AppUser, AudioAsset, PitchSession, Project, Slide, Transcript, utcnow
 from .errors import ApiError, not_found
 from .worker import worker
 
@@ -57,6 +57,8 @@ app = FastAPI(title="AI Pitch Coach API", version="2.1", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.CORS_ORIGINS,
+    # Any computer can open the app. The address is not known ahead of time, and the token still gates data.
+    allow_origin_regex=r"https?://.*",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -83,7 +85,11 @@ def current_user(database: DB, x_access_token: Annotated[Optional[str], Header()
     """The browser sends the token from register or login on every request."""
     if not x_access_token:
         raise ApiError(401, "unauthorized", "Missing access token.")
-    user = database.exec(select(AppUser).where(AppUser.token_hash == _hash(x_access_token))).first()
+    hashed = _hash(x_access_token)
+    user = database.exec(select(AppUser).where(AppUser.token_hash == hashed)).first()
+    if not user:
+        extra = database.exec(select(AccessToken).where(AccessToken.token_hash == hashed)).first()
+        user = database.get(AppUser, extra.user_id) if extra else None
     if not user:
         raise ApiError(401, "unauthorized", "Unknown access token.")
     return user
@@ -334,7 +340,10 @@ def demo_login(database: DB):
                 raise ApiError(500, "internal", "Could not open the demo account.")
         else:
             database.refresh(user)
-    token = _new_token(user, database)
+    # Keep earlier demo sign-ins. Each computer gets its own token for the same account.
+    token = secrets.token_urlsafe(32)
+    database.add(AccessToken(token_hash=_hash(token), user_id=user.id))
+    database.commit()
     return {"id": user.id, "email": user.email, "access_token": token}
 
 
@@ -381,8 +390,14 @@ def me(user: User):
 
 
 @api.post("/auth/logout", status_code=204)
-def logout(user: User, database: DB):
-    _new_token(user, database)
+def logout(user: User, database: DB, x_access_token: Annotated[Optional[str], Header()] = None):
+    hashed = _hash(x_access_token or "")
+    extra = database.exec(select(AccessToken).where(AccessToken.token_hash == hashed)).first()
+    if extra:
+        database.delete(extra)
+        database.commit()
+    else:
+        _new_token(user, database)
     return Response(status_code=204)
 
 

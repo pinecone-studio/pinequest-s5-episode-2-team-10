@@ -83,13 +83,20 @@ def test_login_then_logout_kills_token(client: TestClient):
 
 
 def test_demo_login_opens_the_same_account(client: TestClient):
-    first = client.post("/api/v1/auth/demo")
-    second = client.post("/api/v1/auth/demo")
+    first = client.post("/api/v1/auth/demo", headers={"Origin": "http://192.168.1.20:3000"})
+    second = client.post("/api/v1/auth/demo", headers={"Origin": "http://10.0.0.8:3000"})
+    assert first.headers["access-control-allow-origin"] == "http://192.168.1.20:3000"
+    assert second.headers["access-control-allow-origin"] == "http://10.0.0.8:3000"
     assert first.status_code == second.status_code == 200
     assert first.json()["email"] == second.json()["email"] == "demo@pitchcoach.local"
     assert first.json()["id"] == second.json()["id"]
-    assert client.get("/api/v1/auth/me", headers={"X-Access-Token": first.json()["access_token"]}).status_code == 401
-    assert client.get("/api/v1/auth/me", headers={"X-Access-Token": second.json()["access_token"]}).status_code == 200
+    first_headers = {"X-Access-Token": first.json()["access_token"]}
+    second_headers = {"X-Access-Token": second.json()["access_token"]}
+    assert client.get("/api/v1/auth/me", headers=first_headers).status_code == 200
+    assert client.get("/api/v1/auth/me", headers=second_headers).status_code == 200
+    assert client.post("/api/v1/auth/logout", headers=first_headers).status_code == 204
+    assert client.get("/api/v1/auth/me", headers=first_headers).status_code == 401
+    assert client.get("/api/v1/auth/me", headers=second_headers).status_code == 200
     blocked = client.post("/api/v1/auth/register", json={"email": "demo@pitchcoach.local", "password": PASSWORD})
     assert blocked.status_code == 409
 

@@ -31,6 +31,16 @@ class AppUser(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
 
 
+class AccessToken(SQLModel, table=True):
+    """An extra sign-in for the shared demo account, so another computer can stay signed in."""
+
+    __tablename__ = "access_token"
+
+    token_hash: str = Field(primary_key=True)
+    user_id: str = Field(index=True, foreign_key="app_user.id")
+    created_at: datetime = Field(default_factory=utcnow)
+
+
 class Project(SQLModel, table=True):
     """A folder for one pitch. Each analysis is an attempt (session) inside it."""
 

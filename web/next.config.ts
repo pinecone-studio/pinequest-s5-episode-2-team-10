@@ -4,6 +4,8 @@ const backend = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // The dev server can be opened from another computer, by IP or a .local name.
+  allowedDevOrigins: ["*.*.*.*", "**.local"],
   cacheComponents: true,
   partialPrefetching: true,
   // The browser calls /api/v1 on this app and Next forwards it to the FastAPI backend, so a deployed
