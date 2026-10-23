@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import { folderSnapshot, serverFolderSnapshot, subscribeFolders } from "@/lib/folderStore";
 import { useLang } from "@/lib/i18nClient";
 import { clearSession, useAccount } from "@/lib/session";
 import LangToggle from "./LangToggle";
@@ -23,6 +24,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [narrow, setNarrow] = useState(false);
   const [busy, setBusy] = useState(false);
   const home = pathname === "/" || pathname === "/figma";
+  const openFolder = useSearchParams().get("folder");
+  const folders = useSyncExternalStore(subscribeFolders, folderSnapshot, serverFolderSnapshot);
   const email = account?.email ?? "";
   const label = email.includes("@") ? email.slice(0, email.indexOf("@")) : email;
 
@@ -84,8 +87,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {menuOpen ? null : tr("menu")}
         </button>
         <span className="app-brand">
-          <SayloMark />
-          <span className="desk-brand">SAYLO</span>
+          <Link href="/" className="app-brand-link" aria-label={`SAYLO · ${tr("folders")}`}>
+            <SayloMark />
+            <span className="desk-brand">SAYLO</span>
+          </Link>
         </span>
         <ThemeToggle compact />
       </header>
@@ -94,8 +99,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       )}
       <aside id={menuId} className={menuOpen ? "app-side is-open" : "app-side"} inert={narrow && !menuOpen}>
         <div className="app-brand">
-          <SayloMark />
-          <span className="desk-brand">SAYLO</span>
+          {/* The logo goes to the folder list. */}
+          <Link href="/" className="app-brand-link" aria-label={`SAYLO · ${tr("folders")}`} onClick={() => setMenuOpen(false)}>
+            <SayloMark />
+            <span className="desk-brand">SAYLO</span>
+          </Link>
           {process.env.NODE_ENV === "development" && <LangToggle />}
         </div>
         <div className="app-side-top">
@@ -118,10 +126,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <nav className="app-nav" aria-label="SAYLO">
-          <Link href="/" aria-current={home ? "page" : undefined} onClick={() => setMenuOpen(false)}>
+          <Link href="/" aria-current={home && !openFolder ? "page" : undefined} onClick={() => setMenuOpen(false)}>
             <FolderIcon />
             {tr("folders")}
           </Link>
+          {folders.length > 0 && (
+            <ul className="app-nav-folders">
+              {folders.map((folder) => (
+                <li key={folder.id}>
+                  <Link
+                    href={`/?folder=${encodeURIComponent(folder.id)}`}
+                    aria-current={home && openFolder === folder.id ? "page" : undefined}
+                    title={folder.name}
+                    onClick={() => setMenuOpen(false)}
+                  >
+                    {folder.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </nav>
         <ThemeToggle />
       </aside>

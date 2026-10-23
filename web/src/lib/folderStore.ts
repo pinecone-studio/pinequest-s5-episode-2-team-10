@@ -39,7 +39,38 @@ let userId: string | null = null;
 
 /** Which account's folder list to read. Set before the desk loads. */
 export function setFolderUser(id: string | null) {
+  if (id === userId) return;
   userId = id;
+  snapshot = null;
+  // Called while rendering (AuthGate), so tell listeners afterwards.
+  queueMicrotask(notify);
+}
+
+// The folder list for other parts of the page (the sidebar), kept in step with saveFolders.
+const NO_FOLDERS: FolderMeta[] = [];
+let snapshot: FolderMeta[] | null = null;
+const listeners = new Set<() => void>();
+
+function notify() {
+  for (const listener of listeners) listener();
+}
+
+/** For useSyncExternalStore: call `listener` whenever the folder list changes. */
+export function subscribeFolders(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** The current account's folders; the same array until the list changes. */
+export function folderSnapshot(): FolderMeta[] {
+  if (!userId) return NO_FOLDERS;
+  snapshot ??= loadFolders();
+  return snapshot;
+}
+
+/** Server render: no folders (they live in the browser). */
+export function serverFolderSnapshot(): FolderMeta[] {
+  return NO_FOLDERS;
 }
 
 function listKey(): string | null {
@@ -106,6 +137,8 @@ export function saveFolders(folders: FolderMeta[]) {
   const key = listKey();
   if (!key) return;
   localStorage.setItem(key, JSON.stringify(folders));
+  snapshot = folders;
+  notify();
 }
 
 function openDb(): Promise<IDBDatabase> {

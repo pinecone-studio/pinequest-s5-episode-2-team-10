@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   attachAudio,
@@ -76,7 +77,13 @@ export default function FolderDesk() {
   const { tr } = useLang();
   const [ready, setReady] = useState(false);
   const [folders, setFolders] = useState<FolderMeta[]>([]);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // The open folder lives in the URL (?folder=<id>), so the sidebar can link to it and Back works.
+  const router = useRouter();
+  const pathname = usePathname();
+  const openId = useSearchParams().get("folder");
+  function setOpenId(id: string | null) {
+    router.push(id ? `${pathname}?folder=${encodeURIComponent(id)}` : pathname);
+  }
   const [naming, setNaming] = useState(false);
   const [draft, setDraft] = useState("");
   const [slideFile, setSlideFile] = useState<File | null>(null);
