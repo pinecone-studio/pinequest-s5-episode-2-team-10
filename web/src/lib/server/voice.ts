@@ -1,6 +1,7 @@
 // Server only: talks to the local voice server (voice/server.py). Never import from a client component.
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { t, type Lang } from "@/lib/i18n";
 
 export interface VoiceWord {
   word: string;
@@ -54,11 +55,11 @@ export function voiceConfig() {
   return { url, token };
 }
 
-export async function voiceHealth(): Promise<{ ok: boolean; device?: string; modelLoaded?: boolean; busy?: boolean; error?: string }> {
+export async function voiceHealth(lang: Lang): Promise<{ ok: boolean; device?: string; modelLoaded?: boolean; busy?: boolean; error?: string }> {
   const { url } = voiceConfig();
   try {
     const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5_000), cache: "no-store" });
-    if (!res.ok) return { ok: false, error: `Дуу хоолойн сервер алдаа өглөө (${res.status}).` };
+    if (!res.ok) return { ok: false, error: t(lang, "voiceError", { status: res.status }) };
     const body = (await res.json()) as Record<string, unknown>;
     return {
       ok: body.ok === true,
@@ -67,7 +68,7 @@ export async function voiceHealth(): Promise<{ ok: boolean; device?: string; mod
       busy: body.busy === true,
     };
   } catch {
-    return { ok: false, error: "Дуу хоолойн сервер ажиллахгүй байна. scripts\\voice.ps1-ийг асаана уу." };
+    return { ok: false, error: t(lang, "voiceDown") };
   }
 }
 
@@ -92,9 +93,9 @@ export function parseVoiceReply(raw: unknown): VoiceResult | null {
   };
 }
 
-export async function transcribe(file: Blob, name: string): Promise<VoiceResult> {
+export async function transcribe(file: Blob, name: string, lang: Lang): Promise<VoiceResult> {
   const { url, token } = voiceConfig();
-  if (!token) throw new VoiceError("PITCH_VOICE_TOKEN алга (.env.voice эсвэл web/.env.local).", 503);
+  if (!token) throw new VoiceError(t(lang, "voiceTokenMissing"), 503);
   const form = new FormData();
   form.set("file", file, name);
   let res: Response;
@@ -106,11 +107,11 @@ export async function transcribe(file: Blob, name: string): Promise<VoiceResult>
       signal: AbortSignal.timeout(120_000),
     });
   } catch {
-    throw new VoiceError("Дуу хоолойн сервер ажиллахгүй байна. scripts\\voice.ps1-ийг асаана уу.", 502);
+    throw new VoiceError(t(lang, "voiceDown"), 502);
   }
-  if (res.status === 401) throw new VoiceError("Дуу хоолойн серверийн токен таарсангүй.", 502);
+  if (res.status === 401) throw new VoiceError(t(lang, "voiceTokenWrong"), 502);
   if (!res.ok) {
-    let message = `Дуу хоолойн сервер алдаа өглөө (${res.status}).`;
+    let message = t(lang, "voiceError", { status: res.status });
     try {
       const body = (await res.json()) as { message?: unknown };
       if (typeof body.message === "string") message = body.message;
@@ -120,6 +121,6 @@ export async function transcribe(file: Blob, name: string): Promise<VoiceResult>
     throw new VoiceError(message, res.status >= 500 ? 502 : 400);
   }
   const parsed = parseVoiceReply(await res.json().catch(() => null));
-  if (!parsed) throw new VoiceError("Дуу хоолойн серверийн хариу буруу хэлбэртэй байна.", 502);
+  if (!parsed) throw new VoiceError(t(lang, "voiceBadReply"), 502);
   return parsed;
 }

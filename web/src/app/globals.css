@@ -406,6 +406,76 @@ body {
   opacity: 0.45;
 }
 
+.desk-model {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.desk-model label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.desk-model .desk-sub,
+.desk-model .desk-note {
+  margin: 0;
+  font-size: 12px;
+}
+
+.desk-tests {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px dashed var(--control);
+  border-radius: 12px;
+}
+
+.desk-tests h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.desk-tests .desk-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+}
+
+.desk-tests-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.desk-tests ul {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.desk-tests li {
+  display: grid;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.desk-tests li.is-ok strong {
+  color: var(--positive);
+}
+
+.desk-tests li.is-fail strong {
+  color: var(--negative);
+}
+
+.desk-tests li span {
+  color: var(--muted);
+}
+
 .desk-probe {
   margin-top: 16px;
   padding-top: 14px;
@@ -470,19 +540,31 @@ body {
   }
 }
 
-.desk-model {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 12px;
+.desk-lang {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 2px;
+  border: 1px solid var(--control);
+  border-radius: 999px;
 }
 
-.desk-model label {
+.desk-lang button {
+  min-width: 36px;
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
   color: var(--muted);
   font-size: 12px;
+  cursor: pointer;
 }
 
-.desk-model .desk-sub,
-.desk-model .desk-note {
-  margin: 0;
-  font-size: 12px;
+.desk-lang button[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--text);
+}
+
+.desk-lang button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }

@@ -15,6 +15,9 @@ import {
 } from "@/lib/folderStore";
 import { openPdf, paintPage, readSlideText } from "@/lib/slidePdf";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
+import { langHeaders, useLang } from "@/lib/i18nClient";
+import DevTests from "./DevTests";
+import LangToggle from "./LangToggle";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
 
 type Live = { stream: MediaStream; ctx: AudioContext };
@@ -40,6 +43,7 @@ function isCancel(err: unknown) {
 }
 
 export default function FolderDesk() {
+  const { tr } = useLang();
   const [ready, setReady] = useState(false);
   const [folders, setFolders] = useState<FolderMeta[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -86,17 +90,18 @@ export default function FolderDesk() {
           <div className="desk-bar">
             <WaveMark />
             <span>Pitch Coach</span>
+            {process.env.NODE_ENV === "development" && <LangToggle />}
           </div>
           <div className="desk-title">
             <div>
-              <h1>Хавтаснууд</h1>
+              <h1>{tr("folders")}</h1>
               <p className="desk-sub">
-                {folders.length === 0 ? "Одоогоор хавтас алга." : `${folders.length} хавтас.`}
+                {folders.length === 0 ? tr("foldersNone") : tr("foldersCount", { n: folders.length })}
               </p>
             </div>
             {!naming && (
               <button type="button" className="desk-primary" onClick={() => setNaming(true)}>
-                Хавтас нэмэх
+                {tr("addFolder")}
               </button>
             )}
           </div>
@@ -104,7 +109,7 @@ export default function FolderDesk() {
           {naming && (
             <form onSubmit={createFolder} className="desk-panel">
               <label>
-                <span>Хавтасны нэр</span>
+                <span>{tr("folderName")}</span>
                 <input
                   type="text"
                   autoFocus
@@ -114,10 +119,10 @@ export default function FolderDesk() {
                 />
               </label>
               <label>
-                <span>Слайд</span>
+                <span>{tr("slide")}</span>
                 <span className="desk-file">
-                  <span>{slideFile ? slideFile.name : "TDD слайдаа оруул"}</span>
-                  <span>{slideFile ? "Солих" : "Оруулах"}</span>
+                  <span>{slideFile ? slideFile.name : tr("uploadSlideHint")}</span>
+                  <span>{slideFile ? tr("change") : tr("upload")}</span>
                   <input
                     type="file"
                     accept="image/*,.pdf"
@@ -127,13 +132,13 @@ export default function FolderDesk() {
                 </span>
               </label>
               <button type="submit" className="desk-primary" disabled={!draft.trim() || !slideFile}>
-                Үүсгээд орох
+                {tr("createOpen")}
               </button>
             </form>
           )}
 
           {folders.length === 0 ? (
-            <p className="desk-empty">Хавтас алга. Нэр өгөөд слайдаа оруул.</p>
+            <p className="desk-empty">{tr("foldersEmpty")}</p>
           ) : (
             <ul className="desk-list">
               {folders.map((folder) => (
@@ -142,7 +147,7 @@ export default function FolderDesk() {
                     <FolderMark />
                     <span>
                       <strong>{folder.name}</strong>
-                      <em>{folder.slideName ?? "Слайд оруулаагүй"}</em>
+                      <em>{folder.slideName ?? tr("noSlide")}</em>
                     </span>
                   </button>
                 </li>
@@ -172,6 +177,7 @@ function FolderRoom({
   onBack: () => void;
   onChange: (folder: FolderMeta) => void;
 }) {
+  const { tr } = useLang();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recRef = useRef<PieceRecorder | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
@@ -204,7 +210,7 @@ function FolderRoom({
   const [finalText, setFinalText] = useState("");
   const textRef = useRef("");
   const [sttNote, setSttNote] = useState<string | null>(null);
-  const [slideNote, setSlideNote] = useState<string | null>(null);
+  const [slideNote, setSlideNote] = useState<"pdfOpenFail" | "slideDrawFail" | null>(null);
   const [full, setFull] = useState(false);
   const [probing, setProbing] = useState(false);
   const [probeNote, setProbeNote] = useState<string | null>(null);
@@ -253,7 +259,7 @@ function FolderRoom({
       setPdfEpoch((n) => n + 1);
     } catch {
       if (slideGen.current !== gen) return;
-      setSlideNote("PDF-г нээж чадсангүй.");
+      setSlideNote("pdfOpenFail");
     }
   }
 
@@ -328,7 +334,7 @@ function FolderRoom({
         }
         await rendered.promise;
       } catch (err) {
-        if (!cancelled && !isCancel(err)) setSlideNote("Слайдыг зурж чадсангүй.");
+        if (!cancelled && !isCancel(err)) setSlideNote("slideDrawFail");
       }
     };
 
@@ -393,7 +399,7 @@ function FolderRoom({
         const reply = await transcribeBlob(blob, name);
         if (aliveRef.current && reply.text.trim()) writeSpeech(`${textRef.current} ${reply.text}`);
       } catch (err) {
-        if (aliveRef.current) setSttNote(err instanceof Error ? err.message : "Яриаг текст болгож чадсангүй.");
+        if (aliveRef.current) setSttNote(err instanceof Error ? err.message : tr("sttFail"));
       } finally {
         if (aliveRef.current) setPending((n) => n - 1);
       }
@@ -403,7 +409,7 @@ function FolderRoom({
   /** Saves the whole take as the folder's audio, then replaces the live text with a full transcription. */
   async function finishTake(take: Blob, extension: string, base: string, gen: number) {
     if (take.size < 2_000) return; // shorter than a moment of sound
-    const name = `Бичлэг.${extension}`;
+    const name = `${tr("recordingName")}.${extension}`;
     await putFolderBlob(audioKey(folder.id), take);
     if (!aliveRef.current) return;
     onChange({ ...folder, audioName: name });
@@ -451,7 +457,7 @@ function FolderRoom({
     stopStt();
     const mine = sttGen.current;
     if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setSttNote("Энэ хөтөч дуу бичихгүй. Chrome, Edge эсвэл Firefox дээр нээнэ үү.");
+      setSttNote(tr("browserNoRecord"));
       return;
     }
     playingRef.current = true;
@@ -471,7 +477,7 @@ function FolderRoom({
       if (sttGen.current === mine) {
         playingRef.current = false;
         setListening(false);
-        setSttNote("Микрофон хаагдсан. Зөвшөөрсний дараа Ярих дээр дахин дар.");
+        setSttNote(tr("micBlocked"));
       }
       return;
     }
@@ -490,7 +496,7 @@ function FolderRoom({
       recRef.current = rec;
     } catch {
       stopStt();
-      setSttNote("Бичлэг эхлүүлж чадсангүй.");
+      setSttNote(tr("recordStartFail"));
     }
   }
 
@@ -504,9 +510,9 @@ function FolderRoom({
       const reply = await transcribeBlob(audio, folder.audioName ?? "audio.webm");
       if (!aliveRef.current) return;
       if (reply.text.trim()) writeSpeech(reply.text);
-      else setSttNote("Аудиод яриа олдсонгүй.");
+      else setSttNote(tr("noSpeechInAudio"));
     } catch (err) {
-      if (aliveRef.current) setSttNote(err instanceof Error ? err.message : "Яриаг текст болгож чадсангүй.");
+      if (aliveRef.current) setSttNote(err instanceof Error ? err.message : tr("sttFail"));
     } finally {
       if (aliveRef.current) setFileBusy(false);
     }
@@ -528,6 +534,21 @@ function FolderRoom({
       return URL.createObjectURL(file);
     });
     setTime(0);
+  }
+
+  /** Local test: uses the bundled Mongolian sample as the folder audio and transcribes it. */
+  async function loadSample(audio: Blob): Promise<string> {
+    stopStt();
+    await putFolderBlob(audioKey(folder.id), audio);
+    onChange({ ...folder, audioName: tr("sampleName") });
+    setAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(audio);
+    });
+    setTime(0);
+    const reply = await transcribeBlob(audio, "mn-sample.webm");
+    if (aliveRef.current) writeSpeech(reply.text);
+    return tr("sampleLoaded", { n: reply.text.split(/\s+/).filter(Boolean).length });
   }
 
   function toggleSpeak() {
@@ -561,7 +582,7 @@ function FolderRoom({
       if (audio) body.set("audio", audio, folder.audioName ?? "audio");
       if (slide) body.set("slide", slide, folder.slideName ?? "slide");
       if (slideImage) body.set("slideImage", slideImage, "current-slide.jpg");
-      const res = await fetch("/api/prototype", { method: "POST", body });
+      const res = await fetch("/api/prototype", { method: "POST", body, headers: langHeaders() });
       const payload = (await res.json()) as {
         error?: string;
         summary?: string;
@@ -570,7 +591,7 @@ function FolderRoom({
         received?: { text: boolean; audio: string | null; slide: string | null };
       };
       if (!res.ok || !payload.summary || !payload.points || !payload.received) {
-        setProbeNote(payload.error || "Загвар руу илгээж чадсангүй.");
+        setProbeNote(payload.error || tr("sendFail"));
         return;
       }
       setProbeResult({
@@ -580,7 +601,7 @@ function FolderRoom({
         received: payload.received,
       });
     } catch {
-      setProbeNote("Загвар руу илгээж чадсангүй.");
+      setProbeNote(tr("sendFail"));
     } finally {
       setProbing(false);
     }
@@ -598,7 +619,7 @@ function FolderRoom({
     return (
       <button type="button" className={listening ? "desk-ghost" : "desk-primary"} onClick={toggleSpeak}>
         {listening && <span className="desk-rec" aria-hidden />}
-        {listening ? "Зогсоох" : "Ярих"}
+        {listening ? tr("stop") : tr("speak")}
       </button>
     );
   }
@@ -607,7 +628,7 @@ function FolderRoom({
     return (
       <>
         <button type="button" className="desk-ghost" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-          Өмнөх
+          {tr("prev")}
         </button>
         <span className="desk-count">
           {page} / {pageCount}
@@ -618,7 +639,7 @@ function FolderRoom({
           disabled={page >= pageCount}
           onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
         >
-          Дараах
+          {tr("next")}
         </button>
       </>
     );
@@ -630,6 +651,7 @@ function FolderRoom({
         <div className="desk-bar">
           <WaveMark />
           <span>Pitch Coach</span>
+          {process.env.NODE_ENV === "development" && <LangToggle />}
         </div>
         <div className="desk-title">
           <div>
@@ -637,17 +659,17 @@ function FolderRoom({
               <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
                 <path d="M8.5 2.5 4 7l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Хавтаснууд
+              {tr("folders")}
             </button>
             <h1>{folder.name}</h1>
-            <p className="desk-sub">{pageCount > 1 ? `Слайд ${page} / ${pageCount}` : "Ярь. Текст баруун талд бичигдэнэ."}</p>
+            <p className="desk-sub">{pageCount > 1 ? tr("slideOf", { page, count: pageCount }) : tr("speakHint")}</p>
           </div>
         </div>
         <div className="desk-actions" hidden={full && hasSlide}>
           {speakButton()}
           {hasSlide && (
             <button type="button" className="desk-ghost" onClick={() => setFull(true)}>
-              Бүтэн дэлгэц
+              {tr("fullscreen")}
             </button>
           )}
         </div>
@@ -661,11 +683,11 @@ function FolderRoom({
                 </div>
               ) : slideUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img className="desk-slide" src={slideUrl} alt={folder.slideName ?? "Figma слайд"} />
+                <img className="desk-slide" src={slideUrl} alt={folder.slideName ?? tr("figmaSlide")} />
               ) : (
                 <label className="desk-slide-empty">
-                  <span>Figma слайд</span>
-                  Зураг оруулах
+                  <span>{tr("figmaSlide")}</span>
+                  {tr("addImage")}
                   <input
                     type="file"
                     accept="image/*,.pdf"
@@ -679,7 +701,7 @@ function FolderRoom({
                   {speakButton()}
                   {pageButtons()}
                   <button type="button" className="desk-ghost" onClick={() => setFull(false)}>
-                    Хаах
+                    {tr("close")}
                   </button>
                 </div>
               )}
@@ -688,26 +710,26 @@ function FolderRoom({
               <div className="desk-tools">
                 <div className="desk-pages">{pageButtons()}</div>
                 <label className="desk-link">
-                  Слайд солих
+                  {tr("changeSlide")}
                   <input type="file" accept="image/*,.pdf" className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
                 </label>
               </div>
             )}
-            {slideNote && <p className="desk-note">{slideNote}</p>}
+            {slideNote && <p className="desk-note">{tr(slideNote)}</p>}
           </div>
           <aside className="desk-speech">
-            <h2>Ярианы текст</h2>
+            <h2>{tr("speechText")}</h2>
             <p className="desk-sub" aria-live="polite">
               {listening
-                ? "Сонсож байна. Түр зогсох бүрт текст нэмэгдэнэ."
+                ? tr("listeningLong")
                 : pending > 0 || fileBusy
-                  ? "Текст болгож байна"
+                  ? tr("transcribing")
                   : spoken
-                    ? "Яриа хадгалагдсан"
-                    : "Ярих дээр дараад ярь"}
+                    ? tr("speechSaved")
+                    : tr("pressSpeak")}
             </p>
             <p className="desk-transcript">
-              {spoken || (pending === 0 && <span className="desk-missing">Хоосон</span>)}
+              {spoken || (pending === 0 && <span className="desk-missing">{tr("empty")}</span>)}
               {pending > 0 && <span className="desk-missing"> …</span>}
             </p>
             {sttNote && <p className="desk-note">{sttNote}</p>}
@@ -718,7 +740,7 @@ function FolderRoom({
                 disabled={!folder.audioName || fileBusy || listening}
                 onClick={() => void transcribeAudioFile()}
               >
-                {fileBusy ? "Аудиог текст болгож байна" : "Аудиогоос дахин бичих"}
+                {fileBusy ? tr("transcribingAudio") : tr("retranscribeAudio")}
               </button>
               <button
                 type="button"
@@ -726,7 +748,7 @@ function FolderRoom({
                 disabled={!spoken || listening}
                 onClick={() => writeSpeech("")}
               >
-                Текст арилгах
+                {tr("clearText")}
               </button>
             </div>
             <div className="desk-probe">
@@ -737,15 +759,15 @@ function FolderRoom({
                 disabled={probing || (!spoken && !folder.audioName && !hasSlide)}
                 onClick={() => void sendToModel()}
               >
-                {probing ? "Илгээж байна" : "Загвар руу илгээх"}
+                {probing ? tr("sending") : tr("sendToModel")}
               </button>
               {probeNote && <p className="desk-note">{probeNote}</p>}
               {probeResult && (
                 <>
                   <p>
-                    {probeResult.model} · {probeResult.received.text ? "Текст" : "Текст алга"}
-                    {probeResult.received.audio ? ` · Аудио ${probeResult.received.audio}` : ""}
-                    {probeResult.received.slide ? ` · Слайд ${probeResult.received.slide}` : ""}
+                    {probeResult.model} · {probeResult.received.text ? tr("text") : tr("noText")}
+                    {probeResult.received.audio ? ` · ${tr("audio")} ${probeResult.received.audio}` : ""}
+                    {probeResult.received.slide ? ` · ${tr("slide")} ${probeResult.received.slide}` : ""}
                   </p>
                   <h3>{probeResult.summary}</h3>
                   {probeResult.points.length > 0 && (
@@ -761,6 +783,7 @@ function FolderRoom({
                 </>
               )}
             </div>
+            {process.env.NODE_ENV === "development" && <DevTests model={model} onLoadSample={loadSample} />}
           </aside>
         </div>
 
@@ -870,6 +893,7 @@ function WaveAudio({
   onToggle: () => void;
   onPick: (file: File | undefined) => void;
 }) {
+  const { tr } = useLang();
   const clipId = useId().replace(/:/g, "");
   const [peaks, setPeaks] = useState<number[]>(SAMPLE_WAVE);
   const [spoken, setSpoken] = useState<number[] | null>(null);
@@ -952,12 +976,12 @@ function WaveAudio({
         </span>
       </button>
       <div className="flex items-center justify-between gap-3 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
-        <span className="truncate">{name ?? "Аудио"}</span>
+        <span className="truncate">{name ?? tr("audio")}</span>
         <span className="shrink-0 tabular-nums">
-          {live ? "Сонсож байна" : url ? `${formatClock(time)} / ${formatClock(duration)}` : "Файл оруулаагүй"}
+          {live ? tr("listening") : url ? `${formatClock(time)} / ${formatClock(duration)}` : tr("noFile")}
         </span>
         <label className="shrink-0 cursor-pointer underline">
-          {url ? "Солих" : "Оруулах"}
+          {url ? tr("change") : tr("upload")}
           <input
             type="file"
             accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg"

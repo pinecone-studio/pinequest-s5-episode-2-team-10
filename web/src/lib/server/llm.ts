@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { isProtoModel, type ModelStatus, type ProtoModel } from "@/lib/feedbackModels";
+import { t, type Lang } from "@/lib/i18n";
 
 export { isProtoModel };
 export type { ProtoModel };
@@ -45,7 +46,7 @@ const ollamaUrl = () => setting("OLLAMA_URL", "http://localhost:11434").replace(
 const ollamaModel = () => setting("PITCH_OLLAMA_MODEL_BASE", "gemma4:e4b");
 const claudeModel = () => setting("PITCH_CLAUDE_MODEL", "claude-opus-5-5");
 
-export async function modelStatuses(): Promise<ModelStatus[]> {
+export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
   const claudeKey = Boolean(setting("ANTHROPIC_API_KEY"));
   let ollama: { available: boolean; reason: string | null };
   try {
@@ -55,19 +56,19 @@ export async function modelStatuses(): Promise<ModelStatus[]> {
     const want = ollamaModel();
     ollama = names.some((n) => n === want || n.startsWith(`${want}:`))
       ? { available: true, reason: null }
-      : { available: false, reason: `Ollama-д ${want} татаагүй байна (ollama pull ${want}).` };
+      : { available: false, reason: t(lang, "ollamaNotPulled", { m: want }) };
   } catch {
-    ollama = { available: false, reason: "Ollama ажиллахгүй байна." };
+    ollama = { available: false, reason: t(lang, "ollamaDown") };
   }
   return [
-    { id: "rules", name: "Энгийн шалгалт (LLM-гүй)", local: true, available: true, reason: null },
+    { id: "rules", name: t(lang, "rulesName"), local: true, available: true, reason: null },
     { id: "ollama", name: `Gemma · Ollama (${ollamaModel()})`, local: true, ...ollama },
     {
       id: "claude",
       name: `Claude (${claudeModel()})`,
       local: false,
       available: claudeKey,
-      reason: claudeKey ? null : "ANTHROPIC_API_KEY алга.",
+      reason: claudeKey ? null : t(lang, "claudeKeyMissing"),
     },
   ];
 }
@@ -102,9 +103,9 @@ function jsonFrom(text: string): unknown {
   }
 }
 
-export async function askClaude(prompt: string, image: { mediaType: string; data: string } | null) {
+export async function askClaude(prompt: string, image: { mediaType: string; data: string } | null, lang: Lang) {
   const key = setting("ANTHROPIC_API_KEY");
-  if (!key) throw new LlmError("ANTHROPIC_API_KEY алга.", 503);
+  if (!key) throw new LlmError(t(lang, "claudeKeyMissing"), 503);
   const content: Array<Record<string, unknown>> = [{ type: "text", text: prompt }];
   if (image) content.push({ type: "image", source: { type: "base64", media_type: image.mediaType, data: image.data } });
   let response: Response;
@@ -116,16 +117,16 @@ export async function askClaude(prompt: string, image: { mediaType: string; data
       body: JSON.stringify({ model: claudeModel(), max_tokens: 800, messages: [{ role: "user", content }] }),
     });
   } catch {
-    throw new LlmError("LLM рүү хүрч чадсангүй.", 502);
+    throw new LlmError(t(lang, "llmUnreachable"), 502);
   }
-  if (!response.ok) throw new LlmError(`LLM алдаа (${response.status}).`, 502);
+  if (!response.ok) throw new LlmError(t(lang, "llmError", { status: response.status }), 502);
   const payload = (await response.json()) as { content?: Array<{ type?: string; text?: string }> };
   const reply = parseReply(jsonFrom(payload.content?.find((b) => b.type === "text")?.text ?? ""));
-  if (!reply) throw new LlmError("LLM-ийн хариу хэлбэр таарсангүй.", 502);
+  if (!reply) throw new LlmError(t(lang, "llmBadShape"), 502);
   return reply;
 }
 
-export async function askOllama(prompt: string) {
+export async function askOllama(prompt: string, lang: Lang) {
   let response: Response;
   try {
     response = await fetch(`${ollamaUrl()}/api/chat`, {
@@ -140,12 +141,12 @@ export async function askOllama(prompt: string) {
       }),
     });
   } catch {
-    throw new LlmError("Ollama рүү хүрч чадсангүй. Ollama асаалттай эсэхийг шалгана уу.", 502);
+    throw new LlmError(t(lang, "ollamaUnreachable"), 502);
   }
-  if (!response.ok) throw new LlmError(`Ollama алдаа (${response.status}).`, 502);
+  if (!response.ok) throw new LlmError(t(lang, "ollamaError", { status: response.status }), 502);
   const payload = (await response.json()) as { message?: { content?: string } };
   const reply = parseReply(jsonFrom(payload.message?.content ?? ""));
-  if (!reply) throw new LlmError("Ollama-гийн хариу хэлбэр таарсангүй.", 502);
+  if (!reply) throw new LlmError(t(lang, "ollamaBadShape"), 502);
   return reply;
 }
 
@@ -166,10 +167,10 @@ function fillers(): string[] {
 }
 
 /** No model: counts fillers and back-to-back repeated words. Only quotes words that are in the text. */
-export function rulesReply(text: string, slideText: string): { summary: string; points: Point[] } {
+export function rulesReply(text: string, slideText: string, lang: Lang): { summary: string; points: Point[] } {
   const words = text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   if (words.length === 0) {
-    return { summary: "Ярианы текст алга тул шалгах зүйл алга.", points: [] };
+    return { summary: t(lang, "rulesNoText"), points: [] };
   }
 
   let joined = ` ${words.join(" ")} `;
@@ -196,12 +197,12 @@ export function rulesReply(text: string, slideText: string): { summary: string; 
   const points: Point[] = [];
   points.push(
     fillerTotal
-      ? { title: "Дүүргэгч үг", detail: `${found.join(", ")}. 100 үгэнд ${per100}.` }
-      : { title: "Дүүргэгч үг", detail: "Жагсаалтад байгаа дүүргэгч үг олдсонгүй." },
+      ? { title: t(lang, "rulesFillers"), detail: t(lang, "rulesFillersFound", { list: found.join(", "), per100 }) }
+      : { title: t(lang, "rulesFillers"), detail: t(lang, "rulesFillersNone") },
   );
   if (repeats.size) {
     points.push({
-      title: "Давталт",
+      title: t(lang, "rulesRepeats"),
       detail: [...repeats].map(([w, n]) => `«${w} ${w}» ×${n}`).join(", "),
     });
   }
@@ -210,12 +211,12 @@ export function rulesReply(text: string, slideText: string): { summary: string; 
     const said = new Set(words);
     const covered = [...slideWords].filter((w) => said.has(w)).length;
     points.push({
-      title: "Слайдтай давхцал",
-      detail: `Слайдын ${slideWords.size} түлхүүр үгээс ${covered} нь ярианд орсон.`,
+      title: t(lang, "rulesSlide"),
+      detail: t(lang, "rulesSlideDetail", { total: slideWords.size, covered }),
     });
   }
   return {
-    summary: `Нийт ${words.length} үг. Энэ бол LLM-гүй энгийн тоолол: дүүргэгч үг, давталт, слайдтай давхцал.`,
+    summary: t(lang, "rulesSummary", { n: words.length }),
     points: points.slice(0, 3),
   };
 }
