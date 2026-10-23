@@ -3,13 +3,19 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
-  audioKey,
+  attachAudio,
+  attachSlide,
+  audioFileError,
+  deleteFolderBlob,
+  detachAudio,
   getFolderBlob,
   loadFolders,
   loadSpeech,
   putFolderBlob,
   saveFolders,
   saveSpeech,
+  selectAudio,
+  selectedAudio,
   slideKey,
   type FolderMeta,
 } from "@/lib/folderStore";
@@ -89,12 +95,12 @@ export default function FolderDesk() {
       return;
     }
     setCreating(false);
-    const folder: FolderMeta = {
-      id: crypto.randomUUID(),
-      name,
-      slideName: slide.name,
-      audioName: null,
-    };
+    const id = crypto.randomUUID();
+    const folder = attachSlide(
+      { id, name, slideName: null, audioName: null },
+      { name: slide.name, type: slide.type },
+      new Date().toISOString(),
+    );
     await putFolderBlob(slideKey(folder.id), slide);
     persist([folder, ...folders]);
     setDraft("");
@@ -319,9 +325,10 @@ function FolderRoom({
     aliveRef.current = true;
 
     (async () => {
+      const saved = selectedAudio(folder);
       const [slide, audio] = await Promise.all([
         getFolderBlob(slideKey(folder.id)),
-        getFolderBlob(audioKey(folder.id)),
+        saved ? getFolderBlob(saved.storageKey) : Promise.resolve(null),
       ]);
       if (cancelled) return;
       if (slide) await loadSlide(slide);
@@ -462,14 +469,8 @@ function FolderRoom({
   async function finishTake(take: Blob, extension: string, base: string, gen: number) {
     if (take.size < 2_000) return; // shorter than a moment of sound
     const name = `${tr("recordingName")}.${extension}`;
-    await putFolderBlob(audioKey(folder.id), take);
-    if (!aliveRef.current) return;
-    onChange({ ...folder, audioName: name });
-    setAudioUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(take);
-    });
-    setTime(0);
+    const stored = await storeAudio(take, name, take.type || "audio/webm");
+    if (!stored || !aliveRef.current) return;
 
     // The live pieces were cut short; the whole take reads better with full context.
     setFileBusy(true);
@@ -554,7 +555,8 @@ function FolderRoom({
 
   /** Re-transcribes the whole saved audio file and replaces the text with it. */
   async function transcribeAudioFile() {
-    const audio = await getFolderBlob(audioKey(folder.id));
+    const saved = selectedAudio(folder);
+    const audio = saved ? await getFolderBlob(saved.storageKey) : null;
     if (!audio) return;
     setFileBusy(true);
     setSttNote(null);
@@ -581,32 +583,92 @@ function FolderRoom({
       return;
     }
     setSlideMsg(null);
-    await putFolderBlob(slideKey(folder.id), file);
-    onChange({ ...folder, slideName: file.name });
+    const next = attachSlide(folder, { name: file.name, type: file.type }, new Date().toISOString());
+    await putFolderBlob(next.slide?.storageKey ?? slideKey(folder.id), file);
+    onChange(next);
     await loadSlide(file);
+  }
+
+  function replaceAudioUrl(next: string | null) {
+    setAudioUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return next;
+    });
+    setTime(0);
+  }
+
+  function readDuration(file: Blob): Promise<number | null> {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const audio = document.createElement("audio");
+      let settled = false;
+      const done = (value: number | null) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        URL.revokeObjectURL(url);
+        resolve(value);
+      };
+      const timer = window.setTimeout(() => done(null), 2000);
+      audio.preload = "metadata";
+      audio.onloadedmetadata = () => done(Number.isFinite(audio.duration) ? Math.round(audio.duration * 100) / 100 : null);
+      audio.onerror = () => done(null);
+      audio.src = url;
+    });
+  }
+
+  /** Adds one audio file to this folder's slide. The newest take is the one that plays. */
+  async function storeAudio(file: Blob, name: string, type: string): Promise<boolean> {
+    const problem = audioFileError({ name, type, size: file.size });
+    if (problem) {
+      setSttNote(tr(problem === "size" ? "audioTooBig" : "audioWrongType"));
+      return false;
+    }
+    const next = attachAudio(
+      folder,
+      { name, type, durationS: await readDuration(file) },
+      crypto.randomUUID(),
+      new Date().toISOString(),
+    );
+    const record = selectedAudio(next);
+    if (!record) return false;
+    await putFolderBlob(record.storageKey, file);
+    if (!aliveRef.current) return false;
+    onChange(next);
+    replaceAudioUrl(URL.createObjectURL(file));
+    setSttNote(null);
+    return true;
   }
 
   async function chooseAudio(file: File | undefined) {
     if (!file) return;
-    await putFolderBlob(audioKey(folder.id), file);
-    onChange({ ...folder, audioName: file.name });
-    setAudioUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(file);
-    });
-    setTime(0);
+    await storeAudio(file, file.name, file.type);
+  }
+
+  async function pickSaved(id: string) {
+    const next = selectAudio(folder, id);
+    onChange(next);
+    const record = selectedAudio(next);
+    const blob = record ? await getFolderBlob(record.storageKey) : null;
+    if (!aliveRef.current) return;
+    replaceAudioUrl(blob ? URL.createObjectURL(blob) : null);
+  }
+
+  async function dropAudio(id: string) {
+    const { folder: next, storageKey } = detachAudio(folder, id);
+    if (storageKey) await deleteFolderBlob(storageKey);
+    onChange(next);
+    const record = selectedAudio(next);
+    const blob = record ? await getFolderBlob(record.storageKey) : null;
+    if (!aliveRef.current) return;
+    replaceAudioUrl(blob ? URL.createObjectURL(blob) : null);
   }
 
   /** Local test: uses the bundled Mongolian sample as the folder audio and transcribes it. */
   async function loadSample(audio: Blob): Promise<string> {
     stopStt();
-    await putFolderBlob(audioKey(folder.id), audio);
-    onChange({ ...folder, audioName: tr("sampleName") });
-    setAudioUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(audio);
-    });
-    setTime(0);
+    const stored = await storeAudio(audio, tr("sampleName"), audio.type || "audio/webm");
+    if (!stored) return "";
     const reply = await transcribeBlob(audio, "mn-sample.webm");
     if (aliveRef.current) writeSpeech(reply.text);
     return tr("sampleLoaded", { n: reply.text.split(/\s+/).filter(Boolean).length });
@@ -640,8 +702,9 @@ function FolderRoom({
     setProbeNote(null);
     setProbeResult(null);
     try {
+      const saved = selectedAudio(folder);
       const [audio, slide] = await Promise.all([
-        getFolderBlob(audioKey(folder.id)),
+        saved ? getFolderBlob(saved.storageKey) : Promise.resolve(null),
         getFolderBlob(slideKey(folder.id)),
       ]);
       if (model === "backend") {
@@ -973,6 +1036,25 @@ function FolderRoom({
           onToggle={toggleAudio}
           onPick={chooseAudio}
         />
+        {(folder.audios ?? []).length > 0 && (
+          <ul className="mt-2">
+            {(folder.audios ?? []).map((audio) => (
+              <li key={audio.id} className={`ui-row gap-3 ${audio.id === folder.audioId ? "is-on" : ""}`}>
+                <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => void pickSaved(audio.id)} aria-current={audio.id === folder.audioId ? "true" : undefined}>
+                  <span className="block truncate text-[14px]">{audio.filename}</span>
+                  <span className="ui-help">
+                    {[audio.fileType, audio.durationS != null ? formatClock(audio.durationS) : null, audio.createdAt ? audio.createdAt.slice(0, 10) : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </button>
+                <button type="button" className="ui-link shrink-0" onClick={() => void dropAudio(audio.id)}>
+                  {tr("removeAudio")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <audio
           ref={audioRef}
           src={audioUrl ?? undefined}
@@ -1141,7 +1223,7 @@ function WaveAudio({
           {live ? tr("listening") : url ? `${formatClock(time)} / ${formatClock(duration)}` : tr("noFile")}
         </span>
         <label className="shrink-0 cursor-pointer underline">
-          {url ? tr("change") : tr("upload")}
+          {tr("upload")}
           <input
             type="file"
             accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg"

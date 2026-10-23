@@ -1,8 +1,29 @@
+import { normalizeFolder, type FolderAudio, type FolderSlide } from "./folderFiles";
+
+export type { FolderAudio, FolderSlide };
+export {
+  attachAudio,
+  attachSlide,
+  audioFileError,
+  audioStorageKey,
+  detachAudio,
+  legacyAudioKey,
+  selectAudio,
+  selectedAudio,
+  slideStorageKey,
+} from "./folderFiles";
+
 export interface FolderMeta {
   id: string;
   name: string;
   slideName: string | null;
   audioName: string | null;
+  /** The audio the player and analysis use. */
+  audioId?: string | null;
+  /** The one slide in this folder. */
+  slide?: FolderSlide | null;
+  /** Every audio take for that slide, oldest first. */
+  audios?: FolderAudio[];
   /** The pitch idea and main points the speech should get across (optional, added later). */
   idea?: string;
   keyPoints?: string[];
@@ -40,10 +61,10 @@ function parseList(raw: string | null): FolderMeta[] | null {
 
 export function loadFolders(): FolderMeta[] {
   const key = listKey();
-  if (!key) return [FIGMA_FOLDER];
+  if (!key) return [normalizeFolder(FIGMA_FOLDER)];
   try {
     const own = parseList(localStorage.getItem(key));
-    if (own) return own;
+    if (own) return own.map(normalizeFolder);
     // First sign-in on this browser keeps the folders saved before accounts existed.
     if (localStorage.getItem(key) === null) {
       const legacy = localStorage.getItem(LEGACY_KEY);
@@ -51,13 +72,13 @@ export function loadFolders(): FolderMeta[] {
         localStorage.setItem(key, legacy);
         localStorage.removeItem(LEGACY_KEY);
         const copied = parseList(legacy);
-        if (copied) return copied;
+        if (copied) return copied.map(normalizeFolder);
       }
     }
   } catch {
-    return [FIGMA_FOLDER];
+    return [normalizeFolder(FIGMA_FOLDER)];
   }
-  return [FIGMA_FOLDER];
+  return [FIGMA_FOLDER].map(normalizeFolder);
 }
 
 export function saveFolders(folders: FolderMeta[]) {
@@ -100,6 +121,17 @@ export async function getFolderBlob(key: string): Promise<Blob | null> {
   });
   db.close();
   return blob;
+}
+
+export async function deleteFolderBlob(key: string) {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
 }
 
 export const slideKey = (id: string) => `${id}:slide`;
