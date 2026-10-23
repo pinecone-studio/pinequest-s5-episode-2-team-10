@@ -27,7 +27,7 @@ const audio: FolderAudio = {
 
 export const SHARED_FOLDER = {
   id: SHARED_FOLDER_ID,
-  name: "ok",
+  name: "Coach",
   slideName: slide.filename,
   audioName: audio.filename,
   audioId: AUDIO_ID,
