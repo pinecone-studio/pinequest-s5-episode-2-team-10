@@ -27,6 +27,7 @@ import { streamModelReply } from "@/lib/modelStream";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
+import { useTheme } from "@/lib/theme";
 import Modal from "./Modal";
 import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, pointsToSend, type MainPointsResult } from "./PitchPoints";
@@ -243,6 +244,7 @@ function FolderRoom({
   onChange: (folder: FolderMeta) => void;
 }) {
   const { tr } = useLang();
+  const theme = useTheme();
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recRef = useRef<PieceRecorder | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
@@ -273,7 +275,7 @@ function FolderRoom({
   const [figmaDraft, setFigmaDraft] = useState("");
   const [figmaError, setFigmaError] = useState(false);
   const [preferPdf, setPreferPdf] = useState(false);
-  const figmaEmbed = folder.figmaUrl ? figmaEmbedUrl(folder.figmaUrl) : null;
+  const figmaEmbed = folder.figmaUrl ? figmaEmbedUrl(folder.figmaUrl, theme) : null;
   const showFigma = !!figmaEmbed && !(preferPdf && hasSlide);
   const anySlide = hasSlide || !!figmaEmbed;
   const [pdfEpoch, setPdfEpoch] = useState(0);
@@ -1453,11 +1455,11 @@ function WaveAudio({
     <div className="ui-wave">
       <button type="button" onClick={url && !live ? onToggle : undefined} className="relative block w-full px-4 pb-4 pt-6 text-left" disabled={!url || Boolean(live)}>
         <svg viewBox="0 0 640 160" className="h-28 w-full" aria-hidden>
-          <path d={d} fill="none" stroke="#333436" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+          <path d={d} fill="none" stroke="var(--line)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
           <path
             d={d}
             fill="none"
-            stroke="#e6e6e6"
+            stroke="var(--text-primary)"
             strokeWidth="3"
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -1467,8 +1469,8 @@ function WaveAudio({
             <rect width={640 * progress} height="160" />
           </clipPath>
         </svg>
-        <span className="absolute bottom-4 left-4 flex h-8 w-8 items-center justify-center rounded-full border border-[#333436] bg-[#1a1b1c] text-[#e6e6e6]">
-          {playing ? <span className="h-2.5 w-2.5 rounded-sm bg-[#e6e6e6]" /> : <PlayMark />}
+        <span className="absolute bottom-4 left-4 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--text-primary)]">
+          {playing ? <span className="h-2.5 w-2.5 rounded-sm bg-[var(--text-primary)]" /> : <PlayMark />}
         </span>
       </button>
       <div className="ui-wave-foot">

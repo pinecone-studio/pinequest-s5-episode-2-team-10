@@ -43,7 +43,7 @@ export default function Modal({
               border: 0,
               borderRadius: 8,
               background: "transparent",
-              color: "#e6e6e6",
+              color: "var(--text-primary)",
               cursor: "pointer",
             }}
           >
