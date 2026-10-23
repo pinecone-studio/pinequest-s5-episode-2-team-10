@@ -7,6 +7,17 @@ import { currentLang, langHeaders, useLang } from "@/lib/i18nClient";
 
 const STORAGE_KEY = "pitchcoach:feedback-model";
 
+/** "Gemma · Ollama (gemma4:e4b) · нягт, удаан" → "Gemma нягт". Versions and hosts stay off the control. */
+function modelName(name: string): string {
+  const parts = name
+    .split(" · ")
+    .map((part) => part.replace(/\s*\([^)]*\)/g, "").trim())
+    .filter(Boolean);
+  const head = parts[0] || name;
+  const tail = parts.length >= 3 ? parts[parts.length - 1].split(/[,\s]/)[0] : "";
+  return tail ? `${head} ${tail}` : head;
+}
+
 // The choice lives in memory and is copied to localStorage when storage is allowed.
 const listeners = new Set<() => void>();
 let current: ProtoModel | null = null;
@@ -81,38 +92,25 @@ export default function FeedbackModelSelect({
     if (first) onChange(first.id);
   }, [models, value, onChange]);
 
-  const selected = models?.find((m) => m.id === value);
-
   return (
-    <div className="desk-model">
-      <label htmlFor={id}>{tr("model")}</label>
+    <div className="desk-model" style={{ width: "max-content", maxWidth: "100%", minWidth: 0 }}>
       <select
         id={id}
         className="desk-field"
+        aria-label={tr("model")}
+        style={{ width: "max-content", minWidth: 0, height: 32, padding: "0 28px 0 10px", fontSize: 13 }}
         value={value}
         disabled={!models}
         onChange={(e) => isProtoModel(e.target.value) && onChange(e.target.value)}
       >
         {(models ?? []).map((m) => (
           <option key={m.id} value={m.id} disabled={!m.available}>
-            {m.name}
-            {m.server ? ` · ${tr("backendTag")}` : m.local ? ` · ${tr("thisPc")}` : ` · ${tr("cloud")}`}
-            {m.available ? "" : ` (${tr("unavailableTag")})`}
+            {modelName(m.name)}
           </option>
         ))}
         {!models && <option value={value}>{tr("loading")}</option>}
       </select>
       {error && <p className="desk-note">{error}</p>}
-      {selected && !selected.local && !selected.server && (
-        <p className="desk-sub">{tr("cloudNotice")}</p>
-      )}
-      {models
-        ?.filter((m) => !m.available && m.reason)
-        .map((m) => (
-          <p key={m.id} className="desk-sub">
-            {m.name}: {m.reason}
-          </p>
-        ))}
     </div>
   );
 }
