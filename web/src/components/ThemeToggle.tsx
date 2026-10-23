@@ -1,39 +1,66 @@
 "use client";
 
+import type { MouseEvent } from "react";
+import { flushSync } from "react-dom";
 import { useLang } from "@/lib/i18nClient";
-import { setTheme, useTheme } from "@/lib/theme";
+import { setTheme, useTheme, type Theme } from "@/lib/theme";
 
-/** Light / dark switch. The choice is kept in this browser. */
-export default function ThemeToggle({ compact = false }: { compact?: boolean }) {
+/** Switches the theme with a circle that grows out of the toggle, where the browser supports it. */
+function switchTheme(next: Theme, event: MouseEvent<HTMLButtonElement>) {
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!document.startViewTransition || reduced) {
+    setTheme(next);
+    return;
+  }
+  const box = event.currentTarget.getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  const y = box.top + box.height / 2;
+  const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+  const transition = document.startViewTransition(() => flushSync(() => setTheme(next)));
+  transition.ready
+    .then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+        { duration: 550, easing: "cubic-bezier(0.4, 0, 0.2, 1)", pseudoElement: "::view-transition-new(root)" },
+      );
+    })
+    .catch(() => {
+      /* transition skipped; the theme is already applied */
+    });
+}
+
+/** Sun / moon slider for the light and dark theme. The choice is kept in this browser. */
+export default function ThemeToggle() {
   const { tr } = useLang();
   const theme = useTheme();
+  const dark = theme === "dark";
   return (
-    <div className={compact ? "theme-switch is-compact" : "theme-switch"} role="group" aria-label={tr("theme")}>
-      <button type="button" aria-pressed={theme === "light"} aria-label={tr("lightMode")} onClick={() => setTheme("light")}>
-        <SunIcon />
-        {compact ? null : tr("lightMode")}
-      </button>
-      <button type="button" aria-pressed={theme === "dark"} aria-label={tr("darkMode")} onClick={() => setTheme("dark")}>
-        <MoonIcon />
-        {compact ? null : tr("darkMode")}
-      </button>
-    </div>
-  );
-}
-
-function SunIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-      <circle cx="7" cy="7" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M7 1.2v1.4M7 11.4v1.4M1.2 7h1.4M11.4 7h1.4M2.8 2.8l1 1M10.2 10.2l1 1M11.2 2.8l-1 1M3.8 10.2l-1 1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-      <path d="M8.2 1.6a4.8 4.8 0 1 0 4.2 7.1A4.2 4.2 0 0 1 8.2 1.6Z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-    </svg>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={dark}
+      aria-label={tr("darkMode")}
+      title={dark ? tr("darkMode") : tr("lightMode")}
+      className={dark ? "theme-switch is-dark" : "theme-switch"}
+      onClick={(event) => switchTheme(dark ? "light" : "dark", event)}
+    >
+      <svg className="theme-switch-scene" viewBox="0 0 56 28" aria-hidden>
+        <g className="theme-switch-clouds" fill="#fff">
+          <ellipse cx="38" cy="17" rx="6" ry="3.2" />
+          <circle cx="36" cy="14.5" r="3" />
+          <circle cx="40.5" cy="14" r="3.6" />
+          <ellipse cx="47" cy="11" rx="4.5" ry="2.4" opacity="0.85" />
+          <circle cx="47.5" cy="9.4" r="2.6" opacity="0.85" />
+        </g>
+        <g className="theme-switch-stars" fill="#fff">
+          <circle cx="10" cy="8" r="0.9" />
+          <circle cx="17" cy="16" r="0.7" />
+          <circle cx="24" cy="7" r="0.6" />
+          <circle cx="8" cy="19" r="0.6" />
+          <circle cx="27" cy="19" r="0.9" />
+        </g>
+      </svg>
+      <span className="theme-switch-knob" aria-hidden />
+    </button>
   );
 }

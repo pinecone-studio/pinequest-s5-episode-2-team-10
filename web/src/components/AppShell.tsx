@@ -92,7 +92,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span className="desk-brand">SAYLO</span>
           </Link>
         </span>
-        <ThemeToggle compact />
+        <ThemeToggle />
       </header>
       {menuOpen && (
         <button type="button" className="app-backdrop" aria-label={tr("close")} onClick={() => setMenuOpen(false)} />
@@ -147,9 +147,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </ul>
           )}
         </nav>
-        <ThemeToggle />
       </aside>
-      <div className="app-main">{children}</div>
+      <div className="app-main">
+        <div className="app-corner">
+          <ThemeToggle />
+        </div>
+        {children}
+      </div>
       {accountOpen && panelBox && (
         <>
           <button type="button" className="account-panel-backdrop" aria-label={tr("close")} onClick={() => setAccountOpen(false)} />
