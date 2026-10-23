@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
     if (!backend) return [];
     return [{ source: "/api/v1/:path*", destination: `${backend}/api/v1/:path*` }];
   },
+  experimental: {
+    // Don't reuse `next dev` output across restarts (.next/dev/cache). CSS through the Tailwind
+    // loader could stay stale after a git pull or branch switch, and restarting kept serving it.
+    turbopackFileSystemCacheForDev: false,
+  },
   turbopack: {
     rules: {
       "*.css": {
