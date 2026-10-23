@@ -18,12 +18,13 @@ from typing import Literal, Optional
 import httpx
 from pydantic import BaseModel, ConfigDict
 
-from . import config
+from . import config, fillers
 
 Backend = Literal["claude", "gemma4-ft", "gemma4-base", "rules"]
 BACKENDS: tuple[str, ...] = ("claude", "gemma4-ft", "gemma4-base", "rules")
 
 PROMPT = (Path(__file__).parent / "prompts" / "feedback_v2.md").read_text(encoding="utf-8")
+PROMPT_VERSION = "v2.1-fillers"  # stored with each report; bump when the prompt or schema changes
 MAX_RECOMMENDATIONS = 5
 SLIDE_WORDS = 60  # trim slide text so a 3-minute pitch plus 10 slides fits in 6144 tokens
 SCRIPT_WORDS = 600  # about 4 minutes of speech
@@ -76,6 +77,11 @@ class Recommendation(_Strict):
     impact: Literal["high", "medium", "low"]
 
 
+class FillerOccurrence(_Strict):
+    sentence_id: int
+    word: str
+
+
 class Feedback(_Strict):
     summary: str
     strengths: list[str]
@@ -83,6 +89,7 @@ class Feedback(_Strict):
     slide_feedback: list[SlideFeedback]
     number_checks: list[NumberCheck]
     recommendations: list[Recommendation]
+    filler_occurrences: list[FillerOccurrence]
 
 
 def _inline_refs(schema: dict) -> dict:
@@ -126,6 +133,8 @@ def build_input(session: dict, sentences: list[dict], metrics: dict, wording: di
             for a in alignment.get("slides", [])
         ],
         "number_candidates": alignment.get("number_candidates", []),
+        # Every listed filler word found by code; the model confirms each one in context.
+        "filler_candidates": fillers.find_candidates(sentences),
     }
 
 
@@ -138,6 +147,9 @@ def generate(backend: str, data: dict) -> dict:
         raw = _ollama(config.OLLAMA_MODEL_BASE, data)
     elif backend == "rules":
         raw = _rules(data)
+    elif backend.startswith("ollama:"):
+        # Any local Ollama model, for trying the analysis (scripts/try_analysis.py). Not offered in the app.
+        raw = _ollama(backend.split(":", 1)[1], data)
     else:
         raise FeedbackError(f"Unknown feedback model: {backend}")
 
@@ -145,7 +157,7 @@ def generate(backend: str, data: dict) -> dict:
         fb = Feedback.model_validate(raw)
     except Exception as e:
         raise FeedbackError("The feedback model returned output that does not match the schema.") from e
-    return _sanitize(fb.model_dump(), data)
+    return _sanitize(fb.model_dump(), data, filler_method="list" if backend == "rules" else "llm")
 
 
 # ---- Backends --------------------------------------------------------------
@@ -246,13 +258,15 @@ def _rules(data: dict) -> dict:
             {"area": area, "problem": problem, "start_s": None, "slide": None, "why": "", "action": action, "example_sentence": "", "impact": impact}
             for area, problem, action, impact in recs
         ],
+        # Without a model, every listed filler counts.
+        "filler_occurrences": data["filler_candidates"],
     }
 
 
 # ---- Checks on model output ------------------------------------------------
 
 
-def _sanitize(fb: dict, data: dict) -> dict:
+def _sanitize(fb: dict, data: dict, filler_method: str = "llm") -> dict:
     starts = [s["start"] for s in data["transcript"]]
     slide_numbers = {s["number"] for s in data["slides"]}
     criteria = data["criteria"]
@@ -284,4 +298,14 @@ def _sanitize(fb: dict, data: dict) -> dict:
         if r["slide"] not in slide_numbers:
             r["slide"] = None
     fb["recommendations"] = recs
+
+    # Fillers: keep only occurrences that exist in the named sentence; counts come from code.
+    sentences = data["transcript"]
+    reported = len(fb["filler_occurrences"])
+    fb["filler_occurrences"] = fillers.verify(fb["filler_occurrences"], sentences)
+    fb["fillers"] = fillers.summarize(
+        fb["filler_occurrences"], sentences, data["wording"].get("word_count") or 0, filler_method
+    )
+    # How many occurrences the model claimed before verification; the gap is what it invented.
+    fb["fillers"]["model_reported"] = reported
     return fb

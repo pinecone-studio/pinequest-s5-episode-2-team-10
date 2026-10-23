@@ -1,55 +1,69 @@
 # Saylo
 
-Saylo is an AI-assisted speaking practice tool. A user uploads a short recording, receives a transcript, reviews actionable feedback about wording and delivery-related language patterns, and practices an improved version.
+Saylo is an AI-assisted speaking practice tool. A user keeps one project per pitch, uploads slides and a short Mongolian recording, and gets a transcript, a coaching score, evidence-based feedback (including filler words), and concrete next steps. Every attempt is saved so progress can be compared.
 
 ## MVP goals
 
-- Upload an audio recording.
-- Transcribe Mongolian speech using a speech-to-text model selected through testing.
+- Create projects (folders) and practice the same pitch over several attempts.
+- Upload or record audio, optionally with slides (PDF/PPTX) and a planned script.
+- Transcribe Mongolian speech with a speech-to-text model selected through testing.
 - Analyze the transcript for filler words, repetition, unclear phrasing, and organization.
-- Return a structured score, examples from the transcript, an improved version, and practice tasks.
-- Let users revisit and delete their recordings and analyses.
+- Return a structured score, examples from the transcript, and practical recommendations.
+- Let users revisit and delete their projects, attempts, and uploads.
 
 ## MVP boundaries
 
-The first version focuses on **transcript-based feedback**. It does not claim to reliably evaluate vocal confidence, emotion, facial expression, intonation, or volume. Those require separate audio-feature work and validation.
+Feedback is primarily **transcript-based**. Do not claim to evaluate confidence, emotion, or facial expression. The current backend also measures pace, pauses, pitch range, and volume drop from the audio; whether to show those as scores is an open product decision (see `AGENTS.md`).
 
-## Proposed stack
+## Current stack
 
-- Web app: Next.js, React, TypeScript
-- UI: Tailwind CSS and a consistent component library
-- Backend: Next.js Route Handlers or a separate Node.js/Express API; choose one implementation and keep it consistent
-- Validation: Zod
-- Database: PostgreSQL with Prisma
-- Audio storage: private S3-compatible object storage
-- AI: one speech-to-text model plus one LLM for transcript analysis
+| Part | Choice | Where |
+| --- | --- | --- |
+| Web app | Next.js 16, React 19, TypeScript, Tailwind CSS 4 | `web/` |
+| API | FastAPI (Python 3.10+), one background worker | `backend/` |
+| Analysis pipeline | Python modules: ASR, metrics, slides, fillers, LLM feedback, scoring | `pipeline/` |
+| Database | PostgreSQL on **Supabase** (SQLite for local development), via SQLModel | `backend/db.py` |
+| File storage | Server disk under `data/sessions/` (Supabase Storage is planned) | `backend/config.py` |
+| Speech-to-text | BuzzASR/mongolian (Whisper large-v3) on the GPU machine; `stub` mode for testing | `pipeline/asr.py` |
+| LLM analysis | Claude (Anthropic API) or Gemma 4 through Ollama (base and fine-tuned) | `pipeline/feedback.py` |
+| Validation | Pydantic on the server; shared TypeScript types in the web app | `pipeline/feedback.py`, `web/src/lib/types.ts` |
+| Identity | Anonymous user token per browser (no logins yet) | `backend/main.py` |
 
 ## Core flow
 
-1. User uploads audio.
-2. Server validates file type, size, and duration.
-3. Audio is sent to the speech-to-text provider.
-4. Transcript is stored and shown to the user.
-5. The analysis model returns validated structured feedback.
-6. The app displays the score, evidence, improved transcript, and practice tasks.
+1. The browser gets an anonymous user token and creates a project.
+2. Each analysis is an attempt: slides and script are reused from the previous attempt, a new recording is uploaded.
+3. The server validates and converts the audio, and queues the attempt.
+4. The worker transcribes, measures, matches speech to slides, asks the LLM for feedback, verifies it, and scores it in code.
+5. The web app polls the status and shows the score, filler words, recommendations, transcript, and uploads.
 
 ## Getting started
 
-1. Install the project's dependencies.
-2. Copy `.env.example` to `.env.local`.
-3. Add the required database, storage, and model-provider credentials.
-4. Run database migrations.
-5. Start the development server.
+```bash
+# API (from the repo root)
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt          # add requirements-ml.txt on the GPU machine
+cp .env.example .env                     # set PITCH_DB_URL to Supabase, ANTHROPIC_API_KEY, etc.
+set -a && source .env && set +a
+uvicorn backend.main:app --reload --port 8000
 
-Exact commands depend on the package manager and backend choice selected during implementation. Do not commit `.env.local` or real API keys.
+# Web app
+cd web && npm install
+NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
+```
+
+Without a GPU, set `PITCH_ASR=stub PITCH_EMBEDDINGS=none`. Without `NEXT_PUBLIC_API_URL`, the web app runs in demo mode with sample data. To try only the AI analysis on a transcript, see `TESTING.md`.
+
+Do not commit `.env` or real API keys.
 
 ## Project documents
 
 - `PRD.md`: product scope and user stories
-- `TECHNICAL_DESIGN.md`: system architecture and implementation decisions
+- `TECHNICAL_DESIGN.md`: architecture and implementation decisions
 - `AI_PIPELINE.md`: transcription and analysis behavior
-- `DATABASE.md`: entities and relationships
+- `DATABASE.md`: tables and Supabase setup
 - `API.md`: endpoint contracts
 - `AGENTS.md`: instructions for AI coding assistants
-- `TASKS.md`: suggested MVP work breakdown
-- `TESTING.md`: quality checks and acceptance criteria
+- `TASKS.md`: MVP work breakdown
+- `TESTING.md`: tests, how to try the analysis, and acceptance criteria
+- `server/README.md`, `web/README.md`: setup details for each part

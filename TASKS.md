@@ -11,14 +11,14 @@ This plan assumes a six-person team. Reassign based on actual skills and availab
 - [ ] Track integration blockers and acceptance criteria
 
 ### 2. UI/UX
-- [ ] Design upload page
+- [ ] Design project list and project page
 - [ ] Design processing/loading states
 - [ ] Design transcript and analysis results page
 - [ ] Design errors, empty states, and mobile layout
 - [ ] Deliver reusable component and spacing/type rules
 
 ### 3. Frontend
-- [ ] Build upload flow and client-side validation
+- [ ] Build project list, project page, and upload flow with client-side validation
 - [ ] Connect upload and processing endpoints
 - [ ] Display transcript and analysis results
 - [ ] Display scores, evidence, improved transcript, and tasks
@@ -26,9 +26,9 @@ This plan assumes a six-person team. Reassign based on actual skills and availab
 - [ ] Test loading, error, and responsive states
 
 ### 4. Backend and database
-- [ ] Initialize application and environment configuration
-- [ ] Set up PostgreSQL and ORM migrations
-- [ ] Implement recording metadata and storage integration
+- [ ] Initialize FastAPI application and environment configuration
+- [ ] Connect Supabase Postgres (`PITCH_DB_URL`) and add migrations (Alembic) once the schema settles
+- [ ] Implement project, attempt, and upload storage (server disk now, Supabase Storage later)
 - [ ] Implement status transitions
 - [ ] Implement API routes and ownership checks
 - [ ] Implement deletion and error handling
@@ -41,9 +41,10 @@ This plan assumes a six-person team. Reassign based on actual skills and availab
 - [ ] Integrate the best practical candidate and document limitations
 
 ### 6. AI analysis and evaluation
-- [ ] Define strict analysis schema
+- [ ] Define strict analysis schema (Pydantic, `pipeline/feedback.py`)
 - [ ] Write prompt and version it
-- [ ] Implement transcript analysis service
+- [ ] Implement transcript analysis service (Claude and Gemma via Ollama)
+- [ ] Identify filler words in context and verify them against the transcript
 - [ ] Validate evidence excerpts against the transcript
 - [ ] Implement deterministic score calculation
 - [ ] Review feedback with humans for correctness and usefulness
@@ -52,7 +53,7 @@ This plan assumes a six-person team. Reassign based on actual skills and availab
 ## Suggested sequence
 
 1. **Scope and prototype:** finalize user flow, select sample recordings, and prove the ASR path.
-2. **Backend foundation:** database, upload, private storage, statuses, and API.
+2. **Backend foundation:** FastAPI, Supabase Postgres, upload storage, statuses, and API.
 3. **AI pipeline:** transcription, analysis schema, evidence validation, scoring.
 4. **Frontend integration:** upload, progress, result display, errors, and retry.
 5. **Quality pass:** test Mongolian speech, incorrect transcripts, short/long files, and provider failures.
