@@ -58,6 +58,8 @@ export interface FolderRecord {
   audios?: FolderAudio[];
   idea?: string;
   keyPoints?: string[];
+  /** Each main point's slide number (as on screen), in the same order; null = no slide. */
+  pointSlides?: (number | null)[];
   figmaUrl?: string | null;
 }
 
