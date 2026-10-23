@@ -120,18 +120,14 @@ export default function AudioInput({
 
   return (
     <div className="space-y-3">
-      <div className="inline-flex rounded-lg border border-zinc-300 p-0.5 text-sm dark:border-zinc-700">
+      <div className="ui-tabs">
         {(["upload", "record"] as const).map((m) => (
           <button
             key={m}
             type="button"
             disabled={recording}
             onClick={() => setMode(m)}
-            className={`rounded-md px-3 py-1.5 capitalize ${
-              mode === m
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "text-zinc-600 dark:text-zinc-400"
-            }`}
+            className={mode === m ? "ui-tab is-on" : "ui-tab"}
           >
             {m}
           </button>
@@ -139,9 +135,9 @@ export default function AudioInput({
       </div>
 
       {mode === "upload" ? (
-        <label className="flex cursor-pointer flex-col items-center gap-1 rounded-lg border border-dashed border-zinc-300 px-4 py-6 text-center text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
+        <label className="ui-drop flex cursor-pointer flex-col items-center gap-1 px-4 py-5 text-center text-sm">
           <span className="font-medium">Choose an audio file</span>
-          <span className="text-zinc-500">WAV, MP3, M4A, WebM or OGG · up to 25 MB and 5 minutes</span>
+          <span className="ui-help">WAV, MP3, M4A, WebM or OGG · up to 25 MB and 5 minutes</span>
           <input
             type="file"
             accept={ACCEPT}
@@ -153,19 +149,19 @@ export default function AudioInput({
           />
         </label>
       ) : (
-        <div className="flex items-center gap-4 rounded-lg border border-zinc-300 px-4 py-4 dark:border-zinc-700">
+        <div className="ui-panel flex items-center gap-4 px-4 py-3">
           <button
             type="button"
             onClick={recording ? stopRecording : startRecording}
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white ${
-              recording ? "bg-red-600" : "bg-zinc-900 dark:bg-zinc-100 dark:text-zinc-900"
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#151617] ${
+              recording ? "bg-[#c48b94]" : "bg-[#e6e6e6]"
             }`}
             aria-label={recording ? "Stop recording" : "Start recording"}
           >
             {recording ? (
-              <span className="h-4 w-4 rounded-sm bg-white" />
+              <span className="h-3.5 w-3.5 rounded-sm bg-[#151617]" />
             ) : (
-              <span className="h-4 w-4 rounded-full bg-red-500" />
+              <span className="h-3.5 w-3.5 rounded-full bg-[#c48b94]" />
             )}
           </button>
           <div className="text-sm">
@@ -174,12 +170,12 @@ export default function AudioInput({
                 <div className="font-medium tabular-nums">
                   Recording {formatTime(elapsed)} / 5:00
                 </div>
-                <div className="text-zinc-500">Click the button to stop.</div>
+                <div className="ui-help">Click the button to stop.</div>
               </>
             ) : (
               <>
                 <div className="font-medium">Record your pitch</div>
-                <div className="text-zinc-500">Stops automatically at 5 minutes.</div>
+                <div className="ui-help">Stops automatically at 5 minutes.</div>
               </>
             )}
           </div>
@@ -187,22 +183,18 @@ export default function AudioInput({
       )}
 
       {value && !recording && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-900">
+        <div className="ui-inset flex flex-wrap items-center gap-3 text-sm">
           <audio controls src={value.url} className="h-9 max-w-full" />
-          <span className="text-zinc-600 dark:text-zinc-400">
+          <span className="ui-muted">
             {value.filename} · {formatTime(value.durationS)}
           </span>
-          <button
-            type="button"
-            onClick={() => onChange(null)}
-            className="ml-auto text-zinc-500 underline hover:text-zinc-900 dark:hover:text-zinc-100"
-          >
+          <button type="button" onClick={() => onChange(null)} className="ui-link ml-auto">
             Remove
           </button>
         </div>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="ui-alert">{error}</p>}
     </div>
   );
 }

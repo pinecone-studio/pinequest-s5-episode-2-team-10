@@ -24,18 +24,18 @@ export default function ReportView({ report }: { report: Report }) {
   const { feedback, metrics } = report;
 
   return (
-    <div className="mt-6 space-y-10">
+    <div className="mt-4 space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">{report.title}</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h1 className="ui-title">{report.title}</h1>
+          <p className="ui-muted mt-1">
             Feedback by {modelName(report.backend)}
             {cloud && " · data was sent to Anthropic's API"}
           </p>
         </div>
         <div className="text-right">
-          <div className="text-5xl font-semibold tabular-nums">{report.overall ?? "–"}</div>
-          <div className="text-xs text-zinc-500">
+          <div className="ui-score">{report.overall ?? "–"}</div>
+          <div className="ui-help">
             out of 100{used < 4 && ` · based on ${used} of 4 categories`}
           </div>
         </div>
@@ -43,24 +43,24 @@ export default function ReportView({ report }: { report: Report }) {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {CATEGORIES.map((c) => (
-          <div key={c.key} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-            <div className="text-xs text-zinc-500">
+          <div key={c.key} className="ui-card p-3">
+            <div className="ui-help">
               {c.label} · {c.weight}%
             </div>
-            <div className="mt-1 text-2xl font-semibold tabular-nums">{report[c.key] ?? "–"}</div>
-            {report[c.key] === null && <div className="text-xs text-zinc-400">No data</div>}
+            <div className="ui-score mt-1 text-[18px]">{report[c.key] ?? "–"}</div>
+            {report[c.key] === null && <div className="ui-help">No data</div>}
           </div>
         ))}
       </div>
 
       <section>
-        <h2 className="mb-2 font-medium">Summary</h2>
+        <h2 className="ui-section mb-2">Summary</h2>
         <p className="text-sm leading-relaxed">{feedback.summary}</p>
         {feedback.strengths.length > 0 && (
           <ul className="mt-3 space-y-1 text-sm">
             {feedback.strengths.map((s, i) => (
               <li key={i} className="flex gap-2">
-                <span className="text-emerald-600">+</span>
+                <span className="ui-ok">+</span>
                 {s}
               </li>
             ))}
@@ -73,7 +73,7 @@ export default function ReportView({ report }: { report: Report }) {
       )}
 
       <section>
-        <h2 className="mb-3 font-medium">Top recommendations</h2>
+        <h2 className="ui-section mb-3">Top recommendations</h2>
         <ol className="space-y-3">
           {feedback.recommendations.map((r, i) => (
             <RecommendationCard key={i} rec={r} />
@@ -82,7 +82,7 @@ export default function ReportView({ report }: { report: Report }) {
       </section>
 
       <section>
-        <h2 className="mb-3 font-medium">Delivery</h2>
+        <h2 className="ui-section mb-3">Delivery</h2>
         <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
           <Metric label="Length" value={formatTime(metrics.duration_s)} />
           <Metric label="Pace" value={metrics.wpm} unit="words/min" target="120–150" />
@@ -95,18 +95,18 @@ export default function ReportView({ report }: { report: Report }) {
 
       {feedback.content_scores.length > 0 && (
         <section>
-          <h2 className="mb-3 font-medium">Content</h2>
+          <h2 className="ui-section mb-3">Content</h2>
           <div className="space-y-3">
             {feedback.content_scores.map((c) => (
               <div key={c.criterion} className="text-sm">
                 <div className="flex justify-between">
                   <span>{CRITERIA[c.criterion] ?? c.criterion}</span>
-                  <span className="tabular-nums text-zinc-500">{c.score}</span>
+                  <span className="ui-muted tabular-nums">{c.score}</span>
                 </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
-                  <div className="h-full rounded-full bg-zinc-900 dark:bg-zinc-100" style={{ width: `${c.score}%` }} />
+                <div className="ui-meter mt-1">
+                  <span style={{ width: `${c.score}%` }} />
                 </div>
-                {c.recommendation && <p className="mt-1 text-zinc-500">{c.recommendation}</p>}
+                {c.recommendation && <p className="ui-muted mt-1">{c.recommendation}</p>}
               </div>
             ))}
           </div>
@@ -115,8 +115,8 @@ export default function ReportView({ report }: { report: Report }) {
 
       {feedback.slide_feedback.length > 0 && (
         <section>
-          <h2 className="font-medium">Slides</h2>
-          <p className="mb-3 text-xs text-zinc-500">Estimated from what you said; we don&apos;t know when you changed slides.</p>
+          <h2 className="ui-section">Slides</h2>
+          <p className="ui-help mb-3">Estimated from what you said; we don&apos;t know when you changed slides.</p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {feedback.slide_feedback.map((s) => (
               <SlideTile key={s.slide} slide={s} />
@@ -127,7 +127,7 @@ export default function ReportView({ report }: { report: Report }) {
               {feedback.number_checks
                 .filter((n) => n.inconsistent)
                 .map((n, i) => (
-                  <li key={i} className="text-red-700 dark:text-red-400">
+                  <li key={i} className="ui-bad">
                     Slide {n.slide} says {n.on_slide}, but you said &ldquo;{n.said ?? "nothing"}&rdquo;.
                   </li>
                 ))}
@@ -137,11 +137,11 @@ export default function ReportView({ report }: { report: Report }) {
       )}
 
       <section>
-        <h2 className="mb-3 font-medium">Transcript</h2>
+        <h2 className="ui-section mb-3">Transcript</h2>
         <div className="space-y-1.5 text-sm">
           {report.transcript.sentences.map((s, i) => (
             <p key={i} className="flex gap-3">
-              <span className="w-10 shrink-0 tabular-nums text-zinc-400">{formatTime(s.start)}</span>
+              <span className="ui-help w-10 shrink-0 tabular-nums">{formatTime(s.start)}</span>
               <span>{s.text}</span>
             </p>
           ))}
@@ -152,25 +152,25 @@ export default function ReportView({ report }: { report: Report }) {
 }
 
 const IMPACT_STYLE = {
-  high: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  medium: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
-  low: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  high: "ui-badge is-bad",
+  medium: "ui-badge is-warn",
+  low: "ui-badge",
 };
 
 function RecommendationCard({ rec }: { rec: Recommendation }) {
   return (
-    <li className="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <span className={`rounded px-1.5 py-0.5 ${IMPACT_STYLE[rec.impact]}`}>{rec.impact} impact</span>
-        <span className="text-zinc-500">{rec.area}</span>
-        {rec.start_s != null && <span className="tabular-nums text-zinc-500">at {formatTime(rec.start_s)}</span>}
-        {rec.slide != null && <span className="text-zinc-500">slide {rec.slide}</span>}
+    <li className="ui-card text-sm">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className={IMPACT_STYLE[rec.impact]}>{rec.impact} impact</span>
+        <span className="ui-help">{rec.area}</span>
+        {rec.start_s != null && <span className="ui-help tabular-nums">at {formatTime(rec.start_s)}</span>}
+        {rec.slide != null && <span className="ui-help">slide {rec.slide}</span>}
       </div>
       <p className="font-medium">{rec.problem}</p>
-      <p className="mt-1 text-zinc-500">{rec.why}</p>
+      <p className="ui-muted mt-1">{rec.why}</p>
       <p className="mt-2">{rec.action}</p>
       {rec.example_sentence && (
-        <p className="mt-2 border-l-2 border-zinc-300 pl-3 italic text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
+        <p className="ui-quote">
           {rec.example_sentence}
         </p>
       )}
@@ -190,64 +190,64 @@ function Metric({
   target?: string;
 }) {
   return (
-    <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-      <dt className="text-xs text-zinc-500">{label}</dt>
+    <div className="ui-card p-3">
+      <dt className="ui-help">{label}</dt>
       <dd className="mt-1">
-        <span className="text-lg font-semibold tabular-nums">{value ?? "–"}</span>
-        {unit && value != null && <span className="ml-1 text-xs text-zinc-500">{unit}</span>}
+        <span className="text-base font-medium tabular-nums">{value ?? "–"}</span>
+        {unit && value != null && <span className="ui-help ml-1">{unit}</span>}
       </dd>
-      {target && <dd className="text-xs text-zinc-400">target {target}</dd>}
+      {target && <dd className="ui-help">target {target}</dd>}
     </div>
   );
 }
 
 const SLIDE_STYLE: Record<SlideFeedback["status"], string> = {
-  covered: "border-emerald-300 dark:border-emerald-800",
-  partial: "border-amber-300 dark:border-amber-800",
-  missed: "border-red-300 dark:border-red-800",
-  image_only: "border-dashed border-zinc-300 text-zinc-400 dark:border-zinc-700",
+  covered: "ui-tile is-covered",
+  partial: "ui-tile is-partial",
+  missed: "ui-tile is-missed",
+  image_only: "ui-tile is-image_only",
 };
 
 function SlideTile({ slide }: { slide: SlideFeedback }) {
   return (
-    <div className={`rounded-lg border-2 p-2 text-xs ${SLIDE_STYLE[slide.status]}`}>
+    <div className={`ui-card p-2 text-xs ${SLIDE_STYLE[slide.status]}`}>
       <div className="font-medium">Slide {slide.slide}</div>
-      <div className="text-zinc-500">{slide.status === "image_only" ? "image only, not scored" : slide.status}</div>
+      <div className="ui-help">{slide.status === "image_only" ? "image only, not scored" : slide.status}</div>
       {slide.comment && <div className="mt-1">{slide.comment}</div>}
     </div>
   );
 }
 
 const POINT_STATUS = {
-  covered: { label: "Covered", className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" },
-  partial: { label: "Partly", className: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300" },
-  missed: { label: "Missed", className: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300" },
+  covered: { label: "Covered", className: "ui-badge is-ok" },
+  partial: { label: "Partly", className: "ui-badge is-warn" },
+  missed: { label: "Missed", className: "ui-badge is-bad" },
 } as const;
 
 function MainPointsSection({ data }: { data: MainPoints }) {
   return (
     <section>
-      <h2 className="mb-1 font-medium">
-        Main points{data.coverage !== null && <span className="text-zinc-500"> · {data.coverage}% covered</span>}
+      <h2 className="ui-section mb-1">
+        Main points{data.coverage !== null && <span className="ui-muted"> · {data.coverage}% covered</span>}
       </h2>
       {data.method === "words" && (
-        <p className="mb-2 text-xs text-zinc-500">Matched by key words without an LLM, so this is a rough estimate.</p>
+        <p className="ui-help mb-2">Matched by key words without an LLM, so this is a rough estimate.</p>
       )}
       {data.idea_comment && <p className="mb-3 text-sm leading-relaxed">{data.idea_comment}</p>}
       <ul className="space-y-3">
         {data.points.map((p) => {
           const status = POINT_STATUS[p.verified ? p.status : "missed"];
           return (
-            <li key={p.point} className="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+            <li key={p.point} className="ui-card text-sm">
               <div className="flex items-start justify-between gap-3">
                 <span className="font-medium">{p.text}</span>
-                <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${status.className}`}>{status.label}</span>
+                <span className={`shrink-0 ${status.className}`}>{status.label}</span>
               </div>
-              {p.evidence && <p className="mt-1 text-zinc-600 dark:text-zinc-400">&ldquo;{p.evidence}&rdquo;</p>}
+              {p.evidence && <p className="ui-muted mt-1">&ldquo;{p.evidence}&rdquo;</p>}
               {!p.verified && (
-                <p className="mt-1 text-xs text-zinc-500">The model&apos;s quote isn&apos;t in the transcript, so this wasn&apos;t counted.</p>
+                <p className="ui-help mt-1">The model&apos;s quote isn&apos;t in the transcript, so this wasn&apos;t counted.</p>
               )}
-              {p.note && <p className="mt-1 text-zinc-500">{p.note}</p>}
+              {p.note && <p className="ui-muted mt-1">{p.note}</p>}
             </li>
           );
         })}
@@ -258,9 +258,9 @@ function MainPointsSection({ data }: { data: MainPoints }) {
           <ul className="space-y-2 text-sm">
             {data.off_topic.map((o) => (
               <li key={o.sentence_id}>
-                {o.start !== null && <span className="mr-2 tabular-nums text-zinc-500">{formatTime(o.start)}</span>}
+                {o.start !== null && <span className="ui-help mr-2 tabular-nums">{formatTime(o.start)}</span>}
                 &ldquo;{o.text}&rdquo;
-                {o.reason && <span className="text-zinc-500"> · {o.reason}</span>}
+                {o.reason && <span className="ui-muted"> · {o.reason}</span>}
               </li>
             ))}
           </ul>

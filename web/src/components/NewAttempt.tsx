@@ -102,10 +102,10 @@ export default function NewAttempt({ project, onStarted }: { project: Project; o
       <div className="space-y-6">
         <div>
           <h3 className="text-sm font-medium">Slides</h3>
-          <p className="mb-2 text-xs text-zinc-500">Optional. PDF or PPTX, up to 20 MB and 40 slides.</p>
-          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
-            <span className={slidesLabel ? "font-medium" : "text-zinc-500"}>{slidesLabel ?? "Choose a slides file"}</span>
-            <span className="shrink-0 text-zinc-500 underline">{slidesLabel ? "Replace" : "Browse"}</span>
+          <p className="ui-help mb-2">Optional. PDF or PPTX, up to 20 MB and 40 slides.</p>
+          <label className="ui-drop flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm">
+            <span className={slidesLabel ? "font-medium" : "ui-muted"}>{slidesLabel ?? "Choose a slides file"}</span>
+            <span className="ui-link shrink-0">{slidesLabel ? "Replace" : "Browse"}</span>
             <input
               type="file"
               accept=".pdf,.pptx"
@@ -116,14 +116,14 @@ export default function NewAttempt({ project, onStarted }: { project: Project; o
               }}
             />
           </label>
-          <div className="mt-1.5 flex gap-3 text-xs text-zinc-500">
+          <div className="mt-1.5 flex gap-3">
             {slides.kind !== "none" && (
-              <button type="button" className="underline" onClick={() => setSlides({ kind: "none" })}>
+              <button type="button" className="ui-link" onClick={() => setSlides({ kind: "none" })}>
                 Don&apos;t use slides
               </button>
             )}
             {slides.kind !== "keep" && hasPrevSlides && (
-              <button type="button" className="underline" onClick={() => setSlides({ kind: "keep" })}>
+              <button type="button" className="ui-link" onClick={() => setSlides({ kind: "keep" })}>
                 Use slides from last attempt
               </button>
             )}
@@ -132,7 +132,7 @@ export default function NewAttempt({ project, onStarted }: { project: Project; o
 
         <div>
           <h3 className="text-sm font-medium">Script</h3>
-          <p className="mb-2 text-xs text-zinc-500">
+          <p className="ui-help mb-2">
             Optional. What you plan to say. The AI points out important parts you skipped or changed.
           </p>
           <textarea
@@ -155,14 +155,14 @@ export default function NewAttempt({ project, onStarted }: { project: Project; o
         </div>
 
         {error && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{error}</p>
+          <p className="ui-alert">{error}</p>
         )}
 
         <button
           type="button"
           onClick={analyze}
           disabled={busy || !audio || project.processing}
-          className="w-full rounded-lg bg-zinc-900 px-4 py-3 text-sm font-medium text-white disabled:opacity-40 dark:bg-zinc-100 dark:text-zinc-900"
+          className="ui-btn ui-btn-primary ui-btn-block"
         >
           {step ?? (project.processing ? "Wait for the current analysis…" : "Analyze pitch")}
         </button>

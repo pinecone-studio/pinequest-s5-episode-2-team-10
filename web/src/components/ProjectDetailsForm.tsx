@@ -125,8 +125,8 @@ export default function ProjectDetailsForm({ project, onSaved }: { project: Proj
           </select>
         </Field>
       </div>
-      <p className="mt-2 h-4 text-xs text-zinc-500">
-        {error ? <span className="text-red-600">{error}</span> : state === "saving" ? "Saving…" : state === "saved" ? "Saved" : ""}
+      <p className="ui-help mt-2 h-4">
+        {error ? <span className="ui-bad">{error}</span> : state === "saving" ? "Saving…" : state === "saved" ? <span className="ui-ok">Saved</span> : ""}
       </p>
     </Card>
   );

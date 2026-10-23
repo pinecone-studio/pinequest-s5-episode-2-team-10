@@ -18,10 +18,8 @@ export default function ModelPicker({
         {MODEL_OPTIONS.map((m) => (
           <label
             key={m.id}
-            className={`flex cursor-pointer items-start justify-between gap-3 rounded-lg border px-3 py-2.5 text-sm ${
-              value === m.id
-                ? "border-zinc-900 ring-1 ring-zinc-900 dark:border-zinc-100 dark:ring-zinc-100"
-                : "border-zinc-300 hover:border-zinc-400 dark:border-zinc-700"
+            className={`ui-choice flex cursor-pointer items-start justify-between gap-3 px-3 py-2.5 text-sm ${
+              value === m.id ? "is-on" : ""
             }`}
           >
             <input
@@ -34,22 +32,16 @@ export default function ModelPicker({
             />
             <span className="min-w-0">
               <span className="block font-medium">{m.name}</span>
-              <span className="block text-zinc-500">{m.detail}</span>
+              <span className="ui-help block">{m.detail}</span>
             </span>
-            <span
-              className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${
-                m.runsLocally
-                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                  : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-              }`}
-            >
+            <span className={`ui-badge shrink-0 ${m.runsLocally ? "is-ok" : "is-warn"}`}>
               {m.runsLocally ? "Local · free" : "Cloud API"}
             </span>
           </label>
         ))}
       </div>
       {selected && !selected.runsLocally && (
-        <p className="text-xs text-zinc-500">
+        <p className="ui-help">
           Your transcript, metrics and slide text will be sent to Anthropic&apos;s API.
         </p>
       )}
