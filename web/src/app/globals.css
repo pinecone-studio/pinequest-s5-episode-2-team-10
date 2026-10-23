@@ -379,11 +379,31 @@ body {
   font-size: 12px;
 }
 
-.desk-speech p:last-child {
+.desk-speech p:last-child,
+.desk-speech .desk-transcript {
   margin: 16px 0 0;
   font-size: 14px;
   line-height: 22px;
   white-space: pre-wrap;
+}
+
+.desk-speech-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.desk-speech-tools button {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  text-decoration: underline;
+}
+
+.desk-speech-tools button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .desk-probe {
