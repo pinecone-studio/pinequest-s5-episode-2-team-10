@@ -5,9 +5,11 @@ The database is **PostgreSQL on Supabase** in hosted setups and SQLite for local
 ## Tables
 
 ### `app_user`
-Anonymous user; the browser keeps the token.
+An account. The browser keeps the access token.
 - `id`: UUID primary key
 - `token_hash`: SHA-256 of the access token (unique, indexed); the token itself is never stored
+- `email`: lowercase, unique, empty for accounts created before login existed
+- `password_hash`: PBKDF2-SHA256 (`pbkdf2_sha256$iterations$salt$digest`). The password itself is never stored
 - `created_at`
 
 ### `project`
@@ -61,7 +63,7 @@ One attempt inside a project. Project details are copied in when it is analyzed,
 
 ### Added columns
 
-`project.idea`, `project.key_points`, `session.idea` and `session.key_points` were added after the first release. `backend/db.py` adds them on startup when they are missing (`ADDED_COLUMNS`), on SQLite and Postgres alike, so existing databases keep their data. Add later columns there too.
+`project.idea`, `project.key_points`, `session.idea`, `session.key_points`, `app_user.email` and `app_user.password_hash` were added after the first release. `backend/db.py` adds them on startup when they are missing (`ADDED_COLUMNS`), on SQLite and Postgres alike, so existing databases keep their data. A unique index is added on `app_user.email` when the table does not already have one. Add later columns there too. Older rows keep a null email until someone registers.
 
 ## Relationships
 

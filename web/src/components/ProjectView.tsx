@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { useLang } from "@/lib/i18nClient";
+import { clearSession } from "@/lib/session";
 import { errorMessage, formatDate, formatTime } from "@/lib/format";
 import { modelName } from "@/lib/models";
 import type { Attempt, Project } from "@/lib/types";
@@ -135,11 +137,27 @@ export default function ProjectView() {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
+  const { tr } = useLang();
+
+  async function logout() {
+    try {
+      await api.logout();
+    } catch {
+      /* still leave, even if the token is already dead */
+    }
+    clearSession();
+  }
+
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-8">
-      <Link href="/" className="mb-4 inline-block text-sm text-zinc-500 underline hover:text-zinc-900 dark:hover:text-zinc-100">
-        ← All projects
-      </Link>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Link href="/" className="text-sm text-zinc-500 underline hover:text-zinc-900 dark:hover:text-zinc-100">
+          ← All projects
+        </Link>
+        <button type="button" onClick={logout} className="text-sm text-zinc-500 underline hover:text-zinc-900 dark:hover:text-zinc-100">
+          {tr("logOut")}
+        </button>
+      </div>
       {children}
     </main>
   );

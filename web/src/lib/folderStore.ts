@@ -8,7 +8,17 @@ export interface FolderMeta {
   keyPoints?: string[];
 }
 
-const LIST_KEY = "pitchcoach:folders";
+const LEGACY_KEY = "pitchcoach:folders";
+let userId: string | null = null;
+
+/** Which account's folder list to read. Set before the desk loads. */
+export function setFolderUser(id: string | null) {
+  userId = id;
+}
+
+function listKey(): string | null {
+  return userId ? `${LEGACY_KEY}:${userId}` : null;
+}
 const DB_NAME = "pitchcoach-folders";
 const STORE = "blobs";
 
@@ -19,20 +29,39 @@ export const FIGMA_FOLDER: FolderMeta = {
   audioName: null,
 };
 
+function parseList(raw: string | null): FolderMeta[] | null {
+  if (!raw) return null;
+  const parsed = JSON.parse(raw) as FolderMeta[];
+  if (!Array.isArray(parsed) || parsed.length === 0) return null;
+  return parsed;
+}
+
 export function loadFolders(): FolderMeta[] {
+  const key = listKey();
+  if (!key) return [FIGMA_FOLDER];
   try {
-    const raw = localStorage.getItem(LIST_KEY);
-    if (!raw) return [FIGMA_FOLDER];
-    const parsed = JSON.parse(raw) as FolderMeta[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return [FIGMA_FOLDER];
-    return parsed;
+    const own = parseList(localStorage.getItem(key));
+    if (own) return own;
+    // First sign-in on this browser keeps the folders saved before accounts existed.
+    if (localStorage.getItem(key) === null) {
+      const legacy = localStorage.getItem(LEGACY_KEY);
+      if (legacy) {
+        localStorage.setItem(key, legacy);
+        localStorage.removeItem(LEGACY_KEY);
+        const copied = parseList(legacy);
+        if (copied) return copied;
+      }
+    }
   } catch {
     return [FIGMA_FOLDER];
   }
+  return [FIGMA_FOLDER];
 }
 
 export function saveFolders(folders: FolderMeta[]) {
-  localStorage.setItem(LIST_KEY, JSON.stringify(folders));
+  const key = listKey();
+  if (!key) return;
+  localStorage.setItem(key, JSON.stringify(folders));
 }
 
 function openDb(): Promise<IDBDatabase> {

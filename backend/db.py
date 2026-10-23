@@ -20,12 +20,14 @@ def new_id() -> str:
 
 
 class AppUser(SQLModel, table=True):
-    """Anonymous user: the browser keeps the token. Add email/login later without redesign."""
+    """Account. The browser keeps the access token; the password is stored only as a hash."""
 
     __tablename__ = "app_user"
 
     id: str = Field(default_factory=new_id, primary_key=True)
     token_hash: str = Field(index=True, unique=True)
+    email: Optional[str] = Field(default=None, index=True, unique=True)
+    password_hash: Optional[str] = None
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -143,6 +145,7 @@ engine = _engine()
 # Columns added after the first release. create_all() doesn't change existing tables, so these
 # are added on startup when missing. Additive only: existing rows get the default.
 ADDED_COLUMNS = {
+    "app_user": {"email": "TEXT", "password_hash": "TEXT"},
     "project": {"idea": "TEXT NOT NULL DEFAULT ''", "key_points": "JSON"},
     "session": {"idea": "TEXT NOT NULL DEFAULT ''", "key_points": "JSON"},
 }
@@ -160,10 +163,27 @@ def _add_missing_columns() -> None:
                     conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {ddl}')
 
 
+def _ensure_email_unique() -> None:
+    """Old databases gain `email` as a plain column. New ones already have a unique constraint."""
+    insp = inspect(engine)
+    insp.clear_cache()
+    if not insp.has_table("app_user"):
+        return
+    for idx in insp.get_indexes("app_user"):
+        if idx.get("unique") and "email" in (idx.get("column_names") or []):
+            return
+    for constraint in insp.get_unique_constraints("app_user"):
+        if "email" in (constraint.get("column_names") or []):
+            return
+    with engine.begin() as conn:
+        conn.exec_driver_sql('CREATE UNIQUE INDEX IF NOT EXISTS "ix_app_user_email" ON "app_user" ("email")')
+
+
 def init() -> None:
     config.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     SQLModel.metadata.create_all(engine)
     _add_missing_columns()
+    _ensure_email_unique()
     if engine.dialect.name == "postgresql":
         # Supabase exposes the public schema through its REST API. With row-level security on
         # and no policies, the anon key can't read these tables; the server's own role owns

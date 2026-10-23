@@ -5,7 +5,7 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 ## Common rules
 
 - JSON bodies, except uploads, which are `multipart/form-data` with one `file` field.
-- Identity: the browser calls `POST /users` once and sends the token as `X-Access-Token` on every other request. A missing or unknown token returns `401`.
+- Identity: `POST /auth/register` or `POST /auth/login` returns an access token. The browser sends it as `X-Access-Token` on every other request. A missing or unknown token returns `401`. Login replaces the previous token, so an older sign-in on another device stops working. `POST /auth/logout` does the same without returning a new token.
 - Ownership is checked on every project and attempt; anything owned by another user returns `404`, so IDs can't be probed.
 - Errors always use this shape, with a message safe to show the user:
 
@@ -17,7 +17,10 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 
 | Method and path | Does | Response |
 | --- | --- | --- |
-| `POST /users` | Create an anonymous user | `201 {id, access_token}` |
+| `POST /auth/register` | Create an account. `{email, password}` (password 8–128 characters). Email is stored in lowercase | `201 {id, email, access_token}`; `409 email_taken`; `422` for a bad email or short password |
+| `POST /auth/login` | Sign in. Same body. Wrong email and wrong password return the same error | `200 {id, email, access_token}`; `401 invalid_credentials` |
+| `GET /auth/me` | The signed-in account | `{id, email}` |
+| `POST /auth/logout` | Forget the current token | `204` |
 | `GET /projects` | The user's projects, most recently used first | `[{id, name, goal, audience, idea, key_points, planned_s, pitch_type, created_at, updated_at, attempt_count, latest_overall, processing}]` |
 | `POST /projects` | Create a project; every field optional (`name, goal, audience, idea` up to 500 characters, `key_points` up to 6 strings of up to 200 characters (blank ones dropped), `planned_s 30–900, pitch_type startup/academic`) | `201` project with `attempts` and `current` |
 | `GET /projects/{id}` | Project, `attempts` (newest first), and `current` = slides and script the next attempt will reuse | project |

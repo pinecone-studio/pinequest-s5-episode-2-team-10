@@ -19,8 +19,8 @@ import { streamModelReply } from "@/lib/modelStream";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
+import { AccountMenu } from "./AuthScreen";
 import DevTests from "./DevTests";
-import LangToggle from "./LangToggle";
 import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
@@ -114,7 +114,7 @@ export default function FolderDesk() {
           <div className="desk-bar">
             <WaveMark />
             <span>Pitch Coach</span>
-            {process.env.NODE_ENV === "development" && <LangToggle />}
+            <AccountMenu />
           </div>
           <div className="desk-title">
             <div>
@@ -726,7 +726,7 @@ function FolderRoom({
         <div className="desk-bar">
           <WaveMark />
           <span>Pitch Coach</span>
-          {process.env.NODE_ENV === "development" && <LangToggle />}
+          <AccountMenu />
         </div>
         <div className="desk-title">
           <div>

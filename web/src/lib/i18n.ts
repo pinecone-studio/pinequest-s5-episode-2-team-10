@@ -179,6 +179,21 @@ const mn = {
   rulesSlideDetail: "Слайдын {total} түлхүүр үгээс {covered} нь ярианд орсон.",
   rulesSummary: "Нийт {n} үг. LLM-гүй энгийн шалгалт: гол санаа, дүүргэгч үг, давталт, слайдтай давхцал, урт.",
   replyLanguage: "Mongolian",
+  signIn: "Нэвтрэх",
+  signUp: "Бүртгүүлэх",
+  email: "Имэйл",
+  password: "Нууц үг",
+  passwordAgain: "Нууц үг давтах",
+  authBlurb: "Хавтаснуудаа харахын тулд нэвтэрнэ үү.",
+  authHaveAccount: "Бүртгэлтэй юу?",
+  authNeedAccount: "Бүртгэлгүй юу?",
+  authWorking: "Түр хүлээнэ үү…",
+  authEmailTaken: "Энэ имэйлээр бүртгэл байна.",
+  authBadLogin: "Имэйл эсвэл нууц үг буруу.",
+  authInvalid: "Имэйл болон нууц үгээ шалгана уу. Нууц үг хамгийн багадаа 8 тэмдэгт.",
+  authMismatch: "Нууц үг таарахгүй байна.",
+  authFailed: "Нэвтэрч чадсангүй. Дахин оролдоно уу.",
+  logOut: "Гарах",
 };
 
 export type MessageKey = keyof typeof mn;
@@ -352,6 +367,21 @@ const en: Record<MessageKey, string> = {
   rulesSlideDetail: "{covered} of the slide's {total} key words were spoken.",
   rulesSummary: "{n} words in total. A simple check without an LLM: main points, fillers, repeats, slide overlap, length.",
   replyLanguage: "English",
+  signIn: "Sign in",
+  signUp: "Create account",
+  email: "Email",
+  password: "Password",
+  passwordAgain: "Repeat password",
+  authBlurb: "Sign in to see your folders.",
+  authHaveAccount: "Already have an account?",
+  authNeedAccount: "Need an account?",
+  authWorking: "Please wait…",
+  authEmailTaken: "An account with this email already exists.",
+  authBadLogin: "Email or password is wrong.",
+  authInvalid: "Check the email and password. The password needs at least 8 characters.",
+  authMismatch: "The passwords don't match.",
+  authFailed: "Could not sign in. Try again.",
+  logOut: "Log out",
 };
 
 const DICTS: Record<Lang, Record<MessageKey, string>> = { mn, en };
