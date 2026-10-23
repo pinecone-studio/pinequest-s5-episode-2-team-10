@@ -92,7 +92,16 @@ const realApi = {
   register: (email: string, password: string) =>
     send<AuthSession>("/auth/register", json("POST", { email, password }), null),
   login: (email: string, password: string) => send<AuthSession>("/auth/login", json("POST", { email, password }), null),
-  demo: () => send<AuthSession>("/auth/demo", { method: "POST" }, null),
+  demo: async () => {
+    try {
+      return await send<AuthSession>("/auth/demo", { method: "POST" }, null);
+    } catch (err) {
+      // The GPU PC still serves the older API, which creates an anonymous user at POST /users.
+      if (!(err instanceof ApiRequestError) || err.status !== 404) throw err;
+      const created = await send<{ id: string; access_token: string }>("/users", { method: "POST" }, null);
+      return { id: created.id, email: "demo@pitchcoach.local", access_token: created.access_token };
+    }
+  },
   google: (accessToken: string) =>
     send<AuthSession>("/auth/google", json("POST", { access_token: accessToken }), null),
   me: () => request<{ id: string; email: string }>("/auth/me"),

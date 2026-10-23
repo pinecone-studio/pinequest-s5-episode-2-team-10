@@ -1,3 +1,4 @@
+import { SHARED_BLOBS, SHARED_FOLDER, SHARED_SPEECH } from "./defaultFolder";
 import { normalizeFolder, type FolderAudio, type FolderSlide } from "./folderFiles";
 
 export type { FolderAudio, FolderSlide };
@@ -59,12 +60,30 @@ function parseList(raw: string | null): FolderMeta[] | null {
   return parsed;
 }
 
+const SHARED_FLAG = "pitchcoach:shared-ok";
+
+/** Adds the shared "ok" folder once per account. Deleting it afterwards keeps it gone. */
+function withSharedFolder(folders: FolderMeta[]): FolderMeta[] {
+  const normalized = folders.map(normalizeFolder);
+  const flag = userId ? `${SHARED_FLAG}:${userId}` : null;
+  if (normalized.some((folder) => folder.id === SHARED_FOLDER.id)) {
+    if (flag) localStorage.setItem(flag, "1");
+    return normalized;
+  }
+  if (flag && localStorage.getItem(flag) === "1") return normalized;
+  const next = [normalizeFolder(SHARED_FOLDER), ...normalized];
+  const key = listKey();
+  if (key) localStorage.setItem(key, JSON.stringify(next));
+  if (flag) localStorage.setItem(flag, "1");
+  return next;
+}
+
 export function loadFolders(): FolderMeta[] {
   const key = listKey();
-  if (!key) return [normalizeFolder(FIGMA_FOLDER)];
+  if (!key) return [normalizeFolder(SHARED_FOLDER)];
   try {
     const own = parseList(localStorage.getItem(key));
-    if (own) return own.map(normalizeFolder);
+    if (own) return withSharedFolder(own);
     // First sign-in on this browser keeps the folders saved before accounts existed.
     if (localStorage.getItem(key) === null) {
       const legacy = localStorage.getItem(LEGACY_KEY);
@@ -72,13 +91,13 @@ export function loadFolders(): FolderMeta[] {
         localStorage.setItem(key, legacy);
         localStorage.removeItem(LEGACY_KEY);
         const copied = parseList(legacy);
-        if (copied) return copied.map(normalizeFolder);
+        if (copied) return withSharedFolder(copied);
       }
     }
   } catch {
-    return [normalizeFolder(FIGMA_FOLDER)];
+    return withSharedFolder([FIGMA_FOLDER]);
   }
-  return [FIGMA_FOLDER].map(normalizeFolder);
+  return withSharedFolder([FIGMA_FOLDER]);
 }
 
 export function saveFolders(folders: FolderMeta[]) {
@@ -120,7 +139,18 @@ export async function getFolderBlob(key: string): Promise<Blob | null> {
     req.onerror = () => reject(req.error);
   });
   db.close();
-  return blob;
+  if (blob) return blob;
+  const shared = SHARED_BLOBS[key];
+  if (!shared) return null;
+  try {
+    const res = await fetch(shared.url);
+    if (!res.ok) return null;
+    const fetched = new Blob([await res.arrayBuffer()], { type: shared.type });
+    await putFolderBlob(key, fetched);
+    return fetched;
+  } catch {
+    return null;
+  }
 }
 
 export async function deleteFolderBlob(key: string) {
@@ -141,7 +171,7 @@ const speechKey = (id: string) => `pitchcoach:speech:${id}`;
 export function loadSpeech(id: string): string {
   if (typeof window === "undefined") return "";
   try {
-    return localStorage.getItem(speechKey(id)) ?? "";
+    return localStorage.getItem(speechKey(id)) ?? (id === SHARED_FOLDER.id ? SHARED_SPEECH : "");
   } catch {
     return "";
   }

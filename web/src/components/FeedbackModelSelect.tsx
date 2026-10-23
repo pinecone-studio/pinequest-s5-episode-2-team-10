@@ -15,9 +15,9 @@ function snapshot(): ProtoModel {
   if (current) return current;
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    current = isProtoModel(saved) ? saved : "rules";
+    current = isProtoModel(saved) && saved !== "rules" ? saved : "ollama";
   } catch {
-    current = "rules"; // storage blocked
+    current = "ollama"; // storage blocked
   }
   return current;
 }
@@ -39,7 +39,7 @@ function choose(next: ProtoModel) {
 
 /** The chosen feedback model, remembered in this browser. */
 export function useFeedbackModel(): [ProtoModel, (m: ProtoModel) => void] {
-  const model = useSyncExternalStore(subscribe, snapshot, () => "rules" as ProtoModel);
+  const model = useSyncExternalStore(subscribe, snapshot, () => "ollama" as ProtoModel);
   return [model, choose];
 }
 
@@ -93,7 +93,9 @@ export default function FeedbackModelSelect({
         disabled={!models}
         onChange={(e) => isProtoModel(e.target.value) && onChange(e.target.value)}
       >
-        {(models ?? []).map((m) => (
+        {(models ?? [])
+          .filter((m) => m.id !== "rules")
+          .map((m) => (
           <option key={m.id} value={m.id} disabled={!m.available}>
             {m.name}
             {m.server ? ` · ${tr("backendTag")}` : m.local ? ` · ${tr("thisPc")}` : ` · ${tr("cloud")}`}

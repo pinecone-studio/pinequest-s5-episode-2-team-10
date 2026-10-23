@@ -5,7 +5,7 @@ import { api, ApiRequestError } from "@/lib/api";
 import { t } from "@/lib/i18n";
 import { useLang } from "@/lib/i18nClient";
 import { clearSession, saveSession, useAccount } from "@/lib/session";
-import { AUTH_ENABLED, googleEnabled, supabase } from "@/lib/supabase";
+import { googleEnabled, supabase } from "@/lib/supabase";
 import LangToggle from "./LangToggle";
 import SayloMark from "./SayloMark";
 
@@ -82,10 +82,9 @@ export default function AuthScreen() {
 
   async function signInWithGoogle() {
     const sb = supabase();
-    if (!sb) return;
     setError(null);
     setBusy(true);
-    if (!(await googleEnabled())) {
+    if (!sb || !(await googleEnabled())) {
       setError(tr("googleNotEnabled"));
       setBusy(false);
       return;
@@ -226,12 +225,10 @@ export default function AuthScreen() {
               <div className="auth-or" role="separator">
                 or
               </div>
-              {AUTH_ENABLED && (
-                <button type="button" className="auth-sso" onClick={signInWithGoogle} disabled={busy}>
-                  <GoogleMark />
-                  {tr("signInGoogle")}
-                </button>
-              )}
+              <button type="button" className="auth-sso" onClick={signInWithGoogle} disabled={busy}>
+                <GoogleMark />
+                {tr("signInGoogle")}
+              </button>
               <button type="button" className="auth-demo" onClick={enterDemo} disabled={busy}>
                 {tr("signInDemo")}
               </button>
