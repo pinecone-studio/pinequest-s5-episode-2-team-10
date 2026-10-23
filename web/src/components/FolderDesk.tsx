@@ -1310,13 +1310,24 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
         <span className="folder-card-preview">
           {imageUrl ? <img src={imageUrl} alt="" /> : <canvas ref={canvasRef} hidden={!pdf} />}
         </span>
-        <span className="folder-card-body">
-          <strong>{title}</strong>
-          <span className="folder-card-meta">
-            <FolderGlyph />
-            <span>{tr("audioCount", { n: folder.audios?.length ?? 0 })}</span>
+        <span
+          className="folder-card-body"
+          style={{
+            gap: 4,
+            padding: "12px 14px",
+            background: "color-mix(in srgb, var(--card) 55%, transparent)",
+            backdropFilter: "blur(18px)",
+            WebkitBackdropFilter: "blur(18px)",
+          }}
+        >
+          <span className="folder-card-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0 }}>
+            <strong style={{ minWidth: 0, fontSize: 16, lineHeight: 1.3 }}>{title}</strong>
+            <span className="folder-card-meta" style={{ flexShrink: 0, marginLeft: "auto", fontSize: 15, color: "color-mix(in srgb, var(--text-primary) 82%, transparent)" }}>
+              <FolderGlyph />
+              <span>{tr("audioCount", { n: folder.audios?.length ?? 0 })}</span>
+            </span>
           </span>
-          <time dateTime={updated ?? undefined}>{updated ?? "\u00a0"}</time>
+          <time dateTime={updated ?? undefined} style={{ fontSize: 14, color: "color-mix(in srgb, var(--text-primary) 72%, transparent)" }}>{updated ?? "\u00a0"}</time>
         </span>
       </button>
     </li>
