@@ -21,6 +21,7 @@ import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import { AccountMenu } from "./AuthScreen";
 import DevTests from "./DevTests";
+import SayloMark from "./SayloMark";
 import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
@@ -112,8 +113,8 @@ export default function FolderDesk() {
       <div className="desk">
         <div className="desk-col">
           <div className="desk-bar">
-            <WaveMark />
-            <span>Pitch Coach</span>
+            <SayloMark />
+            <span className="desk-brand">SAYLO</span>
             <AccountMenu />
           </div>
           <div className="desk-title">
@@ -724,8 +725,8 @@ function FolderRoom({
     <div className="desk">
       <div className="desk-col">
         <div className="desk-bar">
-          <WaveMark />
-          <span>Pitch Coach</span>
+          <SayloMark />
+          <span className="desk-brand">SAYLO</span>
           <AccountMenu />
         </div>
         <div className="desk-title">
@@ -897,21 +898,6 @@ function FolderRoom({
         </div>
       </div>
     </div>
-  );
-}
-
-function WaveMark() {
-  return (
-    <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden>
-      <path
-        d="M1 7h2l2-5 3 10 3-8 2 3h8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
 
