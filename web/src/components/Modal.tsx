@@ -8,10 +8,13 @@ export default function Modal({
   title,
   onClose,
   children,
+  wide = false,
 }: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  /** Wider, and scrolls inside when its content is taller than the screen. */
+  wide?: boolean;
 }) {
   const { tr } = useLang();
   const titleId = useId();
@@ -27,7 +30,7 @@ export default function Modal({
   return (
     <div className="app-modal">
       <button type="button" className="app-modal-backdrop" aria-label={tr("close")} onClick={onClose} />
-      <div className="app-modal-card" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div className={wide ? "app-modal-card app-modal-card-wide" : "app-modal-card"} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="app-modal-bar">
           <h2 id={titleId}>{title}</h2>
           <button

@@ -1,5 +1,6 @@
 "use client";
 
+import { useId, useState } from "react";
 import { useLang } from "@/lib/i18nClient";
 
 export interface Improvement {
@@ -22,7 +23,10 @@ export interface OffTopic {
   reason: string;
 }
 
-/** Strengths (each with the words that show it), things to improve, and off-topic sentences. */
+/**
+ * Strengths (each with the words that show it), things to improve, and off-topic sentences.
+ * An improvement shows its title and what to do; "More info" opens the quote, why and example.
+ */
 export default function ImprovementList({
   strengths,
   improvements,
@@ -33,6 +37,18 @@ export default function ImprovementList({
   offTopic?: OffTopic[];
 }) {
   const { tr } = useLang();
+  const id = useId();
+  const [open, setOpen] = useState<Set<number>>(new Set());
+
+  function toggle(i: number) {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+
   return (
     <div className="desk-improve">
       {strengths.length > 0 && (
@@ -52,28 +68,48 @@ export default function ImprovementList({
         <>
           <h3>{tr("improvements")}</h3>
           <ol>
-            {improvements.map((item, i) => (
-              <li key={i}>
-                <strong>
-                  {item.title}
-                  {item.source === "measured" && <span className="desk-tag">{tr("measuredTag")}</span>}
-                </strong>
-                {item.quote && <q>{item.quote}</q>}
-                {item.why && (
+            {improvements.map((item, i) => {
+              const more = Boolean(item.quote || item.why || item.example);
+              const shown = open.has(i);
+              const detailsId = `${id}-more-${i}`;
+              return (
+                <li key={i}>
+                  <strong>
+                    {item.title}
+                    {item.source === "measured" && <span className="desk-tag">{tr("measuredTag")}</span>}
+                  </strong>
                   <span>
-                    <em>{tr("improveWhy")}:</em> {item.why}
+                    <em>{tr("improveAction")}:</em> {item.action}
                   </span>
-                )}
-                <span>
-                  <em>{tr("improveAction")}:</em> {item.action}
-                </span>
-                {item.example && (
-                  <span>
-                    <em>{tr("improveExample")}:</em> «{item.example}»
-                  </span>
-                )}
-              </li>
-            ))}
+                  {more && shown && (
+                    <div id={detailsId} className="desk-improve-more">
+                      {item.quote && <q>{item.quote}</q>}
+                      {item.why && (
+                        <span>
+                          <em>{tr("improveWhy")}:</em> {item.why}
+                        </span>
+                      )}
+                      {item.example && (
+                        <span>
+                          <em>{tr("improveExample")}:</em> «{item.example}»
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {more && (
+                    <button
+                      type="button"
+                      className="desk-link desk-improve-toggle"
+                      aria-expanded={shown}
+                      aria-controls={shown ? detailsId : undefined}
+                      onClick={() => toggle(i)}
+                    >
+                      {shown ? tr("lessInfo") : tr("moreInfo")}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ol>
         </>
       )}

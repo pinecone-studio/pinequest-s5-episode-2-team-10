@@ -26,7 +26,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           }}
         />
       </head>
-      <body className={`${inter.className} min-h-full flex flex-col`}>
+      {/* Browser extensions add classes to <body> before React loads (e.g. "vc-init"); ignore those. */}
+      <body className={`${inter.className} min-h-full flex flex-col`} suppressHydrationWarning>
         <ThemeSync />
         <AuthGate>{children}</AuthGate>
       </body>
