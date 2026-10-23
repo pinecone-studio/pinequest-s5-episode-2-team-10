@@ -17,6 +17,7 @@ import {
   selectAudio,
   selectedAudio,
   slideKey,
+  type FolderAudio,
   type FolderMeta,
 } from "@/lib/folderStore";
 import { figmaEmbedUrl } from "@/lib/figmaEmbed";
@@ -115,7 +116,7 @@ export default function FolderDesk() {
 
   if (!open) {
     return (
-      <div className="desk">
+      <div className="desk folder-board">
         <div className="desk-col">
           <div className="desk-title">
             <div>
@@ -170,17 +171,9 @@ export default function FolderDesk() {
           {folders.length === 0 ? (
             <p className="desk-empty">{tr("foldersEmpty")}</p>
           ) : (
-            <ul className="desk-list">
+            <ul className="folder-grid">
               {folders.map((folder) => (
-                <li key={folder.id}>
-                  <button type="button" className="desk-row" onClick={() => setOpenId(folder.id)}>
-                    <FolderMark />
-                    <span>
-                      <strong>{folder.name}</strong>
-                      <em>{folder.slideName ?? tr("noSlide")}</em>
-                    </span>
-                  </button>
-                </li>
+                <FolderCard key={folder.id} folder={folder} onOpen={() => setOpenId(folder.id)} />
               ))}
             </ul>
           )}
@@ -819,7 +812,7 @@ function FolderRoom({
   }
 
   return (
-    <div className="desk">
+    <div className="desk folder-board">
       <div className="desk-col">
         <div className="desk-title">
           <div>
@@ -1036,25 +1029,38 @@ function FolderRoom({
           onToggle={toggleAudio}
           onPick={chooseAudio}
         />
-        {(folder.audios ?? []).length > 0 && (
-          <ul className="mt-2">
-            {(folder.audios ?? []).map((audio) => (
-              <li key={audio.id} className={`ui-row gap-3 ${audio.id === folder.audioId ? "is-on" : ""}`}>
-                <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => void pickSaved(audio.id)} aria-current={audio.id === folder.audioId ? "true" : undefined}>
-                  <span className="block truncate text-[14px]">{audio.filename}</span>
-                  <span className="ui-help">
-                    {[audio.fileType, audio.durationS != null ? formatClock(audio.durationS) : null, audio.createdAt ? audio.createdAt.slice(0, 10) : null]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </button>
-                <button type="button" className="ui-link shrink-0" onClick={() => void dropAudio(audio.id)}>
-                  {tr("removeAudio")}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <section className="folder-audios" aria-labelledby={`${folder.id}-audios`}>
+          <div className="folder-audios-bar">
+            <h2 id={`${folder.id}-audios`}>{tr("audio")}</h2>
+            <label className="ui-btn">
+              {tr("addAudio")}
+              <input
+                type="file"
+                accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg"
+                className="sr-only"
+                onChange={(e) => {
+                  void chooseAudio(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          {(folder.audios ?? []).length === 0 ? (
+            <p className="folder-audio-empty">{tr("noAudioYet")}</p>
+          ) : (
+            <ul>
+              {(folder.audios ?? []).map((audio) => (
+                <FolderAudioFile
+                  key={audio.id}
+                  audio={audio}
+                  selected={audio.id === folder.audioId}
+                  onSelect={() => void pickSaved(audio.id)}
+                  onRemove={() => void dropAudio(audio.id)}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
         <audio
           ref={audioRef}
           src={audioUrl ?? undefined}
@@ -1069,6 +1075,137 @@ function FolderRoom({
         </div>
       </div>
     </div>
+  );
+}
+
+function latestUpdated(folder: FolderMeta): string | null {
+  const stamps = [folder.slide?.createdAt, ...(folder.audios ?? []).map((audio) => audio.createdAt)].filter(
+    (stamp): stamp is string => Boolean(stamp),
+  );
+  if (stamps.length === 0) return null;
+  const newest = stamps.sort().at(-1);
+  if (!newest) return null;
+  const date = new Date(newest);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void }) {
+  const { tr } = useLang();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [pdf, setPdf] = useState(false);
+  const title = folder.slide?.title || folder.slideName || folder.name;
+  const updated = latestUpdated(folder);
+
+  useEffect(() => {
+    let cancelled = false;
+    let url: string | null = null;
+    let doc: PDFDocumentProxy | null = null;
+    setImageUrl(null);
+    setPdf(false);
+    void (async () => {
+      const blob = await getFolderBlob(slideKey(folder.id));
+      if (cancelled || !blob) return;
+      if (!isPdf(blob)) {
+        url = URL.createObjectURL(blob);
+        if (!cancelled) setImageUrl(url);
+        return;
+      }
+      try {
+        doc = await openPdf(new Uint8Array(await blob.arrayBuffer()));
+        if (cancelled || !canvasRef.current) return;
+        setPdf(true);
+        await paintPage(doc, 1, canvasRef.current, 480);
+      } catch {
+        /* the card still opens the folder */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+      void doc?.loadingTask.destroy().catch(() => undefined);
+    };
+  }, [folder.id, folder.slide?.storageKey, folder.slideName]);
+
+  return (
+    <li>
+      <button type="button" className="folder-card" onClick={onOpen}>
+        <span className="folder-card-preview">
+          {imageUrl ? <img src={imageUrl} alt="" /> : <canvas ref={canvasRef} hidden={!pdf} />}
+        </span>
+        <span className="folder-card-body">
+          <strong>{title}</strong>
+          <span className="folder-card-meta">
+            <FolderGlyph />
+            <span>{tr("audioCount", { n: folder.audios?.length ?? 0 })}</span>
+          </span>
+          {updated && <time dateTime={updated}>{updated}</time>}
+        </span>
+      </button>
+    </li>
+  );
+}
+
+function FolderAudioFile({
+  audio,
+  selected,
+  onSelect,
+  onRemove,
+}: {
+  audio: FolderAudio;
+  selected: boolean;
+  onSelect: () => void;
+  onRemove: () => void;
+}) {
+  const { tr } = useLang();
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let object: string | null = null;
+    void getFolderBlob(audio.storageKey).then((blob) => {
+      if (cancelled || !blob) return;
+      object = URL.createObjectURL(blob);
+      setUrl(object);
+    });
+    return () => {
+      cancelled = true;
+      if (object) URL.revokeObjectURL(object);
+    };
+  }, [audio.storageKey]);
+
+  const meta = [audio.fileType, audio.durationS != null ? formatClock(audio.durationS) : null, audio.createdAt ? audio.createdAt.slice(0, 10) : null]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <li className={selected ? "is-on" : undefined}>
+      <div className="folder-audio-head">
+        <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined}>
+          {audio.filename}
+        </button>
+        <button type="button" className="ui-link" onClick={onRemove}>
+          {tr("removeAudio")}
+        </button>
+      </div>
+      {meta && <p className="ui-help">{meta}</p>}
+      {url && <audio controls preload="metadata" src={url} />}
+    </li>
+  );
+}
+
+function FolderGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M2 3.5h4l1.2 1.5H14v7.2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

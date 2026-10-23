@@ -1715,3 +1715,181 @@ textarea.ui-input {
 .app-main {
   overflow-x: clip;
 }
+
+.folder-board {
+  min-height: 100vh;
+  margin: -36px -40px -44px;
+  padding: 36px 40px 44px;
+  background: #292929;
+}
+
+.folder-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.folder-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #3a3a3a;
+  border-radius: 12px;
+  background: #323232;
+  color: #e6e6e6;
+  text-align: left;
+  cursor: pointer;
+}
+
+.folder-card:hover {
+  border-color: #4a4a4a;
+}
+
+.folder-card:focus-visible {
+  outline: 2px solid #e6e6e6;
+  outline-offset: 2px;
+}
+
+.folder-card-preview {
+  display: block;
+  height: 132px;
+  background: #242424;
+}
+
+.folder-card-preview img,
+.folder-card-preview canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.folder-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px 14px;
+}
+
+.folder-card-body strong {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.folder-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #a0a1a3;
+  font-size: 13px;
+}
+
+.folder-card time {
+  color: #8b8c8e;
+  font-size: 12px;
+}
+
+.folder-audios {
+  margin-top: 16px;
+}
+
+.folder-audios-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.folder-audios-bar h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.folder-audios ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.folder-audios li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #3a3a3a;
+  border-radius: 12px;
+  background: #323232;
+}
+
+.folder-audios li.is-on {
+  border-color: #4a4a4a;
+}
+
+.folder-audio-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.folder-audio-head button:first-child {
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  background: none;
+  color: #e6e6e6;
+  font-size: 14px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.folder-audios audio {
+  width: 100%;
+  height: 36px;
+}
+
+.folder-audio-empty {
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed #3a3a3a;
+  border-radius: 12px;
+  color: #a0a1a3;
+  font-size: 14px;
+}
+
+@media (min-width: 720px) {
+  .folder-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 1180px) {
+  .folder-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+@media (max-width: 800px) {
+  .folder-board {
+    margin: -20px -16px -32px;
+    padding: 20px 16px 32px;
+  }
+
+  .folder-grid {
+    grid-template-columns: 1fr;
+  }
+}
