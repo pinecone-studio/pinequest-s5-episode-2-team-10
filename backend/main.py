@@ -264,6 +264,7 @@ class AuthBody(BaseModel):
 
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+DEMO_EMAIL = "demo@pitchcoach.local"
 
 
 def _clean_email(value: str) -> str:
@@ -299,7 +300,7 @@ def health():
 @api.post("/auth/register", status_code=201)
 def register(body: AuthBody, database: DB):
     email = _clean_email(body.email)
-    if database.exec(select(AppUser).where(AppUser.email == email)).first():
+    if email == DEMO_EMAIL or database.exec(select(AppUser).where(AppUser.email == email)).first():
         raise ApiError(409, "email_taken", "An account with this email already exists.")
     token = secrets.token_urlsafe(32)
     user = AppUser(token_hash=_hash(token), email=email, password_hash=hash_password(body.password))
@@ -310,6 +311,30 @@ def register(body: AuthBody, database: DB):
         database.rollback()
         raise ApiError(409, "email_taken", "An account with this email already exists.")
     database.refresh(user)
+    return {"id": user.id, "email": user.email, "access_token": token}
+
+
+@api.post("/auth/demo")
+def demo_login(database: DB):
+    """One shared account for the sign-in screen. No password is accepted for it."""
+    user = database.exec(select(AppUser).where(AppUser.email == DEMO_EMAIL)).first()
+    if not user:
+        user = AppUser(
+            token_hash=_hash(secrets.token_urlsafe(32)),
+            email=DEMO_EMAIL,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+        )
+        database.add(user)
+        try:
+            database.commit()
+        except IntegrityError:
+            database.rollback()
+            user = database.exec(select(AppUser).where(AppUser.email == DEMO_EMAIL)).first()
+            if not user:
+                raise ApiError(500, "internal", "Could not open the demo account.")
+        else:
+            database.refresh(user)
+    token = _new_token(user, database)
     return {"id": user.id, "email": user.email, "access_token": token}
 
 

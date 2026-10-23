@@ -80,6 +80,18 @@ def test_login_then_logout_kills_token(client: TestClient):
     assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
 
 
+def test_demo_login_opens_the_same_account(client: TestClient):
+    first = client.post("/api/v1/auth/demo")
+    second = client.post("/api/v1/auth/demo")
+    assert first.status_code == second.status_code == 200
+    assert first.json()["email"] == second.json()["email"] == "demo@pitchcoach.local"
+    assert first.json()["id"] == second.json()["id"]
+    assert client.get("/api/v1/auth/me", headers={"X-Access-Token": first.json()["access_token"]}).status_code == 401
+    assert client.get("/api/v1/auth/me", headers={"X-Access-Token": second.json()["access_token"]}).status_code == 200
+    blocked = client.post("/api/v1/auth/register", json={"email": "demo@pitchcoach.local", "password": PASSWORD})
+    assert blocked.status_code == 409
+
+
 def test_other_users_project_is_hidden(client: TestClient):
     owner = _register(client, "owner@example.com")
     other = _register(client, "other@example.com")
