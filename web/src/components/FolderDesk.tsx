@@ -15,6 +15,7 @@ import {
 } from "@/lib/folderStore";
 import { openPdf, paintPage, readSlideText } from "@/lib/slidePdf";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
+import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
 
 type Live = { stream: MediaStream; ctx: AudioContext };
 
@@ -184,6 +185,7 @@ function FolderRoom({
   const slideGen = useRef(0);
   const slideUrlRef = useRef<string | null>(null);
   const liveRef = useRef<Live | null>(null);
+  const [model, setModel] = useFeedbackModel();
   const [pending, setPending] = useState(0);
   const [fileBusy, setFileBusy] = useState(false);
 
@@ -209,6 +211,7 @@ function FolderRoom({
   const [probeResult, setProbeResult] = useState<{
     summary: string;
     points: { title: string; detail: string }[];
+    model: string;
     received: { text: boolean; audio: string | null; slide: string | null };
   } | null>(null);
 
@@ -554,6 +557,7 @@ function FolderRoom({
       const body = new FormData();
       body.set("text", speech);
       body.set("slideText", slideText);
+      body.set("model", model);
       if (audio) body.set("audio", audio, folder.audioName ?? "audio");
       if (slide) body.set("slide", slide, folder.slideName ?? "slide");
       if (slideImage) body.set("slideImage", slideImage, "current-slide.jpg");
@@ -562,19 +566,21 @@ function FolderRoom({
         error?: string;
         summary?: string;
         points?: { title: string; detail: string }[];
+        model?: string;
         received?: { text: boolean; audio: string | null; slide: string | null };
       };
       if (!res.ok || !payload.summary || !payload.points || !payload.received) {
-        setProbeNote(payload.error || "LLM рүү илгээж чадсангүй.");
+        setProbeNote(payload.error || "Загвар руу илгээж чадсангүй.");
         return;
       }
       setProbeResult({
         summary: payload.summary,
         points: payload.points,
+        model: payload.model ?? model,
         received: payload.received,
       });
     } catch {
-      setProbeNote("LLM рүү илгээж чадсангүй.");
+      setProbeNote("Загвар руу илгээж чадсангүй.");
     } finally {
       setProbing(false);
     }
@@ -724,19 +730,20 @@ function FolderRoom({
               </button>
             </div>
             <div className="desk-probe">
+              <FeedbackModelSelect value={model} onChange={setModel} />
               <button
                 type="button"
                 className="desk-ghost"
                 disabled={probing || (!spoken && !folder.audioName && !hasSlide)}
                 onClick={() => void sendToModel()}
               >
-                {probing ? "Илгээж байна" : "LLM рүү илгээх"}
+                {probing ? "Илгээж байна" : "Загвар руу илгээх"}
               </button>
               {probeNote && <p className="desk-note">{probeNote}</p>}
               {probeResult && (
                 <>
                   <p>
-                    {probeResult.received.text ? "Текст" : "Текст алга"}
+                    {probeResult.model} · {probeResult.received.text ? "Текст" : "Текст алга"}
                     {probeResult.received.audio ? ` · Аудио ${probeResult.received.audio}` : ""}
                     {probeResult.received.slide ? ` · Слайд ${probeResult.received.slide}` : ""}
                   </p>
