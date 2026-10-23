@@ -20,7 +20,7 @@ interface Result {
 }
 
 const MIC_SECONDS = 4;
-// Six Common Voice sentences (CC0), see public/test-audio/README.txt.
+// A 76 s pitch-style recording from Common Voice sentences (CC0), see public/test-audio/README.txt.
 const SAMPLE_AUDIO = "/test-audio/mn-sample.webm";
 const SAMPLE_TEXT = "/test-audio/mn-sample.txt";
 // Sample input for the model check; Mongolian on purpose, since that is what the app analyses.
@@ -111,10 +111,13 @@ async function modelCheck(model: ProtoModel): Promise<string> {
   return payload.summary;
 }
 
-// Two points the sample makes and one it never does, so a good check scores about 67%.
+// Three points the sample pitch makes and one it never does, so a good check scores about 75%
+// and flags sentence 7 (about meat products) as off topic.
+const SAMPLE_IDEA = "Монгол орчинд тохирсон дуу хоолойн технологиор ажлын ур чадварын сургалт хийх";
 const SAMPLE_POINTS = [
-  "Сайн хүн болж харагдах гэж өөрийгөө элээдэг",
-  "Ахыгаа ирэхэд дүү нар баярладаг",
+  "Дуу хоолойн технологи хурдан хөгжиж байна",
+  "Ажлын ур чадварын сургалт дутмаг байна",
+  "Манай компани энэ асуудалд тусгай баг гаргасан",
   "Эхний жилд мянган хэрэглэгчтэй болно",
 ];
 
@@ -124,7 +127,7 @@ async function pointsCheck(model: ProtoModel): Promise<string> {
   body.set("text", reference);
   body.set("slideText", "");
   body.set("model", model);
-  body.set("idea", "Хүмүүсийн зан төлөвийн тухай богино өгүүллэгүүд");
+  body.set("idea", SAMPLE_IDEA);
   body.set("keyPoints", JSON.stringify(SAMPLE_POINTS));
   const res = await fetch("/api/prototype", { method: "POST", body, headers: langHeaders() });
   const payload = (await res.json().catch(() => null)) as {

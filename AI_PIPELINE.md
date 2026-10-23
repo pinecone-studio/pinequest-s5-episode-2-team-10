@@ -86,8 +86,16 @@ Does the speech make the points the speaker meant to make? Built in `pipeline/po
 
 1. **Input.** A project has an optional `idea` and up to 6 `key_points`. They are copied to the attempt and sent to the model as `pitch`.
 2. **Judgement by the LLM.** For each point the model returns `point_checks`: `covered`, `partial` or `missed`, an exact `evidence` quote and a short `note`. It also lists `off_topic` sentences and writes an `idea_comment`.
-3. **Verification in code.** One result per point (a skipped point counts as missed). A covered or partial point whose quote is not in the transcript is marked `verified: false` and scored as missed. Off-topic sentences must exist, and their text is quoted by code, not by the model.
+3. **Verification in code.** One result per point (a skipped point counts as missed). A covered or partial point whose quote is not in the transcript is marked `verified: false` and scored as missed. Off-topic sentences must exist, and their text is quoted by code, not by the model. Small models flag too much as off topic, so a flag is dropped when the sentence shares a key word with the idea or a main point, and a reason that only repeats the sentence is removed.
 4. **Coverage in code.** covered = 1, partial = 0.5, missed = 0, averaged over the points, as `main_points.coverage` (0–100). It is reported on its own and does not change the overall score yet.
 5. **Without a model** (`rules`), points are matched to sentences by key words (first 5 letters, so suffixes still match), with `method: "words"`; the report says it is a rough estimate.
 
+Missed or partial points are usually turned into recommendations (area `content`); the `rules` backend adds up to two.
+
 The folder page's "send to model" route (`web/src/lib/server/points.ts`) applies the same rules to the saved speech; keep the two in step. Tests: `tests/test_points.py`.
+
+## Folder page: things to improve
+
+The folder page's "send to model" (`web/src/app/api/prototype/route.ts`) returns a `summary`, up to 3 `strengths` and 3–5 `improvements`, most important first, each with `title`, `why`, `action`, an `example` sentence (no new facts or numbers) and an exact `quote`. A quote that is not in the speech is removed; the advice stays. With Ollama, the reply is constrained by a JSON schema and retried once if it still does not validate. Without an LLM, improvements come from counts only: main points not found, fillers, repeats, slide words not said, and a very short speech.
+
+The speech reaches the model as sentences: the voice server returns no punctuation, so a full stop is placed wherever the speaker paused for 0.6 s or more (`textWithPauses` in `web/src/lib/server/voice.ts`).

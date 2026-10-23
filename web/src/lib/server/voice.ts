@@ -72,6 +72,21 @@ export async function voiceHealth(lang: Lang): Promise<{ ok: boolean; device?: s
   }
 }
 
+// The speech model returns no punctuation. A pause this long ends a sentence, so the text
+// reaches the feedback model (and its quotes) as real sentences instead of one long run.
+const SENTENCE_PAUSE_S = 0.6;
+const ENDS_SENTENCE = /[.?!…]$/;
+
+/** Words joined into text, with a full stop wherever the speaker paused for SENTENCE_PAUSE_S or more. */
+export function textWithPauses(words: VoiceWord[]): string {
+  let out = "";
+  words.forEach((w, i) => {
+    if (i > 0) out += w.start - words[i - 1].end >= SENTENCE_PAUSE_S && !ENDS_SENTENCE.test(out) ? ". " : " ";
+    out += w.word;
+  });
+  return out && !ENDS_SENTENCE.test(out) ? `${out}.` : out;
+}
+
 /** Checks the voice server reply: {words: [{word, start, end}], duration_s, elapsed_s}. */
 export function parseVoiceReply(raw: unknown): VoiceResult | null {
   if (!raw || typeof raw !== "object") return null;
@@ -86,7 +101,7 @@ export function parseVoiceReply(raw: unknown): VoiceResult | null {
   }
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   return {
-    text: words.map((w) => w.word).join(" "),
+    text: textWithPauses(words),
     words,
     durationS: num(body.duration_s),
     elapsedS: num(body.elapsed_s),

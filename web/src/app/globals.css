@@ -675,3 +675,49 @@ body {
   background: color-mix(in srgb, var(--negative) 22%, transparent);
   color: var(--negative);
 }
+
+.desk-improve h3 {
+  margin: 14px 0 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.desk-improve ul,
+.desk-improve ol {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.desk-improve ol {
+  padding-left: 20px;
+  list-style: decimal;
+}
+
+.desk-strengths {
+  padding-left: 0;
+  list-style: none;
+}
+
+.desk-strengths li::before {
+  content: "+ ";
+  color: var(--positive);
+}
+
+.desk-improve ol li {
+  display: grid;
+  gap: 3px;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.desk-improve q,
+.desk-improve li span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.desk-improve li em {
+  color: var(--faint);
+  font-style: normal;
+}

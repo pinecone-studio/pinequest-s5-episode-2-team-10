@@ -8,11 +8,6 @@ import { t, type Lang } from "@/lib/i18n";
 export { isProtoModel };
 export type { ProtoModel };
 
-export interface Point {
-  title: string;
-  detail: string;
-}
-
 export class LlmError extends Error {
   constructor(
     message: string,
@@ -73,30 +68,54 @@ export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
   ];
 }
 
-/** Checks the model's JSON: {summary: string, points: [{title, detail}] (at most 3)}. */
+export interface Improvement {
+  title: string;
+  why: string;
+  action: string;
+  example: string;
+  quote: string; // exact words from the speech; the route drops it when it isn't there
+}
+
 /** A checked reply plus the raw JSON, so callers can read extra fields (main points) themselves. */
 export interface ModelReply {
   summary: string;
-  points: Point[];
+  strengths: string[];
+  improvements: Improvement[];
   raw: Record<string, unknown>;
 }
 
+export const MAX_IMPROVEMENTS = 5;
+const MAX_STRENGTHS = 3;
+
+const text = (value: unknown, max: number) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
+
+/**
+ * Checks the model's JSON: {summary, strengths: [string], improvements: [{title, why, action, example, quote}]}.
+ * Each improvement needs a title and an action; at most MAX_IMPROVEMENTS are kept.
+ * The older {points: [{title, detail}]} shape is read as improvements, so small models that drift still work.
+ */
 export function parseReply(raw: unknown): ModelReply | null {
   if (!raw || typeof raw !== "object") return null;
   const body = raw as Record<string, unknown>;
-  if (typeof body.summary !== "string" || !body.summary.trim()) return null;
-  if (!Array.isArray(body.points)) return null;
-  const points: Point[] = [];
-  for (const item of body.points.slice(0, 3)) {
-    if (!item || typeof item !== "object") return null;
-    const point = item as Record<string, unknown>;
-    if (typeof point.title !== "string" || typeof point.detail !== "string") return null;
-    const title = point.title.trim().slice(0, 120);
-    const detail = point.detail.trim().slice(0, 500);
-    if (!title || !detail) return null;
-    points.push({ title, detail });
+  const summary = text(body.summary, 800);
+  if (!summary) return null;
+  const list = Array.isArray(body.improvements) ? body.improvements : Array.isArray(body.points) ? body.points : null;
+  if (!list) return null;
+  const improvements: Improvement[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue;
+    const i = item as Record<string, unknown>;
+    const title = text(i.title, 120);
+    const action = text(i.action ?? i.detail, 500);
+    if (!title || !action) continue;
+    improvements.push({ title, why: text(i.why, 500), action, example: text(i.example, 400), quote: text(i.quote, 400) });
+    if (improvements.length === MAX_IMPROVEMENTS) break;
   }
-  return { summary: body.summary.trim().slice(0, 800), points, raw: body };
+  const strengths = (Array.isArray(body.strengths) ? body.strengths : [])
+    .map((v) => text(v, 300))
+    .filter(Boolean)
+    .slice(0, MAX_STRENGTHS);
+  return { summary, strengths, improvements, raw: body };
 }
 
 function jsonFrom(text: string): unknown {
@@ -133,28 +152,69 @@ export async function askClaude(prompt: string, image: { mediaType: string; data
   return reply;
 }
 
-export async function askOllama(prompt: string, lang: Lang) {
-  let response: Response;
-  try {
-    response = await fetch(`${ollamaUrl()}/api/chat`, {
-      method: "POST",
-      signal: AbortSignal.timeout(180_000),
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: ollamaModel(),
-        stream: false,
-        format: "json",
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-  } catch {
-    throw new LlmError(t(lang, "ollamaUnreachable"), 502);
+const str = { type: "string" } as const;
+
+/** JSON schema for the reply; Ollama uses it to constrain the output to this shape. */
+export function replySchema(withPoints: boolean): Record<string, unknown> {
+  const properties: Record<string, unknown> = {
+    summary: str,
+    strengths: { type: "array", items: str, maxItems: 3 },
+    improvements: {
+      type: "array",
+      maxItems: MAX_IMPROVEMENTS,
+      items: {
+        type: "object",
+        properties: { title: str, why: str, action: str, example: str, quote: str },
+        required: ["title", "why", "action", "example", "quote"],
+      },
+    },
+  };
+  if (withPoints) {
+    properties.point_checks = {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { point: { type: "integer" }, status: { type: "string", enum: ["covered", "partial", "missed"] }, evidence: str, note: str },
+        required: ["point", "status", "evidence", "note"],
+      },
+    };
+    properties.off_topic = {
+      type: "array",
+      items: { type: "object", properties: { sentence_id: { type: "integer" }, reason: str }, required: ["sentence_id", "reason"] },
+    };
+    properties.idea_comment = str;
   }
-  if (!response.ok) throw new LlmError(t(lang, "ollamaError", { status: response.status }), 502);
-  const payload = (await response.json()) as { message?: { content?: string } };
-  const reply = parseReply(jsonFrom(payload.message?.content ?? ""));
-  if (!reply) throw new LlmError(t(lang, "ollamaBadShape"), 502);
-  return reply;
+  return { type: "object", properties, required: Object.keys(properties) };
+}
+
+const OLLAMA_TRIES = 2; // small local models sometimes return a reply that doesn't validate
+
+export async function askOllama(prompt: string, lang: Lang, schema: Record<string, unknown> = replySchema(false)) {
+  for (let attempt = 1; ; attempt++) {
+    let response: Response;
+    try {
+      response = await fetch(`${ollamaUrl()}/api/chat`, {
+        method: "POST",
+        signal: AbortSignal.timeout(240_000),
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: ollamaModel(),
+          stream: false,
+          format: schema,
+          // Same settings as the pipeline (pipeline/feedback.py): long prompts need the larger context.
+          options: { temperature: 0, num_ctx: 8192 },
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+    } catch {
+      throw new LlmError(t(lang, "ollamaUnreachable"), 502);
+    }
+    if (!response.ok) throw new LlmError(t(lang, "ollamaError", { status: response.status }), 502);
+    const payload = (await response.json()) as { message?: { content?: string } };
+    const reply = parseReply(jsonFrom(payload.message?.content ?? ""));
+    if (reply) return reply;
+    if (attempt >= OLLAMA_TRIES) throw new LlmError(t(lang, "ollamaBadShape"), 502);
+  }
 }
 
 let fillerCache: string[] | null = null;
@@ -173,12 +233,22 @@ function fillers(): string[] {
   return fillerCache;
 }
 
-/** No model: counts fillers and back-to-back repeated words. Only quotes words that are in the text. */
-export function rulesReply(text: string, slideText: string, lang: Lang): { summary: string; points: Point[] } {
-  const words = text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-  if (words.length === 0) {
-    return { summary: t(lang, "rulesNoText"), points: [] };
-  }
+/** What the no-LLM check needs to know about the main points. */
+export interface PointStatus {
+  text: string;
+  status: "covered" | "partial" | "missed";
+}
+
+const SHORT_SPEECH_WORDS = 60;
+
+/**
+ * No model: things to improve from counts only (fillers, back-to-back repeats, main points
+ * not found, slide words not said, a very short speech). Never quotes or invents speech.
+ */
+export function rulesReply(speech: string, slideText: string, lang: Lang, points: PointStatus[] = []): ModelReply {
+  const words = speech.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const empty = { strengths: [], improvements: [], raw: {} };
+  if (words.length === 0) return { summary: t(lang, "rulesNoText"), ...empty };
 
   let joined = ` ${words.join(" ")} `;
   const found: string[] = [];
@@ -200,30 +270,39 @@ export function rulesReply(text: string, slideText: string, lang: Lang): { summa
     if (w === words[i - 1] && w.length > 1 && !fillerSet.has(`${w} ${w}`)) repeats.set(w, (repeats.get(w) ?? 0) + 1);
   }
 
-  const per100 = Math.round((fillerTotal / words.length) * 1000) / 10;
-  const points: Point[] = [];
-  points.push(
-    fillerTotal
-      ? { title: t(lang, "rulesFillers"), detail: t(lang, "rulesFillersFound", { list: found.join(", "), per100 }) }
-      : { title: t(lang, "rulesFillers"), detail: t(lang, "rulesFillersNone") },
-  );
+  const improvements: Improvement[] = [];
+  const add = (title: string, why: string, action: string) => improvements.push({ title, why, action, example: "", quote: "" });
+
+  for (const p of points.filter((p) => p.status !== "covered").slice(0, 2)) {
+    add(
+      t(lang, "rulesPointTitle", { point: p.text }),
+      t(lang, p.status === "missed" ? "rulesPointMissed" : "rulesPointPartial"),
+      t(lang, "rulesPointAction"),
+    );
+  }
+  if (fillerTotal) {
+    const per100 = Math.round((fillerTotal / words.length) * 1000) / 10;
+    add(t(lang, "rulesFillers"), t(lang, "rulesFillersFound", { list: found.join(", "), per100 }), t(lang, "rulesFillersAction"));
+  }
   if (repeats.size) {
-    points.push({
-      title: t(lang, "rulesRepeats"),
-      detail: [...repeats].map(([w, n]) => `«${w} ${w}» ×${n}`).join(", "),
-    });
+    add(t(lang, "rulesRepeats"), [...repeats].map(([w, n]) => `«${w} ${w}» ×${n}`).join(", "), t(lang, "rulesRepeatsAction"));
   }
   if (slideText) {
     const slideWords = new Set((slideText.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? []).slice(0, 400));
     const said = new Set(words);
     const covered = [...slideWords].filter((w) => said.has(w)).length;
-    points.push({
-      title: t(lang, "rulesSlide"),
-      detail: t(lang, "rulesSlideDetail", { total: slideWords.size, covered }),
-    });
+    if (slideWords.size && covered / slideWords.size < 0.5) {
+      add(t(lang, "rulesSlide"), t(lang, "rulesSlideDetail", { total: slideWords.size, covered }), t(lang, "rulesSlideAction"));
+    }
   }
+  if (words.length < SHORT_SPEECH_WORDS) {
+    add(t(lang, "rulesShortTitle"), t(lang, "rulesShortWhy", { n: words.length }), t(lang, "rulesShortAction"));
+  }
+
   return {
     summary: t(lang, "rulesSummary", { n: words.length }),
-    points: points.slice(0, 3),
+    strengths: [],
+    improvements: improvements.slice(0, MAX_IMPROVEMENTS),
+    raw: {},
   };
 }

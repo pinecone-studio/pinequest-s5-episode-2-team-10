@@ -76,7 +76,7 @@ def rules_check(points: list[str], sentences: list[dict]) -> list[dict]:
 
 
 def verify(checks: list[dict], points: list[str], sentences: list[dict], off_topic: list[dict],
-           idea_comment: str, method: str) -> dict:
+           idea_comment: str, method: str, idea: str = "") -> dict:
     """Model (or rules) output -> results the report can trust. See the module docstring."""
     transcript = f" {_norm(' '.join(s['text'] for s in sentences))} "
     by_point: dict[int, dict] = {}
@@ -103,17 +103,24 @@ def verify(checks: list[dict], points: list[str], sentences: list[dict], off_top
             "note": " ".join(str(c.get("note") or "").split()),
         })
 
+    # Small models flag too much as off topic. A sentence that shares a key word with the idea or
+    # a main point is at least related, so its flag is dropped (conservative: may keep a real one out).
+    related = _terms(idea).union(*(_terms(p) for p in points)) if (idea or points) else set()
     flagged = []
     seen: set[int] = set()
     for item in off_topic:
         sid = item.get("sentence_id")
-        if isinstance(sid, int) and 0 <= sid < len(sentences) and sid not in seen:
+        if (isinstance(sid, int) and 0 <= sid < len(sentences) and sid not in seen
+                and not (_terms(sentences[sid]["text"]) & related)):
             seen.add(sid)
+            reason = " ".join(str(item.get("reason") or "").split())
+            if _norm(reason) == _norm(sentences[sid]["text"]):
+                reason = ""  # a "reason" that only repeats the sentence says nothing
             flagged.append({
                 "sentence_id": sid,
                 "start": sentences[sid].get("start"),
                 "text": sentences[sid]["text"],  # quoted by code, not by the model
-                "reason": " ".join(str(item.get("reason") or "").split()),
+                "reason": reason,
             })
 
     return {

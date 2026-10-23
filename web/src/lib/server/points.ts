@@ -97,6 +97,12 @@ export function rulesCheck(points: string[], sentences: Sentence[]) {
   });
 }
 
+/** True when `quote` appears word for word in the speech (case and punctuation ignored). */
+export function inSpeech(quote: string, sentences: Sentence[]): boolean {
+  const words = tokens(quote).join(" ");
+  return words !== "" && ` ${tokens(sentences.map((s) => s.text).join(" ")).join(" ")} `.includes(` ${words} `);
+}
+
 /** Model (or rules) output -> results the page can trust. */
 export function verifyPoints(
   checks: unknown,
@@ -105,6 +111,7 @@ export function verifyPoints(
   offTopic: unknown,
   ideaComment: unknown,
   method: MainPoints["method"],
+  idea = "",
 ): MainPoints {
   const transcript = ` ${tokens(sentences.map((s) => s.text).join(" ")).join(" ")} `;
   const byPoint = new Map<number, Record<string, unknown>>();
@@ -127,13 +134,26 @@ export function verifyPoints(
     return { point: i, text, status, verified, evidence: verified && status !== "missed" ? evidence : "", note: squash(c.note) };
   });
 
+  // Small models flag too much as off topic. A sentence that shares a key word with the idea or
+  // a main point is at least related, so its flag is dropped (conservative: may keep a real one out).
+  const related = new Set([idea, ...points].flatMap((x) => [...terms(x)]));
   const seen = new Set<number>();
   const flagged: MainPoints["offTopic"] = [];
   for (const item of Array.isArray(offTopic) ? offTopic : []) {
     const sid = item && typeof item === "object" ? (item as Record<string, unknown>).sentence_id : undefined;
-    if (typeof sid === "number" && Number.isInteger(sid) && sid >= 0 && sid < sentences.length && !seen.has(sid)) {
+    if (
+      typeof sid === "number" &&
+      Number.isInteger(sid) &&
+      sid >= 0 &&
+      sid < sentences.length &&
+      !seen.has(sid) &&
+      ![...terms(sentences[sid].text)].some((t) => related.has(t))
+    ) {
       seen.add(sid);
-      flagged.push({ sentenceId: sid, text: sentences[sid].text, reason: squash((item as Record<string, unknown>).reason) });
+      const reason = squash((item as Record<string, unknown>).reason);
+      // A "reason" that only repeats the sentence says nothing.
+      const echo = tokens(reason).join(" ") === tokens(sentences[sid].text).join(" ");
+      flagged.push({ sentenceId: sid, text: sentences[sid].text, reason: echo ? "" : reason });
     }
   }
   flagged.sort((a, b) => a.sentenceId - b.sentenceId);
