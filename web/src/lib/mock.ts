@@ -4,6 +4,7 @@
 
 import type {
   Attempt,
+  AuthSession,
   FeedbackBackend,
   Project,
   ProjectDetails,
@@ -44,6 +45,8 @@ interface Store {
 const STAGES: Stage[] = ["transcribing", "measuring", "slides", "feedback", "scoring"];
 const STAGE_MS = 1500;
 const KEY = "pitchcoach:mock:v2";
+const USERS_KEY = "pitchcoach:mock-users";
+const TOKEN_KEY = "pitchcoach:user-token";
 const audioBlobs = new Map<string, Blob>();
 
 const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms));
@@ -130,7 +133,143 @@ function getSession(store: Store, id: string): MockSession {
   return s;
 }
 
+interface MockUser {
+  id: string;
+  email: string;
+  salt: string;
+  password_hash: string;
+  token: string;
+}
+
+function loadUsers(): MockUser[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(USERS_KEY) ?? "[]") as MockUser[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveUsers(users: MockUser[]) {
+  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+async function mockDigest(password: string, salt: string): Promise<string> {
+  const data = new TextEncoder().encode(`${salt}:${password}`);
+  const buf = await crypto.subtle.digest("SHA-256", data);
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function cleanMockEmail(email: string): string {
+  const value = email.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) {
+    throw { code: "invalid_email", message: "Enter a valid email." };
+  }
+  return value;
+}
+
+function currentMockUser(): MockUser {
+  let token: string | null = null;
+  try {
+    token = localStorage.getItem(TOKEN_KEY);
+  } catch {
+    token = null;
+  }
+  const user = loadUsers().find((row) => row.token === token);
+  if (!user) throw { code: "unauthorized", message: "Sign in required." };
+  return user;
+}
+
 export const mockApi = {
+  async register(email: string, password: string): Promise<AuthSession> {
+    await wait();
+    const cleaned = cleanMockEmail(email);
+    if (password.length < 8 || password.length > 128) throw { code: "invalid_request", message: "Invalid password." };
+    const users = loadUsers();
+    if (users.some((row) => row.email === cleaned)) throw { code: "email_taken", message: "An account with this email already exists." };
+    const salt = crypto.randomUUID();
+    const user: MockUser = {
+      id: crypto.randomUUID(),
+      email: cleaned,
+      salt,
+      password_hash: await mockDigest(password, salt),
+      token: crypto.randomUUID(),
+    };
+    users.push(user);
+    saveUsers(users);
+    return { id: user.id, email: user.email, access_token: user.token };
+  },
+
+  async demo(): Promise<AuthSession> {
+    await wait();
+    const email = "demo@pitchcoach.local";
+    const users = loadUsers();
+    let user = users.find((row) => row.email === email);
+    if (!user) {
+      const salt = crypto.randomUUID();
+      user = {
+        id: crypto.randomUUID(),
+        email,
+        salt,
+        password_hash: await mockDigest(crypto.randomUUID(), salt),
+        token: crypto.randomUUID(),
+      };
+      users.push(user);
+    } else {
+      user.token = crypto.randomUUID();
+    }
+    saveUsers(users);
+    return { id: user.id, email: user.email, access_token: user.token };
+  },
+
+  /** Demo mode has no server to verify the Supabase token, so it trusts the email inside it. */
+  async google(accessToken: string): Promise<AuthSession> {
+    await wait();
+    let claimed = "";
+    try {
+      const payload = JSON.parse(atob(accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as { email?: string };
+      claimed = payload.email ?? "";
+    } catch {
+      throw { code: "invalid_google_token", message: "Google sign-in expired. Try again." };
+    }
+    const cleaned = cleanMockEmail(claimed);
+    const users = loadUsers();
+    let user = users.find((row) => row.email === cleaned);
+    if (!user) {
+      user = { id: crypto.randomUUID(), email: cleaned, salt: "", password_hash: "", token: crypto.randomUUID() };
+      users.push(user);
+    } else {
+      user.token = crypto.randomUUID();
+    }
+    saveUsers(users);
+    return { id: user.id, email: user.email, access_token: user.token };
+  },
+
+  async login(email: string, password: string): Promise<AuthSession> {
+    await wait();
+    const cleaned = cleanMockEmail(email);
+    const users = loadUsers();
+    const user = users.find((row) => row.email === cleaned);
+    const hash = user ? await mockDigest(password, user.salt) : "";
+    if (!user || hash !== user.password_hash) throw { code: "invalid_credentials", message: "Email or password is wrong." };
+    user.token = crypto.randomUUID();
+    saveUsers(users);
+    return { id: user.id, email: user.email, access_token: user.token };
+  },
+
+  async me() {
+    await wait(50);
+    const user = currentMockUser();
+    return { id: user.id, email: user.email };
+  },
+
+  async logout() {
+    const users = loadUsers();
+    const user = users.find((row) => row.token === currentMockUser().token);
+    if (user) user.token = crypto.randomUUID();
+    saveUsers(users);
+  },
+
   async listProjects() {
     await wait();
     const store = load();

@@ -15,8 +15,8 @@ export default function Progress({ status }: { status: StatusResponse | null }) 
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Analyzing your pitch</h2>
-        <p className="text-sm text-zinc-500">
+        <h2 className="ui-section">Analyzing your pitch</h2>
+        <p className="ui-muted">
           {queued ? `Waiting in line: ${status!.queue_position} ahead of you.` : "This usually takes 20 to 60 seconds."}
         </p>
       </div>
@@ -29,15 +29,15 @@ export default function Progress({ status }: { status: StatusResponse | null }) 
               <span
                 className={`flex h-5 w-5 items-center justify-center rounded-full text-xs ${
                   done
-                    ? "bg-emerald-600 text-white"
+                    ? "bg-[#8eae9b] text-[#151617]"
                     : active
-                      ? "animate-pulse bg-zinc-900 dark:bg-zinc-100"
-                      : "border border-zinc-300 dark:border-zinc-700"
+                      ? "animate-pulse bg-[#e6e6e6] text-[#151617]"
+                      : "border border-[#333436]"
                 }`}
               >
                 {done ? "✓" : ""}
               </span>
-              <span className={done || active ? "" : "text-zinc-400"}>{s.label}</span>
+              <span className={done || active ? "" : "ui-help"}>{s.label}</span>
             </li>
           );
         })}

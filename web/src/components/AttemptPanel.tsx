@@ -60,13 +60,13 @@ export default function AttemptPanel({
   }, [attemptId]);
 
   if (error) {
-    return <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{error}</p>;
+    return <p className="ui-alert">{error}</p>;
   }
   if (report) {
     return (
       <div className="space-y-6">
         {report.notes.length > 0 && (
-          <ul className="space-y-1 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          <ul className="ui-alert is-warn space-y-1">
             {report.notes.map((n) => (
               <li key={n}>{n}</li>
             ))}
@@ -79,7 +79,7 @@ export default function AttemptPanel({
   }
   if (status?.status === "failed") {
     return (
-      <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+      <p className="ui-alert">
         Analysis failed{status.error ? `: ${status.error}` : "."}
       </p>
     );

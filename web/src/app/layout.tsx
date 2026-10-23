@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import AuthGate from "@/components/AuthGate";
 import "./globals.css";
 
 const inter = Inter({
@@ -9,14 +10,16 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "AI Pitch Coach",
+  title: "Saylo",
   description: "Scored, timestamped feedback on Mongolian pitches with slides.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="mn" className={`${inter.variable} h-full antialiased`}>
-      <body className={`${inter.className} min-h-full flex flex-col`}>{children}</body>
+    <html lang="mn" className={`${inter.variable} dark h-full antialiased`}>
+      <body className={`${inter.className} min-h-full flex flex-col`}>
+        <AuthGate>{children}</AuthGate>
+      </body>
     </html>
   );
 }

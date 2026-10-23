@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import mimetypes
+import re
 import secrets
 import shutil
 from contextlib import asynccontextmanager
@@ -14,6 +15,7 @@ from fastapi import APIRouter, Depends, FastAPI, Header, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import AfterValidator, BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, func, select
 
 from pipeline import audio as audio_tools
@@ -22,7 +24,8 @@ from pipeline import slides as slide_tools
 from pipeline.feedback import BACKENDS
 from pipeline.points import clean_points
 
-from . import config, db, errors
+from . import config, db, errors, supabase_auth
+from .passwords import hash_password, verify_password
 from .db import AnalysisReport, AppUser, AudioAsset, PitchSession, Project, Slide, Transcript, utcnow
 from .errors import ApiError, not_found
 from .worker import worker
@@ -77,7 +80,7 @@ def _hash(token: str) -> str:
 
 
 def current_user(database: DB, x_access_token: Annotated[Optional[str], Header()] = None) -> AppUser:
-    """No accounts yet: each browser gets an anonymous user and sends its token on every request."""
+    """The browser sends the token from register or login on every request."""
     if not x_access_token:
         raise ApiError(401, "unauthorized", "Missing access token.")
     user = database.exec(select(AppUser).where(AppUser.token_hash == _hash(x_access_token))).first()
@@ -255,6 +258,30 @@ class AnalyzeBody(BaseModel):
     feedback_backend: Optional[str] = None
 
 
+class AuthBody(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+
+
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+DEMO_EMAIL = "demo@pitchcoach.local"
+
+
+def _clean_email(value: str) -> str:
+    email = value.strip().lower()
+    if len(email) > 254 or not _EMAIL.fullmatch(email):
+        raise ApiError(422, "invalid_email", "Enter a valid email.")
+    return email
+
+
+def _new_token(user: AppUser, database: Session) -> str:
+    token = secrets.token_urlsafe(32)
+    user.token_hash = _hash(token)
+    database.add(user)
+    database.commit()
+    return token
+
+
 # ---- Users and projects ----------------------------------------------------
 
 
@@ -270,13 +297,93 @@ def health():
     }
 
 
-@api.post("/users", status_code=201)
-def create_user(database: DB):
+@api.post("/auth/register", status_code=201)
+def register(body: AuthBody, database: DB):
+    email = _clean_email(body.email)
+    if email == DEMO_EMAIL or database.exec(select(AppUser).where(AppUser.email == email)).first():
+        raise ApiError(409, "email_taken", "An account with this email already exists.")
     token = secrets.token_urlsafe(32)
-    user = AppUser(token_hash=_hash(token))
+    user = AppUser(token_hash=_hash(token), email=email, password_hash=hash_password(body.password))
     database.add(user)
-    database.commit()
-    return {"id": user.id, "access_token": token}
+    try:
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        raise ApiError(409, "email_taken", "An account with this email already exists.")
+    database.refresh(user)
+    return {"id": user.id, "email": user.email, "access_token": token}
+
+
+@api.post("/auth/demo")
+def demo_login(database: DB):
+    """One shared account for the sign-in screen. No password is accepted for it."""
+    user = database.exec(select(AppUser).where(AppUser.email == DEMO_EMAIL)).first()
+    if not user:
+        user = AppUser(
+            token_hash=_hash(secrets.token_urlsafe(32)),
+            email=DEMO_EMAIL,
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+        )
+        database.add(user)
+        try:
+            database.commit()
+        except IntegrityError:
+            database.rollback()
+            user = database.exec(select(AppUser).where(AppUser.email == DEMO_EMAIL)).first()
+            if not user:
+                raise ApiError(500, "internal", "Could not open the demo account.")
+        else:
+            database.refresh(user)
+    token = _new_token(user, database)
+    return {"id": user.id, "email": user.email, "access_token": token}
+
+
+@api.post("/auth/login")
+def login(body: AuthBody, database: DB):
+    email = _clean_email(body.email)
+    user = database.exec(select(AppUser).where(AppUser.email == email)).first()
+    if not user or not verify_password(body.password, user.password_hash):
+        raise ApiError(401, "invalid_credentials", "Email or password is wrong.")
+    token = _new_token(user, database)
+    return {"id": user.id, "email": user.email, "access_token": token}
+
+
+class GoogleBody(BaseModel):
+    access_token: str = Field(min_length=1, max_length=4096)
+
+
+@api.post("/auth/google")
+def google_login(body: GoogleBody, database: DB):
+    """Signs in with the email Google verified. An existing account with that email is reused."""
+    email = _clean_email(supabase_auth.google_email(body.access_token))
+    if email == DEMO_EMAIL:
+        raise ApiError(401, "invalid_google_token", "This isn't a verified Google account.")
+    user = database.exec(select(AppUser).where(AppUser.email == email)).first()
+    if not user:
+        user = AppUser(token_hash=_hash(secrets.token_urlsafe(32)), email=email)
+        database.add(user)
+        try:
+            database.commit()
+        except IntegrityError:
+            database.rollback()
+            user = database.exec(select(AppUser).where(AppUser.email == email)).first()
+            if not user:
+                raise ApiError(500, "internal", "Could not open the account.")
+        else:
+            database.refresh(user)
+    token = _new_token(user, database)
+    return {"id": user.id, "email": user.email, "access_token": token}
+
+
+@api.get("/auth/me")
+def me(user: User):
+    return {"id": user.id, "email": user.email}
+
+
+@api.post("/auth/logout", status_code=204)
+def logout(user: User, database: DB):
+    _new_token(user, database)
+    return Response(status_code=204)
 
 
 @api.get("/projects")

@@ -21,7 +21,6 @@ import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import DevTests from "./DevTests";
-import LangToggle from "./LangToggle";
 import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
@@ -112,11 +111,6 @@ export default function FolderDesk() {
     return (
       <div className="desk">
         <div className="desk-col">
-          <div className="desk-bar">
-            <WaveMark />
-            <span>Pitch Coach</span>
-            {process.env.NODE_ENV === "development" && <LangToggle />}
-          </div>
           <div className="desk-title">
             <div>
               <h1>{tr("folders")}</h1>
@@ -764,11 +758,6 @@ function FolderRoom({
   return (
     <div className="desk">
       <div className="desk-col">
-        <div className="desk-bar">
-          <WaveMark />
-          <span>Pitch Coach</span>
-          {process.env.NODE_ENV === "development" && <LangToggle />}
-        </div>
         <div className="desk-title">
           <div>
             <button type="button" className="desk-back" onClick={onBack}>
@@ -1001,21 +990,6 @@ function FolderRoom({
   );
 }
 
-function WaveMark() {
-  return (
-    <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden>
-      <path
-        d="M1 7h2l2-5 3 10 3-8 2 3h8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function FolderMark() {
   return (
     <svg width="28" height="18" viewBox="0 0 28 18" aria-hidden className="shrink-0" style={{ color: "var(--muted)" }}>
@@ -1140,14 +1114,14 @@ function WaveAudio({
   }, [live]);
 
   return (
-    <div className="mt-[14px] overflow-hidden rounded-[20px] bg-white text-[#111]">
+    <div className="ui-wave">
       <button type="button" onClick={url && !live ? onToggle : undefined} className="relative block w-full px-4 pb-4 pt-6 text-left" disabled={!url || Boolean(live)}>
-        <svg viewBox="0 0 640 160" className="h-36 w-full" aria-hidden>
-          <path d={d} fill="none" stroke="#c5d7fb" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+        <svg viewBox="0 0 640 160" className="h-28 w-full" aria-hidden>
+          <path d={d} fill="none" stroke="#333436" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
           <path
             d={d}
             fill="none"
-            stroke="#5b8def"
+            stroke="#e6e6e6"
             strokeWidth="3"
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -1157,11 +1131,11 @@ function WaveAudio({
             <rect width={640 * progress} height="160" />
           </clipPath>
         </svg>
-        <span className="absolute bottom-4 left-4 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700">
-          {playing ? <span className="h-2.5 w-2.5 rounded-sm bg-zinc-700" /> : <PlayMark />}
+        <span className="absolute bottom-4 left-4 flex h-8 w-8 items-center justify-center rounded-full border border-[#333436] bg-[#1a1b1c] text-[#e6e6e6]">
+          {playing ? <span className="h-2.5 w-2.5 rounded-sm bg-[#e6e6e6]" /> : <PlayMark />}
         </span>
       </button>
-      <div className="flex items-center justify-between gap-3 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
+      <div className="ui-wave-foot">
         <span className="truncate">{name ?? tr("audio")}</span>
         <span className="shrink-0 tabular-nums">
           {live ? tr("listening") : url ? `${formatClock(time)} / ${formatClock(duration)}` : tr("noFile")}

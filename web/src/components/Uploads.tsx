@@ -54,56 +54,54 @@ export default function Uploads({ report }: { report: Report }) {
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-zinc-200 p-4 text-sm dark:border-zinc-800">
-      <h2 className="font-medium">Your uploads</h2>
+    <section className="ui-card space-y-4 text-sm">
+      <h2 className="ui-section">Your uploads</h2>
 
       <div>
-        <h3 className="mb-1 text-xs text-zinc-500">Recording</h3>
+        <h3 className="ui-help mb-1">Recording</h3>
         {audioUrl ? (
           <audio controls src={audioUrl} className="h-9 w-full" />
         ) : (
-          <p className="text-zinc-500">{audioError ?? "Loading recording…"}</p>
+          <p className="ui-muted">{audioError ?? "Loading recording…"}</p>
         )}
       </div>
 
       <div>
-        <h3 className="mb-1 text-xs text-zinc-500">Slides</h3>
+        <h3 className="ui-help mb-1">Slides</h3>
         {report.slides_filename ? (
           <>
             <div className="flex flex-wrap items-center gap-3">
               <span className="font-medium">{report.slides_filename}</span>
-              <button type="button" onClick={toggleSlides} className="text-zinc-500 underline">
+              <button type="button" onClick={toggleSlides} className="ui-link">
                 {slides ? "Hide text" : "Show text"}
               </button>
-              <button type="button" onClick={downloadSlides} className="text-zinc-500 underline">
+              <button type="button" onClick={downloadSlides} className="ui-link">
                 Download
               </button>
             </div>
-            {slidesError && <p className="mt-1 text-red-600">{slidesError}</p>}
+            {slidesError && <p className="ui-alert mt-1">{slidesError}</p>}
             {slides && (
               <ol className="mt-2 space-y-2">
                 {slides.map((s) => (
-                  <li key={s.number} className="rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-900">
-                    <span className="text-xs text-zinc-500">Slide {s.number}</span>
-                    <p className="whitespace-pre-line">{s.image_only ? <em className="text-zinc-400">Image only</em> : s.text}</p>
+                  <li key={s.number} className="ui-inset">
+                    <span className="ui-help">Slide {s.number}</span>
+                    <p className="whitespace-pre-line">{s.image_only ? <em className="ui-help">Image only</em> : s.text}</p>
                   </li>
                 ))}
               </ol>
             )}
           </>
         ) : (
-          <p className="text-zinc-500">No slides for this attempt.</p>
+          <p className="ui-muted">No slides for this attempt.</p>
         )}
       </div>
 
       <div>
-        <h3 className="mb-1 text-xs text-zinc-500">Script</h3>
+        <h3 className="ui-help mb-1">Script</h3>
         {report.script ? (
-          <p className="max-h-48 overflow-y-auto whitespace-pre-line rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-900">
-            {report.script}
-          </p>
+          <p className="ui-inset max-h-48 overflow-y-auto whitespace-pre-line">{report.script}</p>
         ) : (
-          <p className="text-zinc-500">No script for this attempt.</p>
+          <p className="ui-muted">No script for this attempt.</p>
         )}
       </div>
     </section>

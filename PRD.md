@@ -81,7 +81,7 @@ These weights must be tested with human reviewers and adjusted. Avoid penalizing
 
 Before implementation, choose:
 - Supported audio formats and maximum duration/size
-- Whether login is required for the demo
+- Login is required: email and password (decided)
 - The speech-to-text provider after Mongolian evaluation
 - The LLM provider and model
 - Retention period for audio and transcript data
