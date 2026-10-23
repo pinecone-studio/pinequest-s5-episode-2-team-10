@@ -15,7 +15,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, FastAPI, Header, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 from sqlmodel import Session, func, select
 
 from pipeline import audio as audio_tools
@@ -92,15 +92,26 @@ def current_user(database: DB, x_access_token: Annotated[Optional[str], Header()
         user = database.get(AppUser, extra_token.user_id) if extra_token else None
     if not user:
         raise ApiError(401, "unauthorized", "Unknown access token.")
+    if not user.is_active:
+        raise ApiError(403, "account_disabled", "This account has been disabled.")
     return user
 
 
 User = Annotated[AppUser, Depends(current_user)]
 
 
+def admin_user(user: User) -> AppUser:
+    if user.role != "admin":
+        raise ApiError(403, "admin_required", "Administrator access is required.")
+    return user
+
+
+AdminUser = Annotated[AppUser, Depends(admin_user)]
+
+
 def owned_project(project_id: str, user: User, database: DB) -> Project:
     p = database.get(Project, project_id)
-    if not p or p.user_id != user.id:
+    if not p or (p.user_id != user.id and user.role != "admin"):
         raise not_found("Project")
     return p
 
@@ -108,7 +119,7 @@ def owned_project(project_id: str, user: User, database: DB) -> Project:
 def owned_session(session_id: str, user: User, database: DB) -> PitchSession:
     s = database.get(PitchSession, session_id)
     p = database.get(Project, s.project_id) if s else None
-    if not s or not p or p.user_id != user.id:
+    if not s or not p or (p.user_id != user.id and user.role != "admin"):
         raise not_found("Attempt")
     return s
 
@@ -187,7 +198,7 @@ def _sessions(database: Session, project_id: str) -> list[PitchSession]:
     ).all()
 
 
-def _project(database: Session, p: Project, with_attempts: bool) -> dict:
+def _project(database: Session, p: Project, with_attempts: bool, include_owner: bool = False) -> dict:
     sessions = _sessions(database, p.id)
     analyzed = [s for s in sessions if s.status in ("processing", "completed", "failed")]
     latest_done = next((s for s in sessions if s.status == "completed"), None)
@@ -216,6 +227,10 @@ def _project(database: Session, p: Project, with_attempts: bool) -> dict:
             "slide_count": _attempt(database, latest)["slide_count"] if latest else 0,
             "script": latest.script if latest else "",
         }
+    if include_owner:
+        owner = database.get(AppUser, p.user_id)
+        out["owner_id"] = p.user_id
+        out["owner_email"] = owner.email if owner else None
     return out
 
 
@@ -277,12 +292,39 @@ class AnalyzeBody(BaseModel):
 
 
 class AuthCredentials(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: str = Field(min_length=1, max_length=254)
     password: str = Field(min_length=8, max_length=128)
 
 
 class GoogleAuthBody(BaseModel):
     access_token: str = Field(min_length=1, max_length=8192)
+
+
+class AdminUserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: Optional[Literal["member", "admin"]] = None
+    is_active: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def require_update(self):
+        if (
+            not self.model_fields_set
+            or ("role" in self.model_fields_set and self.role is None)
+            or ("is_active" in self.model_fields_set and self.is_active is None)
+        ):
+            raise ValueError("Provide a role or is_active value.")
+        return self
+
+
+class AdminUserView(BaseModel):
+    id: str
+    email: Optional[str]
+    role: Literal["member", "admin"]
+    is_active: bool
+    created_at: str
 
 
 # ---- Users and projects ----------------------------------------------------
@@ -308,7 +350,7 @@ def _normalized_email(email: str) -> str:
 
 
 def _auth_response(user: AppUser, token: str) -> dict:
-    return {"id": user.id, "email": user.email, "access_token": token}
+    return {"id": user.id, "email": user.email, "role": user.role, "access_token": token}
 
 
 def _replace_user_token(database: Session, user: AppUser) -> dict:
@@ -347,6 +389,8 @@ def login(body: AuthCredentials, database: DB):
     user = database.exec(select(AppUser).where(func.lower(AppUser.email) == email)).first()
     if not user or not verify_password(body.password, user.password_hash):
         raise ApiError(401, "invalid_credentials", "Email or password is incorrect.")
+    if not user.is_active:
+        raise ApiError(401, "invalid_credentials", "Email or password is incorrect.")
     return _replace_user_token(database, user)
 
 
@@ -359,6 +403,8 @@ def demo_login(database: DB):
         user = AppUser(email=email, password_hash=None, token_hash=_hash(token))
         database.add(user)
     else:
+        if not user.is_active or user.role != "member":
+            raise ApiError(403, "demo_unavailable", "The shared demo account is unavailable.")
         database.add(AccessToken(token_hash=_hash(token), user_id=user.id))
     database.commit()
     database.refresh(user)
@@ -372,16 +418,26 @@ def google_login(body: GoogleAuthBody, database: DB):
         raise ApiError(401, "invalid_google_token", "This Google account cannot use the demo account.")
     user = database.exec(select(AppUser).where(func.lower(AppUser.email) == email)).first()
     if user is None:
-        user = AppUser(email=email, token_hash=_hash(secrets.token_urlsafe(32)))
+        user = AppUser(
+            email=email,
+            role="admin" if email in config.ADMIN_EMAILS else "member",
+            token_hash=_hash(secrets.token_urlsafe(32)),
+        )
         database.add(user)
         database.commit()
         database.refresh(user)
+    elif not user.is_active:
+        raise ApiError(403, "account_disabled", "This account has been disabled.")
+    elif email in config.ADMIN_EMAILS and user.role != "admin":
+        user.role = "admin"
+        database.add(user)
+        database.commit()
     return _replace_user_token(database, user)
 
 
 @api.get("/auth/me")
 def auth_me(user: User):
-    return {"id": user.id, "email": user.email}
+    return {"id": user.id, "email": user.email, "role": user.role}
 
 
 @api.post("/auth/logout", status_code=204)
@@ -402,12 +458,66 @@ def logout(
     return Response(status_code=204)
 
 
+def _admin_user_view(user: AppUser) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "role": user.role,
+        "is_active": user.is_active,
+        "created_at": _iso(user.created_at),
+    }
+
+
+@api.get("/admin/users", response_model=list[AdminUserView])
+def list_users(_: AdminUser, database: DB):
+    users = database.exec(select(AppUser).order_by(AppUser.created_at.desc())).all()
+    return [_admin_user_view(user) for user in users]
+
+
+@api.patch("/admin/users/{user_id}", response_model=AdminUserView)
+def update_user_role(user_id: str, body: AdminUserUpdate, admin: AdminUser, database: DB):
+    target = database.get(AppUser, user_id)
+    if not target:
+        raise not_found("User")
+    if target.id == admin.id:
+        raise ApiError(409, "self_update_forbidden", "Administrators cannot change their own role or status.")
+
+    changes = body.model_dump(exclude_unset=True)
+    next_role = changes.get("role", target.role)
+    next_active = changes.get("is_active", target.is_active)
+    if target.email == "demo@pitchcoach.local" and next_role == "admin":
+        raise ApiError(409, "demo_cannot_be_admin", "The shared demo account cannot be an administrator.")
+    if target.email and target.email.lower() in config.ADMIN_EMAILS and next_role != "admin":
+        raise ApiError(409, "configured_admin", "This administrator is assigned through PITCH_ADMIN_EMAILS.")
+    if target.role == "admin" and (next_role != "admin" or not next_active):
+        other_admins = database.exec(
+            select(func.count())
+            .select_from(AppUser)
+            .where(AppUser.role == "admin", AppUser.is_active.is_(True), AppUser.id != target.id)
+        ).one()
+        if other_admins == 0:
+            raise ApiError(409, "last_admin", "At least one active administrator must remain.")
+
+    was_active = target.is_active
+    target.role = next_role
+    target.is_active = next_active
+    if was_active and not target.is_active:
+        target.token_hash = _hash(secrets.token_urlsafe(32))
+        for token in database.exec(select(AccessToken).where(AccessToken.user_id == target.id)).all():
+            database.delete(token)
+    database.add(target)
+    database.commit()
+    database.refresh(target)
+    return _admin_user_view(target)
+
+
 @api.get("/projects")
 def list_projects(user: User, database: DB):
-    projects = database.exec(
-        select(Project).where(Project.user_id == user.id).order_by(Project.updated_at.desc())
-    ).all()
-    return [_project(database, p, with_attempts=False) for p in projects]
+    query = select(Project).order_by(Project.updated_at.desc())
+    if user.role != "admin":
+        query = query.where(Project.user_id == user.id)
+    projects = database.exec(query).all()
+    return [_project(database, p, with_attempts=False, include_owner=user.role == "admin") for p in projects]
 
 
 @api.post("/projects", status_code=201)
@@ -416,16 +526,16 @@ def create_project(body: ProjectBody, user: User, database: DB):
     p.name = p.name.strip() or "Untitled project"
     database.add(p)
     database.commit()
-    return _project(database, p, with_attempts=True)
+    return _project(database, p, with_attempts=True, include_owner=user.role == "admin")
 
 
 @api.get("/projects/{project_id}")
-def get_project(p: OwnedProject, database: DB):
-    return _project(database, p, with_attempts=True)
+def get_project(p: OwnedProject, user: User, database: DB):
+    return _project(database, p, with_attempts=True, include_owner=user.role == "admin")
 
 
 @api.patch("/projects/{project_id}")
-def update_project(body: ProjectPatch, p: OwnedProject, database: DB):
+def update_project(body: ProjectPatch, p: OwnedProject, user: User, database: DB):
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(p, k, v.strip() if isinstance(v, str) else v)
     if not p.name:
@@ -433,7 +543,7 @@ def update_project(body: ProjectPatch, p: OwnedProject, database: DB):
     p.updated_at = utcnow()
     database.add(p)
     database.commit()
-    return _project(database, p, with_attempts=True)
+    return _project(database, p, with_attempts=True, include_owner=user.role == "admin")
 
 
 @api.delete("/projects/{project_id}", status_code=204)

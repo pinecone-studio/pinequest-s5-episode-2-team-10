@@ -36,7 +36,7 @@ For team-shared use, clients must call the same FastAPI process; the in-memory w
 | ORM | SQLModel (SQLAlchemy) | Tables created on startup; no migrations yet |
 | Database | Supabase Postgres in hosted setups, SQLite locally | Set `PITCH_DB_URL`; see `DATABASE.md` |
 | File storage | Local disk for SQLite; private Supabase Storage for shared Postgres | FastAPI checks ownership before serving objects |
-| Identity | Anonymous user token, hashed in the database | Supabase Auth or similar can replace it later |
+| Identity | App user token, hashed in the database; Supabase verifies Google sign-in | FastAPI enforces member/admin roles |
 | Validation | Pydantic for API input and LLM output | TypeScript types mirror the API in `web/src/lib/types.ts` |
 | Speech-to-text | BuzzASR/mongolian via transformers | Needs the GPU machine; `PITCH_ASR=stub` for testing |
 | LLM | Claude (`claude-opus-5-5`) or Gemma 4 E4B through Ollama | Chosen per analysis; `rules` runs without a model |
@@ -58,7 +58,7 @@ Status is persisted, so the UI recovers after a refresh. Attempts still `process
 
 - Provider API keys stay on the server; the browser only talks to FastAPI.
 - Uploads are checked for extension, size, duration, and whether ffmpeg can decode them.
-- Every project and attempt query checks ownership; anything owned by another user returns 404.
+- Every member project and attempt query checks ownership; another user's data returns 404. Admin access is explicit, logged-in, and can span users.
 - LLM output must pass the Pydantic schema, then code checks it: evidence and filler occurrences must exist in the transcript, timestamps and slide numbers must come from the input, and invented items are dropped.
 - Every number in the report comes from code; the model judges content and writes advice.
 - Errors are returned as `{"code", "message"}` with a plain-language message.

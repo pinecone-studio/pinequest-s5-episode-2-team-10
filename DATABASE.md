@@ -10,6 +10,8 @@ An account. The browser keeps the access token.
 - `token_hash`: SHA-256 of the access token (unique, indexed); the token itself is never stored
 - `email`: optional lowercase unique email; `NULL` for accounts created before login existed
 - `password_hash`: PBKDF2-SHA256 (`pbkdf2_sha256$iterations$salt$digest`). The password itself is never stored
+- `role`: `member` (default) or `admin`; assigned and enforced by the backend
+- `is_active`: whether the account can authenticate (default `true`)
 - `created_at`
 
 ### `access_token`
@@ -69,7 +71,7 @@ One attempt inside a project. Project details are copied in when it is analyzed,
 
 ### Added columns
 
-`project.idea`, `project.key_points`, `session.idea`, `session.key_points`, `app_user.email` and `app_user.password_hash` were added after the first release. `backend/db.py` adds them on startup when they are missing (`ADDED_COLUMNS`), on SQLite and Postgres alike, so existing databases keep their data. A unique index is added on `app_user.email` when the table does not already have one. Add later columns there too. Older rows keep a null email until someone registers.
+`project.idea`, `project.key_points`, `session.idea`, `session.key_points`, `app_user.email`, `app_user.password_hash`, `app_user.role`, and `app_user.is_active` were added after the first release. `backend/db.py` adds them on startup when they are missing (`ADDED_COLUMNS`), on SQLite and Postgres alike, so existing databases keep their data. Existing users receive the safe defaults `member` and active. A unique index is added on `app_user.email` when the table does not already have one. Add later columns there too. Older rows keep a null email until someone registers.
 
 ## Relationships
 
@@ -85,6 +87,12 @@ One attempt inside a project. Project details are copied in when it is analyzed,
 4. Start the API. It creates missing tables and turns on **row-level security** on each one, so Supabase's public REST API cannot read them. The API connects through the database URI. Existing Postgres tables are not dropped by startup.
 
 The web app never talks to Supabase directly; all access goes through FastAPI, which checks ownership on every query. For the MVP, teammates should point their web clients at the **same FastAPI URL** as well as the same database and bucket. The analysis queue is in-process; do not run multiple API/worker instances against the shared database until the queue is moved to a shared job system.
+
+## Account roles
+
+Every account starts as `member`. Set the server-only `PITCH_ADMIN_EMAILS` environment variable to a comma-separated list of Google account emails to bootstrap administrators. The backend verifies the email through Supabase Auth before applying the admin role; the browser cannot choose a role. Restart the API after changing this list. Allowlisted administrators stay protected from demotion through the API; remove an email from the list and then use the admin endpoint to change that account's stored role.
+
+Admins can list accounts and update another account's role or active status with the FastAPI admin endpoints. Disabling an account revokes its current app tokens; re-enable it only when the user should sign in again. An admin cannot modify their own role/status, and the final active admin cannot be demoted or disabled. Admins can access all users' projects, attempts, reports, transcripts, audio, and slides, including modify/delete operations. Give admin access only to trusted people.
 
 ## Moving existing local data
 
@@ -151,6 +159,7 @@ Edit only `backend/.env.local` for machine-specific values. Uncomment `PITCH_DB_
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Supabase project URL (Storage and optional Google Auth) and publishable key (optional Google Auth). Neither is a database credential. |
 | `SUPABASE_STORAGE_BUCKET` | Private bucket name; default setup uses `saylo-session-files`. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only Supabase key for private Storage requests. Never expose or commit it. |
+| `PITCH_ADMIN_EMAILS` | Comma-separated, server-only list of verified Google emails bootstrapped as admins. |
 | `PITCH_CORS_ORIGINS` | Comma-separated web origins allowed by FastAPI. |
 | `PITCH_RETENTION_DAYS` | Delete projects untouched for this many days; `0` keeps them. |
 | `PITCH_DEFAULT_BACKEND` | Default feedback backend: `claude`, `gemma4-ft`, `gemma4-base`, or `rules`. |
