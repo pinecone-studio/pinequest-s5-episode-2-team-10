@@ -68,10 +68,10 @@ export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
     ollama = { available: false, reason: t(lang, "ollamaDown") };
   }
   const backend = await backendStatus(lang);
+  const remoteOllama = /^https?:\/\//.test(ollamaUrl()) && !/localhost|127\.0\.0\.1/.test(ollamaUrl());
   return [
-    { id: "rules", name: t(lang, "rulesName"), local: true, available: true, reason: null },
-    { id: "ollama", name: `Gemma · Ollama (${ollamaModel()})`, local: true, ...ollama },
-    { id: "ollama-think", name: t(lang, "ollamaCarefulName", { m: ollamaModel() }), local: true, ...ollama },
+    { id: "ollama", name: `Gemma · Ollama (${ollamaModel()})`, local: !remoteOllama, server: remoteOllama, ...ollama },
+    { id: "ollama-think", name: t(lang, "ollamaCarefulName", { m: ollamaModel() }), local: !remoteOllama, server: remoteOllama, ...ollama },
     {
       id: "claude",
       name: `Claude (${claudeModel()})`,
