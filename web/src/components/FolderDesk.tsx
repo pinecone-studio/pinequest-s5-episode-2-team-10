@@ -832,7 +832,12 @@ function FolderRoom({
   const spoken = finalText.trim();
   function speakButton() {
     return (
-      <button type="button" className={listening ? "desk-ghost" : "desk-primary"} onClick={toggleSpeak}>
+      <button
+        type="button"
+        className={listening ? "desk-ghost" : "desk-primary"}
+        style={listening ? { background: "#2b2b2b", color: "#e6e6e6", borderColor: "#5a5a5a" } : undefined}
+        onClick={toggleSpeak}
+      >
         {listening && <span className="desk-rec" aria-hidden />}
         {listening ? tr("stop") : tr("speak")}
       </button>
@@ -1051,43 +1056,41 @@ function FolderRoom({
           </div>
           <aside className="desk-speech">
             <h2>{tr("speechText")}</h2>
-            <p className="desk-sub" aria-live="polite">
-              {listening
-                ? tr("listeningLong")
-                : pending > 0 || fileBusy
-                  ? tr("transcribing")
-                  : spoken
-                    ? tr("speechSaved")
-                    : tr("pressSpeak")}
-            </p>
-            <p className="desk-transcript">
-              {spoken || (pending === 0 && <span className="desk-missing">{tr("empty")}</span>)}
-              {pending > 0 && <span className="desk-missing"> …</span>}
-            </p>
+            {spoken && !listening && pending === 0 && !fileBusy && <p className="desk-sub">{tr("speechSaved")}</p>}
+            <div className="desk-speech-body" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 148, marginTop: 16 }}>
+              {spoken ? (
+                <p className="desk-transcript">
+                  {spoken}
+                  {(listening || pending > 0) && <span className="desk-speech-pending"> …</span>}
+                </p>
+              ) : (
+                <div className="desk-speech-empty">
+                  <SpeechMark />
+                  <p>{listening ? tr("listening") : pending > 0 || fileBusy ? tr("transcribing") : tr("noSpeechYet")}</p>
+                  <span>
+                    {listening ? tr("listeningLong") : pending > 0 || fileBusy ? tr("transcribing") : tr("noSpeechHint")}
+                  </span>
+                </div>
+              )}
+            </div>
             {sttNote && <p className="desk-note">{sttNote}</p>}
             <div className="desk-speech-tools">
               <button
                 type="button"
-                className="desk-link"
                 disabled={!folder.audioName || fileBusy || listening}
                 onClick={() => void transcribeAudioFile()}
               >
                 {fileBusy ? tr("transcribingAudio") : tr("retranscribeAudio")}
               </button>
-              <button
-                type="button"
-                className="desk-link"
-                disabled={!spoken || listening}
-                onClick={() => writeSpeech("")}
-              >
+              <button type="button" disabled={!spoken || listening} onClick={() => writeSpeech("")}>
                 {tr("clearText")}
               </button>
             </div>
             <div className="desk-probe">
               <button
                 type="button"
-                className="desk-ghost"
-                disabled={probing || (!spoken && !folder.audioName && !hasSlide)}
+                className="desk-primary desk-send"
+                disabled={probing || !spoken}
                 onClick={() => void sendToModel()}
               >
                 {probing ? tr("sending") : tr("sendToModel")}
@@ -1311,6 +1314,15 @@ function FolderAudioFile({
       {meta && <p className="ui-help">{meta}</p>}
       {url && <audio controls preload="metadata" src={url} />}
     </li>
+  );
+}
+
+function SpeechMark() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden>
+      <rect x="10" y="3.5" width="8" height="12" rx="4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M7 13.5a7 7 0 0 0 14 0M14 20.5v3.5M10.5 24h7" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
   );
 }
 
