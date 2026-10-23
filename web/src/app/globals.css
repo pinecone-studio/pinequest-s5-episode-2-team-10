@@ -156,6 +156,26 @@ body {
   flex-shrink: 0;
 }
 
+.app-brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-brand-link:hover {
+  background: var(--hover);
+}
+
+.app-brand-link:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
 .app-side-top {
   position: relative;
 }
@@ -280,6 +300,29 @@ body {
 .app-nav a[aria-current="page"] {
   background: var(--card);
   color: var(--text);
+}
+
+/* Each folder under "Folders": indented, one line, and the list scrolls when it is long. */
+.app-nav-folders {
+  display: grid;
+  gap: 2px;
+  max-height: 50vh;
+  margin: 0;
+  padding: 0 0 0 22px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.app-nav .app-nav-folders a {
+  display: block;
+  height: auto;
+  padding: 7px 10px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-main {
