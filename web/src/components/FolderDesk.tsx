@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
   attachAudio,
@@ -245,7 +245,6 @@ function FolderRoom({
 }) {
   const { tr } = useLang();
   const theme = useTheme();
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const recRef = useRef<PieceRecorder | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const takeBaseRef = useRef("");
@@ -279,12 +278,7 @@ function FolderRoom({
   const showFigma = !!figmaEmbed && !(preferPdf && hasSlide);
   const anySlide = hasSlide || !!figmaEmbed;
   const [pdfEpoch, setPdfEpoch] = useState(0);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
   const [listening, setListening] = useState(false);
-  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
-  const [time, setTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [finalText, setFinalText] = useState("");
   const textRef = useRef("");
   const [sttNote, setSttNote] = useState<string | null>(null);
@@ -362,16 +356,11 @@ function FolderRoom({
   }
 
   useEffect(() => {
-    let audioObject: string | null = null;
     let cancelled = false;
     aliveRef.current = true;
 
     (async () => {
-      const saved = selectedAudio(folder);
-      const [slide, audio] = await Promise.all([
-        getFolderBlob(slideKey(folder.id)),
-        saved ? getFolderBlob(saved.storageKey) : Promise.resolve(null),
-      ]);
+      const slide = await getFolderBlob(slideKey(folder.id));
       if (cancelled) return;
       if (slide) await loadSlide(slide);
       else {
@@ -384,11 +373,6 @@ function FolderRoom({
         rememberUrl(null);
         setSlideNote(null);
       }
-      if (cancelled) return;
-      if (audio) {
-        audioObject = URL.createObjectURL(audio);
-        setAudioUrl(audioObject);
-      } else setAudioUrl(null);
     })();
 
     return () => {
@@ -398,7 +382,6 @@ function FolderRoom({
       pdfRef.current = null;
       if (slideUrlRef.current) URL.revokeObjectURL(slideUrlRef.current);
       slideUrlRef.current = null;
-      if (audioObject) URL.revokeObjectURL(audioObject);
       aliveRef.current = false;
       sttGen.current += 1;
       playingRef.current = false;
@@ -537,7 +520,6 @@ function FolderRoom({
     sttGen.current += 1;
     playingRef.current = false;
     setListening(false);
-    setAnalyser(null);
     const rec = recRef.current;
     const live = liveRef.current;
     recRef.current = null;
@@ -590,7 +572,6 @@ function FolderRoom({
     node.fftSize = 2048;
     ctx.createMediaStreamSource(stream).connect(node);
     liveRef.current = { stream, ctx };
-    setAnalyser(node);
     const rec = new PieceRecorder(stream, node, queueTranscript);
     try {
       rec.start();
@@ -637,14 +618,6 @@ function FolderRoom({
     await loadSlide(file);
   }
 
-  function replaceAudioUrl(next: string | null) {
-    setAudioUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return next;
-    });
-    setTime(0);
-  }
-
   function readDuration(file: Blob): Promise<number | null> {
     return new Promise((resolve) => {
       const url = URL.createObjectURL(file);
@@ -683,7 +656,6 @@ function FolderRoom({
     await putFolderBlob(record.storageKey, file);
     if (!aliveRef.current) return false;
     onChange(next);
-    replaceAudioUrl(URL.createObjectURL(file));
     setSttNote(null);
     return true;
   }
@@ -693,23 +665,15 @@ function FolderRoom({
     await storeAudio(file, file.name, file.type);
   }
 
-  async function pickSaved(id: string) {
-    const next = selectAudio(folder, id);
-    onChange(next);
-    const record = selectedAudio(next);
-    const blob = record ? await getFolderBlob(record.storageKey) : null;
-    if (!aliveRef.current) return;
-    replaceAudioUrl(blob ? URL.createObjectURL(blob) : null);
+  function pickSaved(id: string) {
+    onChange(selectAudio(folder, id));
   }
 
   async function dropAudio(id: string) {
     const { folder: next, storageKey } = detachAudio(folder, id);
     if (storageKey) await deleteFolderBlob(storageKey);
-    onChange(next);
-    const record = selectedAudio(next);
-    const blob = record ? await getFolderBlob(record.storageKey) : null;
     if (!aliveRef.current) return;
-    replaceAudioUrl(blob ? URL.createObjectURL(blob) : null);
+    onChange(next);
   }
 
   function toggleSpeak() {
@@ -822,13 +786,6 @@ function FolderRoom({
     }
   }
 
-  function toggleAudio() {
-    const el = audioRef.current;
-    if (!el) return;
-    if (el.paused) void el.play();
-    else el.pause();
-  }
-
   const spoken = finalText.trim();
   function speakButton() {
     return (
@@ -887,20 +844,83 @@ function FolderRoom({
             </p>
           </div>
         </div>
-        <div className="desk-actions" style={{ justifyContent: "flex-end" }} hidden={full && anySlide}>
-          {anySlide && (
-            <button type="button" className="desk-ghost" onClick={() => setFull(true)}>
-              {tr("fullscreen")}
+        {figmaEditing && !full && (
+          <button
+            type="button"
+            aria-label={tr("close")}
+            onClick={() => (setFigmaEditing(false), setFigmaError(false))}
+            style={{ position: "fixed", inset: 0, zIndex: 4, border: 0, padding: 0, background: "transparent" }}
+          />
+        )}
+        <div className="desk-actions" style={{ justifyContent: "flex-end", position: "relative", zIndex: 5 }} hidden={full && anySlide}>
+          <div className="desk-link-bar" style={{ position: "relative", width: "max-content" }}>
+            <button
+              type="button"
+              className="desk-ghost"
+              aria-expanded={figmaEditing}
+              onClick={() => {
+                if (figmaEditing) {
+                  setFigmaEditing(false);
+                  setFigmaError(false);
+                  return;
+                }
+                setFigmaDraft(folder.figmaUrl ?? "");
+                setFigmaEditing(true);
+              }}
+            >
+              {tr("figmaAdd")}
             </button>
-          )}
+            {figmaEditing && (
+              <form
+                onSubmit={saveFigma}
+                className="desk-link-popover"
+                role="dialog"
+                aria-label={tr("figmaLinkLabel")}
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 6px)",
+                  right: 0,
+                  width: 200,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  padding: 8,
+                  border: "1px solid #3a3a3a",
+                  borderRadius: 10,
+                  background: "#2b2b2b",
+                  color: "#e6e6e6",
+                  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
+                }}
+              >
+                <input
+                  type="url"
+                  value={figmaDraft}
+                  onChange={(e) => setFigmaDraft(e.target.value)}
+                  placeholder="https://www.figma.com/slides/…"
+                  aria-label={tr("figmaLinkLabel")}
+                  autoFocus
+                  style={{ width: "100%", height: 28, padding: "0 8px", fontSize: 12, boxSizing: "border-box" }}
+                />
+                {figmaError && <p className="desk-note">{tr("figmaBad")}</p>}
+                <div className="desk-link-actions">
+                  <button type="button" className="desk-ghost" style={{ height: 28, padding: "0 10px", fontSize: 12 }} onClick={() => (setFigmaEditing(false), setFigmaError(false))}>
+                    {tr("figmaCancel")}
+                  </button>
+                  <button type="submit" className="desk-primary" style={{ height: 28, padding: "0 10px", fontSize: 12 }}>
+                    {tr("figmaSave")}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
           <FeedbackModelSelect value={model} onChange={setModel} />
         </div>
 
         <div className="desk-stage">
-          <div>
+          <div className="desk-slide-slot" style={{ position: "relative", aspectRatio: "16 / 9" }}>
             <div
               className={`desk-slide-frame${full && anySlide ? (showFigma ? " desk-full desk-full-figma" : " desk-full") : ""}`}
-              style={full && anySlide ? undefined : { position: "relative", aspectRatio: "16 / 9" }}
+              style={full && anySlide ? undefined : { position: "absolute", inset: 0 }}
             >
               {showFigma ? (
                 <div className="desk-slide desk-figma" style={{ height: "100%" }}>
@@ -930,76 +950,23 @@ function FolderRoom({
                   {speakButton()}
                 </div>
               )}
-              {!full && figmaEditing && (
+              {!full && anySlide && (
                 <button
                   type="button"
-                  aria-label={tr("close")}
-                  onClick={() => (setFigmaEditing(false), setFigmaError(false))}
-                  style={{ position: "absolute", inset: 0, zIndex: 2, border: 0, padding: 0, background: "transparent" }}
-                />
-              )}
-              {!full && (
-                <div className="desk-slide-link" style={{ position: "absolute", zIndex: 3, top: 14, right: 14, width: "max-content" }}>
-                  <button
-                    type="button"
-                    className="desk-ghost"
-                    aria-expanded={figmaEditing}
-                    style={{ background: "rgba(20, 20, 20, 0.72)", color: "#e6e6e6", borderColor: "#3a3a3a" }}
-                    onClick={() => {
-                      if (figmaEditing) {
-                        setFigmaEditing(false);
-                        setFigmaError(false);
-                        return;
-                      }
-                      setFigmaDraft(folder.figmaUrl ?? "");
-                      setFigmaEditing(true);
-                    }}
-                  >
-                    {tr("figmaAdd")}
-                  </button>
-                  {figmaEditing && (
-                    <form
-                      onSubmit={saveFigma}
-                      className="desk-link-popover"
-                      role="dialog"
-                      aria-label={tr("figmaLinkLabel")}
-                      style={{
-                        position: "absolute",
-                        top: "calc(100% + 6px)",
-                        right: 0,
-                        width: 200,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                        padding: 8,
-                        border: "1px solid #3a3a3a",
-                        borderRadius: 10,
-                        background: "#2b2b2b",
-                        color: "#e6e6e6",
-                        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
-                      }}
-                    >
-                      <input
-                        type="url"
-                        value={figmaDraft}
-                        onChange={(e) => setFigmaDraft(e.target.value)}
-                        placeholder="https://www.figma.com/slides/…"
-                        aria-label={tr("figmaLinkLabel")}
-                        autoFocus
-                        style={{ width: "100%", height: 28, padding: "0 8px", fontSize: 12, boxSizing: "border-box" }}
-                      />
-                      {figmaError && <p className="desk-note">{tr("figmaBad")}</p>}
-                      <div className="desk-link-actions">
-                        <button type="button" className="desk-ghost" style={{ height: 28, padding: "0 10px", fontSize: 12 }} onClick={() => (setFigmaEditing(false), setFigmaError(false))}>
-                          {tr("figmaCancel")}
-                        </button>
-                        <button type="submit" className="desk-primary" style={{ height: 28, padding: "0 10px", fontSize: 12 }}>
-                          {tr("figmaSave")}
-                        </button>
-                      </div>
-                    </form>
-                  )}
-                </div>
+                  className="desk-ghost desk-full-toggle"
+                  style={{
+                    position: "absolute",
+                    zIndex: 3,
+                    top: 14,
+                    right: 14,
+                    background: "rgba(20, 20, 20, 0.72)",
+                    color: "#e6e6e6",
+                    borderColor: "#3a3a3a",
+                  }}
+                  onClick={() => setFull(true)}
+                >
+                  {tr("fullscreen")}
+                </button>
               )}
               {full && anySlide && (
                 <div className="desk-full-bar">
@@ -1013,6 +980,8 @@ function FolderRoom({
                 </div>
               )}
             </div>
+          </div>
+          <div className="desk-below">
             {!full && (
               <div className="desk-tools">
                 <div className="desk-pages">{!showFigma && pageButtons()}</div>
@@ -1057,7 +1026,7 @@ function FolderRoom({
           <aside className="desk-speech">
             <h2>{tr("speechText")}</h2>
             {spoken && !listening && pending === 0 && !fileBusy && <p className="desk-sub">{tr("speechSaved")}</p>}
-            <div className="desk-speech-body" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 148, marginTop: 16 }}>
+            <div className="desk-speech-body" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, marginTop: 16 }}>
               {spoken ? (
                 <p className="desk-transcript">
                   {spoken}
@@ -1124,16 +1093,6 @@ function FolderRoom({
         </div>
 
         <div>
-        <WaveAudio
-          url={audioUrl}
-          name={folder.audioName}
-          playing={playing}
-          live={analyser}
-          time={time}
-          duration={duration}
-          onToggle={toggleAudio}
-          onPick={chooseAudio}
-        />
         <section className="folder-audios" aria-labelledby={`${folder.id}-audios`}>
           <div className="folder-audios-bar">
             <h2 id={`${folder.id}-audios`}>{tr("audio")}</h2>
@@ -1159,24 +1118,13 @@ function FolderRoom({
                   key={audio.id}
                   audio={audio}
                   selected={audio.id === folder.audioId}
-                  onSelect={() => void pickSaved(audio.id)}
+                  onSelect={() => pickSaved(audio.id)}
                   onRemove={() => void dropAudio(audio.id)}
                 />
               ))}
             </ul>
           )}
         </section>
-        <audio
-          ref={audioRef}
-          src={audioUrl ?? undefined}
-          preload="metadata"
-          className="hidden"
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onEnded={() => setPlaying(false)}
-          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
-          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
-        />
         </div>
       </div>
     </div>
@@ -1349,157 +1297,3 @@ function FolderMark() {
   );
 }
 
-const SAMPLE_WAVE = [0.12, 0.4, -0.2, 0.62, 0.95, 0.25, -0.45, 0.7, -0.15, 0.5, -0.6, 0.22, 0.58, -0.08, 0.33, -0.4, 0.18, 0.46, -0.22, 0.12];
-
-function wavePath(peaks: number[]) {
-  const w = 640;
-  const h = 160;
-  const mid = h / 2;
-  const step = w / Math.max(1, peaks.length - 1);
-  return peaks
-    .map((peak, i) => {
-      const y = mid - peak * (mid - 12);
-      return `${i === 0 ? "M" : "L"}${+(i * step).toFixed(1)},${+y.toFixed(1)}`;
-    })
-    .join(" ");
-}
-
-function PlayMark() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden className="ml-0.5">
-      <path fill="currentColor" d="M4 2.2v9.6l8-4.8-8-4.8Z" />
-    </svg>
-  );
-}
-
-function livePeaksFrom(analyser: AnalyserNode, data: Uint8Array<ArrayBuffer>) {
-  analyser.getByteTimeDomainData(data);
-  const count = 32;
-  const block = Math.floor(data.length / count);
-  const next: number[] = [];
-  for (let i = 0; i < count; i++) {
-    const sample = (data[i * block + Math.floor(block / 2)] - 128) / 128;
-    next.push(Math.max(-1, Math.min(1, sample * 1.8)));
-  }
-  return next;
-}
-
-function WaveAudio({
-  url,
-  name,
-  playing,
-  live,
-  time,
-  duration,
-  onToggle,
-  onPick,
-}: {
-  url: string | null;
-  name: string | null;
-  playing: boolean;
-  live: AnalyserNode | null;
-  time: number;
-  duration: number;
-  onToggle: () => void;
-  onPick: (file: File | undefined) => void;
-}) {
-  const { tr } = useLang();
-  const clipId = useId().replace(/:/g, "");
-  const [peaks, setPeaks] = useState<number[]>(SAMPLE_WAVE);
-  const [spoken, setSpoken] = useState<number[] | null>(null);
-  const progress = live ? 1 : duration > 0 ? Math.min(1, time / duration) : 0;
-  const d = wavePath(spoken ?? peaks);
-
-  useEffect(() => {
-    if (!url) return setPeaks(SAMPLE_WAVE);
-    let cancelled = false;
-    (async () => {
-      try {
-        const buf = await (await fetch(url)).arrayBuffer();
-        const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-        if (!Ctx) return;
-        const ctx = new Ctx();
-        const audio = await ctx.decodeAudioData(buf.slice(0));
-        const data = audio.getChannelData(0);
-        const count = 96;
-        const block = Math.max(1, Math.floor(data.length / count));
-        const next: number[] = [];
-        for (let i = 0; i < count; i++) {
-          let sum = 0;
-          let n = 0;
-          for (let j = 0; j < block; j += 8) {
-            sum += data[i * block + j] || 0;
-            n++;
-          }
-          next.push(sum / Math.max(1, n));
-        }
-        const top = Math.max(...next.map((v) => Math.abs(v)), 0.01);
-        if (!cancelled) setPeaks(next.map((v) => v / top));
-        await ctx.close();
-      } catch {
-        if (!cancelled) setPeaks(SAMPLE_WAVE);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [url]);
-
-  useEffect(() => {
-    if (!live) return;
-    const data = new Uint8Array(live.fftSize);
-    let raf = 0;
-    let last = 0;
-    const tick = (now: number) => {
-      raf = requestAnimationFrame(tick);
-      if (now - last < 180) return;
-      last = now;
-      setSpoken(livePeaksFrom(live, data));
-    };
-    raf = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(raf);
-      setSpoken(null);
-    };
-  }, [live]);
-
-  return (
-    <div className="ui-wave">
-      <button type="button" onClick={url && !live ? onToggle : undefined} className="relative block w-full px-4 pb-4 pt-6 text-left" disabled={!url || Boolean(live)}>
-        <svg viewBox="0 0 640 160" className="h-28 w-full" aria-hidden>
-          <path d={d} fill="none" stroke="var(--line)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-          <path
-            d={d}
-            fill="none"
-            stroke="var(--text-primary)"
-            strokeWidth="3"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            clipPath={`url(#${clipId})`}
-          />
-          <clipPath id={clipId}>
-            <rect width={640 * progress} height="160" />
-          </clipPath>
-        </svg>
-        <span className="absolute bottom-4 left-4 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--inset)] text-[var(--text-primary)]">
-          {playing ? <span className="h-2.5 w-2.5 rounded-sm bg-[var(--text-primary)]" /> : <PlayMark />}
-        </span>
-      </button>
-      <div className="ui-wave-foot">
-        <span className="truncate">{name ?? tr("audio")}</span>
-        <span className="shrink-0 tabular-nums">
-          {live ? tr("listening") : url ? `${formatClock(time)} / ${formatClock(duration)}` : tr("noFile")}
-        </span>
-        <label className="shrink-0 cursor-pointer underline">
-          {tr("upload")}
-          <input
-            type="file"
-            accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg"
-            className="sr-only"
-            onChange={(e) => onPick(e.target.files?.[0])}
-          />
-        </label>
-      </div>
-    </div>
-  );
-}

@@ -536,12 +536,34 @@ body {
   font-size: 13px;
 }
 
+.desk-slide-slot {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  min-width: 0;
+}
+
 .desk-slide-frame {
   position: relative;
 }
 
-.desk-slide-frame:not(.desk-full) {
-  aspect-ratio: 16 / 9;
+.desk-slide-slot > .desk-slide-frame:not(.desk-full) {
+  position: absolute;
+  inset: 0;
+}
+
+.desk-link-bar {
+  position: relative;
+  width: max-content;
+}
+
+.desk-full-toggle {
+  position: absolute;
+  z-index: 3;
+  top: 14px;
+  right: 14px;
+  background: rgba(20, 20, 20, 0.72);
+  color: #e6e6e6;
+  border-color: #3a3a3a;
 }
 
 .desk-slide-frame:not(.desk-full) > .desk-slide,
@@ -1182,6 +1204,8 @@ body {
   display: flex;
   min-height: 0;
   flex-direction: column;
+  aspect-ratio: 16 / 9;
+  overflow: auto;
   padding: 24px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -1207,6 +1231,7 @@ body {
   flex-direction: column;
   min-height: 148px;
   margin-top: 16px;
+  overflow: auto;
 }
 
 .desk-speech .desk-transcript {
@@ -1367,16 +1392,41 @@ body {
   background: var(--negative);
 }
 
+.desk-below {
+  min-width: 0;
+}
+
 @media (min-width: 900px) {
   .desk-stage {
     grid-template-columns: minmax(0, 762fr) minmax(280px, 374fr);
   }
 
+  .desk-slide-slot {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
   .desk-speech {
+    grid-column: 2;
+    grid-row: 1;
     position: sticky;
     top: 14px;
-    max-height: calc(100vh - 28px);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    aspect-ratio: auto;
+    height: 0;
+    min-height: 100%;
     overflow: auto;
+  }
+
+  .desk-speech-body {
+    min-height: 0;
+  }
+
+  .desk-below {
+    grid-column: 1;
+    grid-row: 2;
   }
 }
 
@@ -1905,26 +1955,6 @@ textarea.ui-input {
 .ui-tile.is-image_only {
   border-style: dashed;
   color: var(--text-helper);
-}
-
-.ui-wave {
-  overflow: hidden;
-  margin-top: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--card);
-  color: var(--text-primary);
-}
-
-.ui-wave-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border-top: 1px solid var(--line);
-  color: var(--text-secondary);
-  font-size: 12px;
 }
 
 .app-main {

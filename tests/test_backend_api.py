@@ -25,8 +25,14 @@ def client(tmp_path, monkeypatch):
 
 
 def _headers(client: TestClient) -> dict[str, str]:
-    response = client.post("/api/v1/users")
-    assert response.status_code == 201
+    response = client.post("/api/v1/auth/demo")
+    assert response.status_code == 200
+    return {"X-Access-Token": response.json()["access_token"]}
+
+
+def _user_headers(client: TestClient, email: str) -> dict[str, str]:
+    response = client.post("/api/v1/auth/register", json={"email": email, "password": "password1"})
+    assert response.status_code == 201, response.text
     return {"X-Access-Token": response.json()["access_token"]}
 
 
@@ -163,13 +169,13 @@ def test_new_attempt_receives_project_fields(client):
 
 
 def test_project_fields_are_not_visible_to_another_user(client):
-    owner_headers = _headers(client)
+    owner_headers = _user_headers(client, "owner@example.com")
     project = client.post(
         "/api/v1/projects",
         headers=owner_headers,
         json={"name": "Private"},
     ).json()
-    other_headers = _headers(client)
+    other_headers = _user_headers(client, "other@example.com")
 
     response = client.get(f"/api/v1/projects/{project['id']}", headers=other_headers)
 
