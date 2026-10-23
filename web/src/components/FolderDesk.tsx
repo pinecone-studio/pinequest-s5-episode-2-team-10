@@ -1013,14 +1013,14 @@ function WaveAudio({
   }, [live]);
 
   return (
-    <div className="mt-[14px] overflow-hidden rounded-[20px] bg-white text-[#111]">
+    <div className="ui-wave">
       <button type="button" onClick={url && !live ? onToggle : undefined} className="relative block w-full px-4 pb-4 pt-6 text-left" disabled={!url || Boolean(live)}>
-        <svg viewBox="0 0 640 160" className="h-36 w-full" aria-hidden>
-          <path d={d} fill="none" stroke="#c5d7fb" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+        <svg viewBox="0 0 640 160" className="h-28 w-full" aria-hidden>
+          <path d={d} fill="none" stroke="#333436" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
           <path
             d={d}
             fill="none"
-            stroke="#5b8def"
+            stroke="#e6e6e6"
             strokeWidth="3"
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -1030,11 +1030,11 @@ function WaveAudio({
             <rect width={640 * progress} height="160" />
           </clipPath>
         </svg>
-        <span className="absolute bottom-4 left-4 flex h-8 w-8 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700">
-          {playing ? <span className="h-2.5 w-2.5 rounded-sm bg-zinc-700" /> : <PlayMark />}
+        <span className="absolute bottom-4 left-4 flex h-8 w-8 items-center justify-center rounded-full border border-[#333436] bg-[#1a1b1c] text-[#e6e6e6]">
+          {playing ? <span className="h-2.5 w-2.5 rounded-sm bg-[#e6e6e6]" /> : <PlayMark />}
         </span>
       </button>
-      <div className="flex items-center justify-between gap-3 border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
+      <div className="ui-wave-foot">
         <span className="truncate">{name ?? tr("audio")}</span>
         <span className="shrink-0 tabular-nums">
           {live ? tr("listening") : url ? `${formatClock(time)} / ${formatClock(duration)}` : tr("noFile")}

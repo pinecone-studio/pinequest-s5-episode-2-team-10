@@ -829,7 +829,7 @@ body {
   align-items: center;
   gap: 14px;
   width: 100%;
-  height: 72px;
+  height: 48px;
   padding: 0;
   border: 0;
   border-top: 1px solid var(--rule);
@@ -848,7 +848,7 @@ body {
 
 .desk-row strong {
   display: block;
-  font-size: var(--font-size-section);
+  font-size: var(--font-size-body);
   font-weight: 500;
 }
 
@@ -1330,4 +1330,327 @@ body {
 
 .desk-offtopic li span {
   color: var(--muted);
+}
+
+/* Shared controls. Pages use these instead of one-off colors. */
+.ui-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  padding: 16px;
+}
+
+.ui-inset {
+  border-radius: var(--radius-md);
+  background: var(--inset);
+  padding: 8px 12px;
+}
+
+.ui-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-title);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.ui-section {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-section);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.ui-muted {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 1.45;
+}
+
+.ui-help {
+  color: var(--text-helper);
+  font-size: var(--font-size-helper);
+  line-height: 1.45;
+}
+
+.ui-ok {
+  color: var(--status-positive);
+}
+
+.ui-bad {
+  color: var(--status-negative);
+}
+
+.ui-link {
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.ui-link:hover {
+  color: var(--text-primary);
+}
+
+.ui-link:focus-visible,
+.ui-input:focus-visible,
+.ui-btn:focus-visible,
+.ui-tab:focus-visible,
+.ui-choice:focus-within {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+.ui-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--inset);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+textarea.ui-input {
+  height: auto;
+  min-height: 96px;
+  padding: 10px 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.ui-input::placeholder {
+  color: var(--text-helper);
+}
+
+.ui-input:hover,
+.ui-btn:hover:not(:disabled),
+.ui-choice:hover,
+.ui-drop:hover,
+.ui-row:hover {
+  border-color: #4a4b4d;
+}
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ui-btn:disabled,
+.ui-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ui-btn-primary {
+  border: 0;
+  border-radius: 999px;
+  background: var(--text-primary);
+  color: var(--on-primary);
+}
+
+.ui-btn-primary:hover:not(:disabled) {
+  background: #f4f4f4;
+}
+
+.ui-btn-block {
+  width: 100%;
+}
+
+.ui-tabs {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.ui-tab {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.ui-tab.is-on {
+  background: var(--text-primary);
+  color: var(--on-primary);
+}
+
+.ui-drop,
+.ui-choice,
+.ui-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.ui-drop {
+  border-style: dashed;
+  cursor: pointer;
+}
+
+.ui-drop:hover,
+.ui-choice:hover,
+.ui-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ui-choice.is-on {
+  border-color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ui-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ui-row.is-on {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.ui-badge.is-ok {
+  background: color-mix(in srgb, var(--status-positive) 18%, transparent);
+  color: var(--status-positive);
+}
+
+.ui-badge.is-warn {
+  background: color-mix(in srgb, var(--status-warning) 18%, transparent);
+  color: var(--status-warning);
+}
+
+.ui-badge.is-bad {
+  background: color-mix(in srgb, var(--status-negative) 18%, transparent);
+  color: var(--status-negative);
+}
+
+.ui-alert {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--status-negative) 40%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--status-negative) 12%, var(--card));
+  color: #e7b4bc;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.ui-alert.is-warn {
+  border-color: color-mix(in srgb, var(--status-warning) 40%, var(--line));
+  background: color-mix(in srgb, var(--status-warning) 12%, var(--card));
+  color: var(--status-warning);
+}
+
+.ui-meter {
+  overflow: hidden;
+  height: 6px;
+  border-radius: 999px;
+  background: #333436;
+}
+
+.ui-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--text-primary);
+}
+
+.ui-quote {
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.ui-score {
+  font-size: 22px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.ui-tile.is-covered {
+  border-color: color-mix(in srgb, var(--status-positive) 55%, var(--line));
+}
+
+.ui-tile.is-partial {
+  border-color: color-mix(in srgb, var(--status-warning) 55%, var(--line));
+}
+
+.ui-tile.is-missed {
+  border-color: color-mix(in srgb, var(--status-negative) 55%, var(--line));
+}
+
+.ui-tile.is-image_only {
+  border-style: dashed;
+  color: var(--text-helper);
+}
+
+.ui-wave {
+  overflow: hidden;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--text-primary);
+}
+
+.ui-wave-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.app-main {
+  overflow-x: clip;
 }
