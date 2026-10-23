@@ -1,7 +1,5 @@
 """Contract tests for the project fields sent by the web client."""
 
-from uuid import uuid4
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, create_engine
@@ -27,10 +25,7 @@ def client(tmp_path, monkeypatch):
 
 
 def _headers(client: TestClient) -> dict[str, str]:
-    response = client.post(
-        "/api/v1/auth/register",
-        json={"email": f"test-{uuid4().hex}@example.com", "password": "test-password-123"},
-    )
+    response = client.post("/api/v1/users")
     assert response.status_code == 201
     return {"X-Access-Token": response.json()["access_token"]}
 
