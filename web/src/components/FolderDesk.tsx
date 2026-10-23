@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
@@ -9,13 +9,15 @@ import {
   attachSlide,
   audioFileError,
   deleteFolderBlob,
-  deleteFolderData,
   detachAudio,
+  folderSnapshot,
   getFolderBlob,
-  loadFolders,
   loadSpeech,
   putFolderBlob,
+  removeFolder,
   saveFolders,
+  serverFolderSnapshot,
+  subscribeFolders,
   saveSpeech,
   selectAudio,
   selectedAudio,
@@ -49,16 +51,16 @@ function formatClock(seconds: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-const TRANSCRIPT_PREVIEW_WORDS = 60; // longer speech text is cut until "See more"
+const TRANSCRIPT_PREVIEW_WORDS = 60; // longer speech text is cut; "See more" opens all of it in a dialog
 
 /**
  * The speech text to show: all of it when open or short; otherwise the first words, or the
  * latest ones while speech is still coming in, so new words stay in view.
  */
-function transcriptPreview(text: string, open: boolean, live: boolean): { text: string; long: boolean } {
+function transcriptPreview(text: string, live: boolean): { text: string; long: boolean } {
   const words = text.split(/\s+/).filter(Boolean);
   const long = words.length > TRANSCRIPT_PREVIEW_WORDS;
-  if (open || !long) return { text, long };
+  if (!long) return { text, long };
   return live
     ? { text: `… ${words.slice(-TRANSCRIPT_PREVIEW_WORDS).join(" ")}`, long }
     : { text: `${words.slice(0, TRANSCRIPT_PREVIEW_WORDS).join(" ")} …`, long };
@@ -76,7 +78,8 @@ function isCancel(err: unknown) {
 export default function FolderDesk() {
   const { tr } = useLang();
   const [ready, setReady] = useState(false);
-  const [folders, setFolders] = useState<FolderMeta[]>([]);
+  // The saved list, shared with the sidebar (which can rename and delete folders too).
+  const folders = useSyncExternalStore(subscribeFolders, folderSnapshot, serverFolderSnapshot);
   // The open folder lives in the URL (?folder=<id>), so the sidebar can link to it and Back works.
   const router = useRouter();
   const pathname = usePathname();
@@ -103,12 +106,10 @@ export default function FolderDesk() {
   }
 
   useEffect(() => {
-    setFolders(loadFolders());
     setReady(true);
   }, []);
 
   function persist(next: FolderMeta[]) {
-    setFolders(next);
     saveFolders(next);
   }
 
@@ -251,8 +252,7 @@ export default function FolderDesk() {
 
   async function deleteFolder(folder: FolderMeta) {
     setOpenId(null);
-    persist(folders.filter((f) => f.id !== folder.id));
-    await deleteFolderData(folder);
+    await removeFolder(folder);
   }
 
   return (
@@ -320,8 +320,10 @@ function FolderRoom({
   const [slideNote, setSlideNote] = useState<"pdfOpenFail" | "slideDrawFail" | null>(null);
   const [slideMsg, setSlideMsg] = useState<string | null>(null); // converting, or why a picked file was refused
   const [full, setFull] = useState(false);
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [transcriptOpen, setTranscriptOpen] = useState(false); // the full speech text in a dialog
   const transcriptRef = useRef<HTMLParagraphElement | null>(null);
+  const previewRef = useRef<HTMLParagraphElement | null>(null);
+  const [previewCut, setPreviewCut] = useState(false); // the preview is taller than the speech card
   const [probing, setProbing] = useState(false);
   const [probeNote, setProbeNote] = useState<string | null>(null);
   const [resultOpen, setResultOpen] = useState(false); // the analysis dialog
@@ -839,9 +841,24 @@ function FolderRoom({
   }
 
   const spoken = finalText.trim();
-  const transcript = transcriptPreview(spoken, transcriptOpen, listening || pending > 0);
+  const transcript = transcriptPreview(spoken, listening || pending > 0);
 
-  // The opened text scrolls in its box; while speech comes in, keep the newest words in view.
+  // The speech card has the slide's height: the preview shows what fits (newest words while speech
+  // comes in), and "See more" appears whenever some of it is cut off.
+  useEffect(() => {
+    const box = previewRef.current;
+    if (!box) return;
+    const measure = () => {
+      if (listening || pending > 0) box.scrollTop = box.scrollHeight;
+      setPreviewCut(box.scrollHeight > box.clientHeight + 1);
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    measure();
+    return () => observer.disconnect();
+  }, [spoken, listening, pending]);
+
+  // The dialog scrolls; while speech comes in, keep the newest words in view.
   useEffect(() => {
     const box = transcriptRef.current;
     if (box && transcriptOpen && (listening || pending > 0)) box.scrollTop = box.scrollHeight;
@@ -1085,29 +1102,33 @@ function FolderRoom({
           <aside className="desk-speech">
             <h2>{tr("speechText")}</h2>
             {spoken && !listening && pending === 0 && !fileBusy && <p className="desk-sub">{tr("speechSaved")}</p>}
-            <div className="desk-speech-body" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, marginTop: 16, overflowY: transcriptOpen ? "hidden" : "auto" }}>
+            <div className="desk-speech-body" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, marginTop: 16, overflowY: "hidden" }}>
               {spoken ? (
                 <>
-                  <p
-                    ref={transcriptRef}
-                    className={transcriptOpen ? "desk-transcript desk-transcript-scroll" : "desk-transcript"}
-                    id={`${folder.id}-transcript`}
-                    tabIndex={transcriptOpen ? 0 : undefined}
-                  >
+                  <p ref={previewRef} className={previewCut ? "desk-transcript desk-transcript-preview is-cut" : "desk-transcript desk-transcript-preview"}>
                     {transcript.text}
                     {(listening || pending > 0) && <span className="desk-speech-pending"> …</span>}
                   </p>
-                  {transcript.long && (
+                  {(transcript.long || previewCut) && (
                     <button
                       type="button"
                       className="desk-link desk-transcript-toggle"
-                      aria-expanded={transcriptOpen}
-                      aria-controls={`${folder.id}-transcript`}
-                      onClick={() => setTranscriptOpen((open) => !open)}
+                      aria-haspopup="dialog"
+                      onClick={() => setTranscriptOpen(true)}
                     >
-                      {transcriptOpen ? tr("lessInfo") : tr("seeMore")}
+                      {tr("seeMore")}
                     </button>
                   )}
+                  {transcriptOpen &&
+                    createPortal(
+                      <Modal title={tr("speechText")} onClose={() => setTranscriptOpen(false)} wide>
+                        <p ref={transcriptRef} className="desk-transcript desk-transcript-full" tabIndex={0}>
+                          {spoken}
+                          {(listening || pending > 0) && <span className="desk-speech-pending"> …</span>}
+                        </p>
+                      </Modal>,
+                      document.body,
+                    )}
                 </>
               ) : (
                 <div className="desk-speech-empty">
@@ -1264,7 +1285,7 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pdf, setPdf] = useState(false);
-  const title = folder.slide?.title || folder.slideName || folder.name;
+  const title = folder.name; // the pitch's own name, which the sidebar can rename
   const updated = latestUpdated(folder);
 
   useEffect(() => {

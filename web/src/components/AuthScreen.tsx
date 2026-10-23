@@ -106,14 +106,6 @@ export default function AuthScreen() {
     setAgain("");
   }
 
-  function goBack() {
-    if (registering) {
-      switchMode("login");
-      return;
-    }
-    if (window.history.length > 1) window.history.back();
-  }
-
   async function enterDemo() {
     setError(null);
     setBusy(true);
@@ -144,12 +136,6 @@ export default function AuthScreen() {
 
   return (
     <div className="auth-screen">
-      <button type="button" className="auth-back" onClick={goBack}>
-        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-          <path d="M8.5 2.5 4 7l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        Back
-      </button>
       <div className="auth-theme">
         <ThemeToggle />
       </div>

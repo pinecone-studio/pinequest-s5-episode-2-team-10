@@ -1,4 +1,5 @@
 import { SHARED_BLOBS, SHARED_FOLDER, SHARED_SPEECH } from "./defaultFolder";
+import { DEMO_BLOBS, DEMO_FOLDERS, DEMO_SPEECHES } from "./demoPitches";
 import { normalizeFolder, type FolderAudio, type FolderSlide } from "./folderFiles";
 
 export type { FolderAudio, FolderSlide };
@@ -95,25 +96,42 @@ function parseList(raw: string | null): FolderMeta[] | null {
 
 const SHARED_FLAG = "pitchcoach:shared-ok";
 
-/** Adds the shared "ok" folder once per account. Deleting it afterwards keeps it gone. */
-function withSharedFolder(folders: FolderMeta[]): FolderMeta[] {
-  const normalized = folders.map(normalizeFolder);
-  const flag = userId ? `${SHARED_FLAG}:${userId}` : null;
-  if (normalized.some((folder) => folder.id === SHARED_FOLDER.id)) {
-    if (flag) localStorage.setItem(flag, "1");
-    return normalized;
-  }
-  if (flag && localStorage.getItem(flag) === "1") return normalized;
-  const next = [normalizeFolder(SHARED_FOLDER), ...normalized];
+const DEMO_FLAG = "pitchcoach:demo-pitches:v1";
+
+/** Adds `seeds` once per account (flag `flagKey`), at the end of the list. Deleted ones stay gone. */
+function withSeeds(folders: FolderMeta[], seeds: FolderMeta[], flagKey: string, atStart = false): FolderMeta[] {
+  const flag = userId ? `${flagKey}:${userId}` : null;
+  if (flag && localStorage.getItem(flag) === "1") return folders;
+  const missing = seeds.filter((seed) => !folders.some((folder) => folder.id === seed.id)).map(normalizeFolder);
+  const next = atStart ? [...missing, ...folders] : [...folders, ...missing];
   const key = listKey();
-  if (key) localStorage.setItem(key, JSON.stringify(next));
+  if (key && missing.length) localStorage.setItem(key, JSON.stringify(next));
   if (flag) localStorage.setItem(flag, "1");
   return next;
 }
 
+/** The shared folder's first name; saved copies that still have it take the current one. */
+const SHARED_OLD_NAME = "ok";
+
+/** Adds the shared "Coach" folder and the demo pitches once per account. Deleting them keeps them gone. */
+function withSharedFolder(folders: FolderMeta[]): FolderMeta[] {
+  let renamed = false;
+  const current = folders.map((folder) => {
+    if (folder.id !== SHARED_FOLDER.id || folder.name !== SHARED_OLD_NAME) return normalizeFolder(folder);
+    renamed = true;
+    return normalizeFolder({ ...folder, name: SHARED_FOLDER.name });
+  });
+  if (renamed) {
+    const key = listKey();
+    if (key) localStorage.setItem(key, JSON.stringify(current));
+  }
+  const withCoach = withSeeds(current, [SHARED_FOLDER], SHARED_FLAG, true);
+  return withSeeds(withCoach, DEMO_FOLDERS, DEMO_FLAG);
+}
+
 export function loadFolders(): FolderMeta[] {
   const key = listKey();
-  if (!key) return [normalizeFolder(SHARED_FOLDER)];
+  if (!key) return [SHARED_FOLDER, ...DEMO_FOLDERS].map(normalizeFolder);
   try {
     const own = parseList(localStorage.getItem(key));
     if (own) return withSharedFolder(own);
@@ -175,7 +193,7 @@ export async function getFolderBlob(key: string): Promise<Blob | null> {
   });
   db.close();
   if (blob) return blob;
-  const shared = SHARED_BLOBS[key];
+  const shared = SHARED_BLOBS[key] ?? DEMO_BLOBS[key];
   if (!shared) return null;
   try {
     const res = await fetch(shared.url);
@@ -203,6 +221,19 @@ export const slideKey = (id: string) => `${id}:slide`;
 export const audioKey = (id: string) => `${id}:audio`;
 const speechKey = (id: string) => `pitchcoach:speech:${id}`;
 
+/** Renames a folder in the saved list (the sidebar and the folder page both follow it). */
+export function renameFolder(id: string, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  saveFolders(folderSnapshot().map((f) => (f.id === id ? { ...f, name: trimmed } : f)));
+}
+
+/** Removes a folder from the saved list, then its files and speech text. */
+export async function removeFolder(folder: FolderMeta) {
+  saveFolders(folderSnapshot().filter((f) => f.id !== folder.id));
+  await deleteFolderData(folder);
+}
+
 /** Removes a folder's files and saved speech text from this browser. The list is saved separately. */
 export async function deleteFolderData(folder: FolderMeta) {
   const keys = new Set([slideKey(folder.id), audioKey(folder.id), ...(folder.audios ?? []).map((a) => a.storageKey)]);
@@ -217,7 +248,7 @@ export async function deleteFolderData(folder: FolderMeta) {
 export function loadSpeech(id: string): string {
   if (typeof window === "undefined") return "";
   try {
-    return localStorage.getItem(speechKey(id)) ?? (id === SHARED_FOLDER.id ? SHARED_SPEECH : "");
+    return localStorage.getItem(speechKey(id)) ?? (id === SHARED_FOLDER.id ? SHARED_SPEECH : DEMO_SPEECHES[id] ?? "");
   } catch {
     return "";
   }

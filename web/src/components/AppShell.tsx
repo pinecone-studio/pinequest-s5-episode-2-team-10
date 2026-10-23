@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
-import { folderSnapshot, serverFolderSnapshot, subscribeFolders } from "@/lib/folderStore";
 import { useLang } from "@/lib/i18nClient";
 import { clearSession, useAccount } from "@/lib/session";
 import LangToggle from "./LangToggle";
 import SayloMark from "./SayloMark";
+import SidebarPitches from "./SidebarPitches";
 import ThemeToggle from "./ThemeToggle";
 
 /** Shared signed-in frame: one sidebar, one content area. */
@@ -25,7 +25,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [busy, setBusy] = useState(false);
   const home = pathname === "/" || pathname === "/figma";
   const openFolder = useSearchParams().get("folder");
-  const folders = useSyncExternalStore(subscribeFolders, folderSnapshot, serverFolderSnapshot);
   const email = account?.email ?? "";
   const label = email.includes("@") ? email.slice(0, email.indexOf("@")) : email;
 
@@ -126,26 +125,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </button>
         </div>
         <nav className="app-nav" aria-label="SAYLO">
-          <Link href="/" aria-current={home && !openFolder ? "page" : undefined} onClick={() => setMenuOpen(false)}>
-            <FolderIcon />
-            {tr("folders")}
-          </Link>
-          {folders.length > 0 && (
-            <ul className="app-nav-folders">
-              {folders.map((folder) => (
-                <li key={folder.id}>
-                  <Link
-                    href={`/?folder=${encodeURIComponent(folder.id)}`}
-                    aria-current={home && openFolder === folder.id ? "page" : undefined}
-                    title={folder.name}
-                    onClick={() => setMenuOpen(false)}
-                  >
-                    {folder.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          <SidebarPitches home={home} openId={openFolder} onNavigate={() => setMenuOpen(false)} />
         </nav>
       </aside>
       <div className="app-main">
@@ -239,16 +219,3 @@ function ChevronIcon() {
   );
 }
 
-function FolderIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
-      <path
-        d="M2.5 5.5h4l1.2-1.5H15.5v9.5h-13V5.5Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
