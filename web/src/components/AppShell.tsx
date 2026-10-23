@@ -54,7 +54,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       return;
     }
     const rect = accountBtnRef.current?.getBoundingClientRect();
-    if (rect) setPanelBox({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+    if (rect) setPanelBox({ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 220) });
     setAccountOpen(true);
   }
 
@@ -131,21 +131,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-label={label || "SAYLO"}
-            style={{ top: panelBox.top, left: panelBox.left, width: panelBox.width }}
+            style={{
+              position: "fixed",
+              zIndex: 61,
+              top: panelBox.top,
+              left: panelBox.left,
+              width: panelBox.width,
+              maxHeight: "calc(100vh - 24px)",
+              overflow: "auto",
+              boxSizing: "border-box",
+              padding: 8,
+              border: "1px solid #3a3a3a",
+              borderRadius: 12,
+              background: "#2b2b2b",
+              color: "#e6e6e6",
+            }}
           >
             <div className="account-panel-section">
               <p>{tr("currentAccount")}</p>
-              <div className="account-panel-user">
+              <div className="account-panel-user" style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
                 <span className="app-avatar" aria-hidden>
                   {(label || email || "?").slice(0, 1).toUpperCase()}
                 </span>
-                <span>
-                  <strong>{label || "SAYLO"}</strong>
-                  {email && <span>{email}</span>}
+                <span className="account-panel-copy" style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
+                  <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label || "SAYLO"}</strong>
+                  {email && (
+                    <span style={{ display: "block", overflow: "hidden", color: "#a0a1a3", fontSize: 12, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {email}
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
-            <button type="button" className="account-panel-logout" onClick={logout} disabled={busy}>
+            <button
+              type="button"
+              className="account-panel-logout"
+              onClick={logout}
+              disabled={busy}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}
+            >
               {tr("logOut")}
               <ChevronRight />
             </button>

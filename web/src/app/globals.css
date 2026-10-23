@@ -2059,13 +2059,15 @@ textarea.ui-input {
   padding: 4px 8px;
 }
 
-.account-panel-user > span:last-child {
-  display: grid;
+.account-panel-copy {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
-.account-panel-user strong,
-.account-panel-user span span {
+.account-panel-copy strong,
+.account-panel-copy span {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
