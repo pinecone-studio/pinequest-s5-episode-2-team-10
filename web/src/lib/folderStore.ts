@@ -6,6 +6,8 @@ export interface FolderMeta {
   /** The pitch idea and main points the speech should get across (optional, added later). */
   idea?: string;
   keyPoints?: string[];
+  /** Figma Slides (or prototype) share link, played live with its animations (optional). */
+  figmaUrl?: string | null;
 }
 
 const LEGACY_KEY = "pitchcoach:folders";

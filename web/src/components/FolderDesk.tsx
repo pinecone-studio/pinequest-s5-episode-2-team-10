@@ -13,7 +13,8 @@ import {
   slideKey,
   type FolderMeta,
 } from "@/lib/folderStore";
-import { openPdf, paintPage, readSlideText } from "@/lib/slidePdf";
+import { figmaEmbedUrl } from "@/lib/figmaEmbed";
+import { openPdf, paintPage, pickSlides, readSlideText } from "@/lib/slidePdf";
 import { runBackendAnalysis } from "@/lib/backendAnalysis";
 import { streamModelReply } from "@/lib/modelStream";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
@@ -223,6 +224,16 @@ function FolderRoom({
   const [hasSlide, setHasSlide] = useState(false);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
+  const [shownPages, setShownPages] = useState<number[]>([]); // PDF page numbers on screen; empty = all
+  const [hiddenPages, setHiddenPages] = useState(0); // animation steps and empty pages left out
+  // A Figma link plays the deck live (with its animations); the PDF still feeds the analysis.
+  const [figmaEditing, setFigmaEditing] = useState(false);
+  const [figmaDraft, setFigmaDraft] = useState("");
+  const [figmaError, setFigmaError] = useState(false);
+  const [preferPdf, setPreferPdf] = useState(false);
+  const figmaEmbed = folder.figmaUrl ? figmaEmbedUrl(folder.figmaUrl) : null;
+  const showFigma = !!figmaEmbed && !(preferPdf && hasSlide);
+  const anySlide = hasSlide || !!figmaEmbed;
   const [pdfEpoch, setPdfEpoch] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -265,6 +276,8 @@ function FolderRoom({
       pdfRef.current = null;
       setSlidePdf(false);
       setPageCount(0);
+      setShownPages([]);
+      setHiddenPages(0);
       setPage(1);
       rememberUrl(URL.createObjectURL(file));
       setSlideNote(null);
@@ -283,8 +296,17 @@ function FolderRoom({
       await pdfRef.current?.loadingTask.destroy().catch(() => undefined);
       pdfRef.current = doc;
       setPageCount(doc.numPages);
+      setShownPages([]);
+      setHiddenPages(0);
       setPage(1);
       setPdfEpoch((n) => n + 1);
+      const picked = await pickSlides(doc).catch(() => null);
+      if (picked && slideGen.current === gen && picked.hidden > 0) {
+        setShownPages(picked.pages);
+        setHiddenPages(picked.hidden);
+        setPageCount(picked.pages.length);
+        setPage(1);
+      }
     } catch {
       if (slideGen.current !== gen) return;
       setSlideNote("pdfOpenFail");
@@ -307,6 +329,8 @@ function FolderRoom({
         setHasSlide(false);
         setSlidePdf(false);
         setPageCount(0);
+        setShownPages([]);
+        setHiddenPages(0);
         rememberUrl(null);
         setSlideNote(null);
       }
@@ -344,7 +368,7 @@ function FolderRoom({
   }, [folder.id]);
 
   useEffect(() => {
-    if (!slidePdf) return;
+    if (!slidePdf || showFigma) return;
     const doc = pdfRef.current;
     const canvas = canvasRef.current;
     if (!doc || !canvas) return;
@@ -354,7 +378,7 @@ function FolderRoom({
     const draw = async () => {
       const width = frameRef.current?.clientWidth || canvas.clientWidth || 960;
       try {
-        const rendered = await paintPage(doc, page, canvas, width);
+        const rendered = await paintPage(doc, shownPages[page - 1] ?? page, canvas, width);
         task = rendered;
         if (cancelled) {
           rendered.cancel();
@@ -382,7 +406,7 @@ function FolderRoom({
       ro.disconnect();
       window.clearTimeout(timer);
     };
-  }, [page, pdfEpoch, slidePdf, full]);
+  }, [page, pdfEpoch, slidePdf, full, shownPages, showFigma]);
 
   useEffect(() => {
     if (!full) return;
@@ -593,6 +617,23 @@ function FolderRoom({
     else void beginStt();
   }
 
+  function saveFigma(e: React.FormEvent) {
+    e.preventDefault();
+    const value = figmaDraft.trim();
+    if (!value) return removeFigma();
+    if (!figmaEmbedUrl(value)) return setFigmaError(true);
+    onChange({ ...folder, figmaUrl: value });
+    setFigmaEditing(false);
+    setFigmaError(false);
+    setPreferPdf(false);
+  }
+
+  function removeFigma() {
+    onChange({ ...folder, figmaUrl: null });
+    setFigmaEditing(false);
+    setFigmaError(false);
+  }
+
   async function sendToModel() {
     const speech = textRef.current.trim();
     setProbing(true);
@@ -617,7 +658,7 @@ function FolderRoom({
         setProbeResult({ ...result, model, writing: false });
         return;
       }
-      const slideText = pdfRef.current ? await readSlideText(pdfRef.current) : "";
+      const slideText = pdfRef.current ? await readSlideText(pdfRef.current, 8, shownPages) : "";
       const slideImage = await new Promise<Blob | null>((resolve) => {
         const canvas = canvasRef.current;
         if (!canvas) {
@@ -726,12 +767,19 @@ function FolderRoom({
               {tr("folders")}
             </button>
             <h1>{folder.name}</h1>
-            <p className="desk-sub">{pageCount > 1 ? tr("slideOf", { page, count: pageCount }) : tr("speakHint")}</p>
+            <p className="desk-sub">
+              {showFigma
+                ? tr("figmaLive")
+                : pageCount > 1
+                  ? tr("slideOf", { page, count: pageCount })
+                  : tr("speakHint")}
+              {!showFigma && hiddenPages > 0 && ` · ${tr("slidesHidden", { count: hiddenPages })}`}
+            </p>
           </div>
         </div>
-        <div className="desk-actions" hidden={full && hasSlide}>
+        <div className="desk-actions" hidden={full && anySlide}>
           {speakButton()}
-          {hasSlide && (
+          {anySlide && (
             <button type="button" className="desk-ghost" onClick={() => setFull(true)}>
               {tr("fullscreen")}
             </button>
@@ -740,8 +788,12 @@ function FolderRoom({
 
         <div className="desk-stage">
           <div>
-            <div className={full && hasSlide ? "desk-full" : undefined}>
-              {slidePdf ? (
+            <div className={full && anySlide ? (showFigma ? "desk-full desk-full-figma" : "desk-full") : undefined}>
+              {showFigma ? (
+                <div className="desk-slide desk-figma">
+                  <iframe src={figmaEmbed!} title={tr("figmaLive")} allow="fullscreen" allowFullScreen />
+                </div>
+              ) : slidePdf ? (
                 <div ref={frameRef} className="desk-slide">
                   <canvas ref={canvasRef} width={1920} height={1080} />
                 </div>
@@ -760,24 +812,73 @@ function FolderRoom({
                   />
                 </label>
               )}
-              {full && hasSlide && (
+              {full && anySlide && (
                 <div className="desk-full-bar">
                   {speakButton()}
-                  {pageButtons()}
+                  {!showFigma && pageButtons()}
                   <button type="button" className="desk-ghost" onClick={() => setFull(false)}>
                     {tr("close")}
                   </button>
                 </div>
               )}
             </div>
-            {hasSlide && !full && (
+            {!full && (
               <div className="desk-tools">
-                <div className="desk-pages">{pageButtons()}</div>
-                <label className="desk-link">
-                  {tr("changeSlide")}
-                  <input type="file" accept={SLIDE_ACCEPT} className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
-                </label>
+                <div className="desk-pages">{!showFigma && pageButtons()}</div>
+                <div className="desk-figma-tools">
+                  {figmaEditing ? (
+                    <form onSubmit={saveFigma} className="desk-figma-form">
+                      <input
+                        type="url"
+                        value={figmaDraft}
+                        onChange={(e) => setFigmaDraft(e.target.value)}
+                        placeholder="https://www.figma.com/slides/…"
+                        aria-label={tr("figmaLinkLabel")}
+                        autoFocus
+                      />
+                      <button type="submit" className="desk-ghost">
+                        {tr("figmaSave")}
+                      </button>
+                      <button type="button" className="desk-ghost" onClick={() => (setFigmaEditing(false), setFigmaError(false))}>
+                        {tr("figmaCancel")}
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      {figmaEmbed && hasSlide && (
+                        <button type="button" className="desk-link" onClick={() => setPreferPdf((p) => !p)}>
+                          {showFigma ? tr("showPdf") : tr("showFigma")}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="desk-link"
+                        onClick={() => (setFigmaDraft(folder.figmaUrl ?? ""), setFigmaEditing(true))}
+                      >
+                        {folder.figmaUrl ? tr("figmaChange") : tr("figmaAdd")}
+                      </button>
+                      {folder.figmaUrl && (
+                        <button type="button" className="desk-link" onClick={removeFigma}>
+                          {tr("figmaRemove")}
+                        </button>
+                      )}
+                      {hasSlide && (
+                        <label className="desk-link">
+                          {tr("changeSlide")}
+                          <input type="file" accept={SLIDE_ACCEPT} className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
+                        </label>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
+            )}
+            {figmaError && <p className="desk-note">{tr("figmaBad")}</p>}
+            {showFigma && !full && (
+              <p className="desk-hint">
+                {tr("figmaShareHint")}
+                {!hasSlide && ` ${tr("figmaNeedsPdf")}`}
+              </p>
             )}
             {slideNote && <p className="desk-note">{tr(slideNote)}</p>}
             {slideMsg && <p className="desk-note" aria-live="polite">{slideMsg}</p>}
