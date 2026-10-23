@@ -1,4 +1,4 @@
-"""AI Pitch Coach API (TDD v2 + projects). Run: uvicorn server.main:app --reload"""
+"""AI Pitch Coach API. Run: uvicorn backend.main:app --reload"""
 
 import hashlib
 import logging

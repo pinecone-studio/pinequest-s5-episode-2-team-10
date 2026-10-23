@@ -6,6 +6,7 @@ __pycache__/
 # Server data (sessions, SQLite)
 data/
 .env
+backend/.env.local
 
 # Node (web/ lives on another branch)
 node_modules/
