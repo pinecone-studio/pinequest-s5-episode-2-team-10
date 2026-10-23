@@ -14,7 +14,7 @@ uvicorn server.main:app --reload --port 8000
 
 Interactive docs: http://localhost:8000/docs
 
-**Speech to text:** default is `PITCH_ASR=duudlaga` with `DUUDLAGA_API_KEY` (Mongolian STT via https://api.duudlaga.dev). Alternatives: `whisper` (BuzzASR, needs GPU + requirements-ml.txt) or `stub` (sample text). Word timings from Duudlaga are estimated from the transcript text.
+**Speech to text:** default is `PITCH_ASR=duudlaga` with `DUUDLAGA_API_KEY` (Mongolian STT via https://api.duudlaga.dev). Alternatives: `whisper` (BuzzASR, needs GPU + requirements-ml.txt), `remote` (the same model on another PC's GPU through the voice server and a Cloudflare tunnel, see `voice/README.md`) or `stub` (sample text). With `whisper`/`remote`, word timings are estimated from where the audio has sound. Word timings from Duudlaga are estimated from the transcript text.
 
 **Without a GPU / without Duudlaga:** `PITCH_ASR=stub PITCH_EMBEDDINGS=none` runs everything with sample transcript text, and the `rules` feedback backend needs no model or API key. Reports say when stub data was used (`notes`).
 
@@ -69,7 +69,8 @@ There are no logins yet. The browser calls `POST /users` once, keeps the token, 
 | Module | Does |
 | --- | --- |
 | `audio.py` | ffmpeg conversion, duration |
-| `asr.py` | Duudlaga API, BuzzASR word timestamps, or `stub`; unloads Whisper before feedback to free the GPU |
+| `asr.py` | Duudlaga API, BuzzASR (local or through the voice server), or `stub`; unloads Whisper before feedback to free the GPU |
+| `word_timing.py` | Finds where the audio has sound, cuts it into sentence-sized pieces, estimates word times |
 | `segments.py` | Sentences split at punctuation or pauses over 0.7 s |
 | `metrics.py` | Pace, long pauses, pitch range (parselmouth), volume drop at the end |
 | `text_checks.py` | Fillers from `fillers_mn.txt`, repeats, sentence length |

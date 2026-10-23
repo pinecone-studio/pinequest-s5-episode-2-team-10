@@ -12,3 +12,6 @@ node_modules/
 .next/
 next-env.d.ts
 *.tsbuildinfo
+
+# Voice server token (scripts/voice.ps1)
+.env.voice
