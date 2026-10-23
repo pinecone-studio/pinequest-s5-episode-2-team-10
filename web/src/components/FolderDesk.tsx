@@ -14,6 +14,7 @@ import {
   type FolderMeta,
 } from "@/lib/folderStore";
 import { openPdf, paintPage, readSlideText } from "@/lib/slidePdf";
+import { streamModelReply } from "@/lib/modelStream";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import DevTests from "./DevTests";
@@ -222,7 +223,8 @@ function FolderRoom({
     improvements: Improvement[];
     model: string;
     mainPoints: MainPointsResult | null;
-    received: { text: boolean; audio: string | null; slide: string | null };
+    received: { text: boolean; audio: string | null; slide: string | null } | null;
+    writing: boolean; // true while the model is still writing (shown as it arrives, not checked yet)
   } | null>(null);
 
   function rememberUrl(next: string | null) {
@@ -588,18 +590,25 @@ function FolderRoom({
       if (audio) body.set("audio", audio, folder.audioName ?? "audio");
       if (slide) body.set("slide", slide, folder.slideName ?? "slide");
       if (slideImage) body.set("slideImage", slideImage, "current-slide.jpg");
-      const res = await fetch("/api/prototype", { method: "POST", body, headers: langHeaders() });
-      const payload = (await res.json()) as {
-        error?: string;
-        summary?: string;
-        strengths?: string[];
-        improvements?: Improvement[];
-        model?: string;
-        mainPoints?: MainPointsResult | null;
-        received?: { text: boolean; audio: string | null; slide: string | null };
-      };
-      if (!res.ok || !payload.summary || !payload.improvements || !payload.received) {
-        setProbeNote(payload.error || tr("sendFail"));
+      // Streamed: the summary and list fill in while the model writes; the checked reply replaces them.
+      const payload = await streamModelReply(
+        body,
+        langHeaders(),
+        (partial) =>
+          setProbeResult({
+            summary: partial.summary ?? "",
+            strengths: partial.strengths ?? [],
+            improvements: partial.improvements ?? [],
+            model,
+            mainPoints: null,
+            received: null,
+            writing: true,
+          }),
+        tr("sendFail"),
+      );
+      if (!payload.summary || !payload.improvements || !payload.received) {
+        setProbeResult(null);
+        setProbeNote(tr("sendFail"));
         return;
       }
       setProbeResult({
@@ -607,11 +616,13 @@ function FolderRoom({
         strengths: payload.strengths ?? [],
         improvements: payload.improvements,
         model: payload.model ?? model,
-        mainPoints: payload.mainPoints ?? null,
+        mainPoints: (payload.mainPoints as MainPointsResult | null) ?? null,
         received: payload.received,
+        writing: false,
       });
-    } catch {
-      setProbeNote(tr("sendFail"));
+    } catch (err) {
+      setProbeResult(null);
+      setProbeNote(err instanceof Error && err.message ? err.message : tr("sendFail"));
     } finally {
       setProbing(false);
     }
@@ -775,9 +786,16 @@ function FolderRoom({
               {probeResult && (
                 <>
                   <p>
-                    {probeResult.model} · {probeResult.received.text ? tr("text") : tr("noText")}
-                    {probeResult.received.audio ? ` · ${tr("audio")} ${probeResult.received.audio}` : ""}
-                    {probeResult.received.slide ? ` · ${tr("slide")} ${probeResult.received.slide}` : ""}
+                    {probeResult.model}
+                    {probeResult.writing && ` · ${tr("writing")}`}
+                    {probeResult.received && (
+                      <>
+                        {" · "}
+                        {probeResult.received.text ? tr("text") : tr("noText")}
+                        {probeResult.received.audio ? ` · ${tr("audio")} ${probeResult.received.audio}` : ""}
+                        {probeResult.received.slide ? ` · ${tr("slide")} ${probeResult.received.slide}` : ""}
+                      </>
+                    )}
                   </p>
                   <h3>{probeResult.summary}</h3>
                   <ImprovementList strengths={probeResult.strengths} improvements={probeResult.improvements} />

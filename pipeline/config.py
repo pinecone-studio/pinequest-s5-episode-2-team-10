@@ -32,3 +32,6 @@ OLLAMA_URL = _env("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL_FT = _env("PITCH_OLLAMA_MODEL_FT", "pitchcoach-gemma4")
 OLLAMA_MODEL_BASE = _env("PITCH_OLLAMA_MODEL_BASE", "gemma4:e4b")
 OLLAMA_TIMEOUT_S = float(_env("PITCH_OLLAMA_TIMEOUT_S", "240"))
+# How long Ollama keeps the model loaded after a request: -1 = until Ollama stops, or e.g. "10m".
+_keep = _env("PITCH_OLLAMA_KEEP_ALIVE", "-1")
+OLLAMA_KEEP_ALIVE = int(_keep) if _keep.lstrip("-").isdigit() else _keep

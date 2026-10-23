@@ -228,6 +228,7 @@ def _ollama(model: str, data: dict) -> dict:
         "model": model,
         "stream": False,
         "format": SCHEMA,
+        "keep_alive": config.OLLAMA_KEEP_ALIVE,
         "options": {"temperature": 0, "num_ctx": 8192},
         "messages": [
             {"role": "system", "content": PROMPT},

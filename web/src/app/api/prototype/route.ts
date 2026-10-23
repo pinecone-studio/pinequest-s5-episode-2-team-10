@@ -10,12 +10,15 @@ import {
   type Improvement,
   type ModelReply,
 } from "@/lib/server/llm";
-import { cleanPoints, inSpeech, MAX_POINTS, rulesCheck, toSentences, verifyPoints, type MainPoints } from "@/lib/server/points";
+import { parsePartialJson } from "@/lib/server/partialJson";
+import { cleanPoints, cleanQuote, inSpeech, MAX_POINTS, rulesCheck, toSentences, verifyPoints, type MainPoints } from "@/lib/server/points";
 
 const MAX_TEXT = 20_000;
 const MAX_IDEA = 500;
 const MAX_FILE = 12 * 1024 * 1024;
 const MAX_IMAGE = 4 * 1024 * 1024;
+const NDJSON = "application/x-ndjson";
+const STREAM_EVERY_MS = 200;
 
 type Reply = {
   summary: string;
@@ -107,6 +110,7 @@ export async function POST(request: Request) {
           keyPoints.length ? keyPoints.map((p, i) => `(${i}) ${p}`).join("\n") : "(none)",
           "",
           "For each main point, judge whether the speech made it. Judge meaning, not wording; one shared word is not enough.",
+          "- point: the number in brackets before that main point. Return one entry per main point, in the same order.",
           "- status: covered (clearly made), partial (vague or incomplete), missed (not said or only implied).",
           "- evidence: the exact words from the speech that make the point, copied from one sentence or consecutive sentences; empty when missed. Every quote is checked against the speech.",
           "- note: one short sentence on what was missing, or empty.",
@@ -143,10 +147,12 @@ export async function POST(request: Request) {
           }
         : {}),
     }),
-    `Write all text in ${language}. Use only what the speech and slide text say; never invent quotes or numbers.`,
+    `Write all text in ${language}, except quotes: copy "evidence" and "quote" word for word from the speech,`,
+    "in the speech's own language, never translated. Use only what the speech and slide text say; never invent quotes or numbers.",
   ].join("\n");
 
-  try {
+  /** Runs the chosen model and checks its answer. `onPartial` gets progress while Ollama writes. */
+  async function analyze(onPartial?: (partial: Partial<Reply>) => void): Promise<Reply> {
     let reply: ModelReply;
     let mainPoints: MainPoints | null = null;
     if (model === "rules") {
@@ -154,7 +160,8 @@ export async function POST(request: Request) {
       reply = rulesReply(text, slideText, lang, mainPoints?.points ?? []);
     } else {
       if (model === "ollama") {
-        reply = await askOllama(prompt, lang, replySchema(checkPoints));
+        const onText = onPartial ? throttle((soFar: string) => onPartial(partialReply(soFar)), STREAM_EVERY_MS) : undefined;
+        reply = await askOllama(prompt, lang, replySchema(checkPoints), onText);
       } else {
         let image: { mediaType: string; data: string } | null = null;
         if (slideImage && slideImage.type.startsWith("image/") && slideImage.size <= MAX_IMAGE) {
@@ -173,11 +180,81 @@ export async function POST(request: Request) {
     }
 
     // A quote the model made up is dropped; the advice itself stays.
-    const improvements = reply.improvements.map((i) => (i.quote && !inSpeech(i.quote, sentences) ? { ...i, quote: "" } : i));
-    const body: Reply = { summary: reply.summary, strengths: reply.strengths, improvements, model, mainPoints, received };
-    return NextResponse.json(body);
-  } catch (err) {
-    if (err instanceof LlmError) return jsonError(err.message, err.status);
-    return jsonError(t(lang, "sendFail"), 500);
+    const improvements = reply.improvements.map((i) => {
+      const quote = cleanQuote(i.quote);
+      return { ...i, quote: quote && inSpeech(quote, sentences) ? quote : "" };
+    });
+    return { summary: reply.summary, strengths: reply.strengths, improvements, model, mainPoints, received };
   }
+
+  const failure = (err: unknown) =>
+    err instanceof LlmError ? { message: err.message, status: err.status } : { message: t(lang, "sendFail"), status: 500 };
+
+  // Streaming: one JSON object per line. {"type":"partial",...} while the model writes (not checked yet),
+  // then {"type":"done",...} with the checked reply, or {"type":"error","error":"..."}.
+  if (request.headers.get("accept")?.includes(NDJSON)) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let closed = false;
+        // A throttled progress update may fire after the final line; ignore it then.
+        const send = (line: object) => {
+          if (!closed) controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+        };
+        try {
+          const body = await analyze((partial) => send({ type: "partial", ...partial }));
+          send({ type: "done", ...body });
+        } catch (err) {
+          send({ type: "error", error: failure(err).message });
+        } finally {
+          closed = true;
+          controller.close();
+        }
+      },
+    });
+    return new Response(stream, { headers: { "content-type": NDJSON, "cache-control": "no-store" } });
+  }
+
+  try {
+    return NextResponse.json(await analyze());
+  } catch (err) {
+    const { message, status } = failure(err);
+    return jsonError(message, status);
+  }
+}
+
+/** What the model has written so far, in the reply's shape. Unchecked; only for showing progress. */
+function partialReply(soFar: string): Partial<Reply> {
+  const raw = parsePartialJson(soFar);
+  if (!raw || typeof raw !== "object") return {};
+  const body = raw as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  return {
+    summary: str(body.summary),
+    strengths: Array.isArray(body.strengths) ? body.strengths.map(str).filter(Boolean) : [],
+    improvements: (Array.isArray(body.improvements) ? body.improvements : [])
+      .filter((i): i is Record<string, unknown> => Boolean(i) && typeof i === "object" && Boolean(str(i.title)))
+      .map((i) => ({ title: str(i.title), why: str(i.why), action: str(i.action), example: str(i.example), quote: "" })),
+  };
+}
+
+/** Calls `fn` at most every `ms`, always with the latest value; the last call is never dropped. */
+function throttle<T>(fn: (value: T) => void, ms: number): (value: T) => void {
+  let last = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: T;
+  return (value: T) => {
+    pending = value;
+    const wait = last + ms - Date.now();
+    if (wait <= 0) {
+      last = Date.now();
+      fn(value);
+    } else if (!timer) {
+      timer = setTimeout(() => {
+        timer = null;
+        last = Date.now();
+        fn(pending);
+      }, wait);
+    }
+  };
 }
