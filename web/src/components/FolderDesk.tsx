@@ -1306,13 +1306,33 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
 
   return (
     <li>
-      <button type="button" className="folder-card" onClick={onOpen}>
-        <span className="folder-card-preview">
-          {imageUrl ? <img src={imageUrl} alt="" /> : <canvas ref={canvasRef} hidden={!pdf} />}
+      <button
+        type="button"
+        className="folder-card"
+        onClick={onOpen}
+        style={{
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-end",
+          minHeight: 248,
+          aspectRatio: "16 / 10",
+          overflow: "hidden",
+        }}
+      >
+        <span className="folder-card-preview" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+          {imageUrl ? (
+            <img src={imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }} />
+          ) : (
+            <canvas ref={canvasRef} hidden={!pdf} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }} />
+          )}
         </span>
         <span
           className="folder-card-body"
           style={{
+            position: "relative",
+            zIndex: 1,
+            flex: "0 0 auto",
             gap: 4,
             padding: "12px 14px",
             background: "color-mix(in srgb, var(--card) 55%, transparent)",
@@ -1327,7 +1347,7 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
               <span>{tr("audioCount", { n: folder.audios?.length ?? 0 })}</span>
             </span>
           </span>
-          <time dateTime={updated ?? undefined} style={{ fontSize: 14, color: "color-mix(in srgb, var(--text-primary) 72%, transparent)" }}>{updated ?? "\u00a0"}</time>
+          <time dateTime={updated ?? undefined} style={{ marginTop: 0, fontSize: 14, color: "color-mix(in srgb, var(--text-primary) 72%, transparent)" }}>{updated ?? "\u00a0"}</time>
         </span>
       </button>
     </li>
