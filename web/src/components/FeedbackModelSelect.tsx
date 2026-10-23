@@ -96,14 +96,14 @@ export default function FeedbackModelSelect({
         {(models ?? []).map((m) => (
           <option key={m.id} value={m.id} disabled={!m.available}>
             {m.name}
-            {m.local ? ` · ${tr("thisPc")}` : ` · ${tr("cloud")}`}
+            {m.server ? ` · ${tr("backendTag")}` : m.local ? ` · ${tr("thisPc")}` : ` · ${tr("cloud")}`}
             {m.available ? "" : ` (${tr("unavailableTag")})`}
           </option>
         ))}
         {!models && <option value={value}>{tr("loading")}</option>}
       </select>
       {error && <p className="desk-note">{error}</p>}
-      {selected && !selected.local && (
+      {selected && !selected.local && !selected.server && (
         <p className="desk-sub">{tr("cloudNotice")}</p>
       )}
       {models

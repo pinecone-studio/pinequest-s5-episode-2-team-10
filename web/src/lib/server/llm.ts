@@ -60,6 +60,7 @@ export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
   } catch {
     ollama = { available: false, reason: t(lang, "ollamaDown") };
   }
+  const backend = await backendStatus(lang);
   return [
     { id: "rules", name: t(lang, "rulesName"), local: true, available: true, reason: null },
     { id: "ollama", name: `Gemma · Ollama (${ollamaModel()})`, local: true, ...ollama },
@@ -71,7 +72,20 @@ export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
       available: claudeKey,
       reason: claudeKey ? null : t(lang, "claudeKeyMissing"),
     },
+    { id: "backend", name: t(lang, "backendName"), local: false, server: true, ...backend },
   ];
+}
+
+/** Whether the FastAPI backend (NEXT_PUBLIC_API_URL) answers its health check. */
+async function backendStatus(lang: Lang): Promise<{ available: boolean; reason: string | null }> {
+  const url = (process.env.NEXT_PUBLIC_API_URL ?? "").trim().replace(/\/+$/, "");
+  if (!url) return { available: false, reason: t(lang, "backendNotSet") };
+  try {
+    const res = await fetch(`${url}/api/v1/health`, { signal: AbortSignal.timeout(3_000), cache: "no-store" });
+    return res.ok ? { available: true, reason: null } : { available: false, reason: t(lang, "backendDown") };
+  } catch {
+    return { available: false, reason: t(lang, "backendDown") };
+  }
 }
 
 export interface Improvement {
