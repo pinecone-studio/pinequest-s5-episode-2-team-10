@@ -14,6 +14,14 @@ export interface ModelStatus {
   reason: string | null;
 }
 
+/**
+ * "Full analysis (backend)" is offered in development, or when NEXT_PUBLIC_FULL_ANALYSIS=1. It
+ * needs the backend, a recording and a PDF deck, and the folder page shows only its text, so the
+ * demo site leaves it out.
+ */
+export const FULL_ANALYSIS_ENABLED =
+  process.env.NODE_ENV === "development" || process.env.NEXT_PUBLIC_FULL_ANALYSIS === "1";
+
 export function isProtoModel(value: unknown): value is ProtoModel {
   return typeof value === "string" && (PROTO_MODELS as readonly string[]).includes(value);
 }
