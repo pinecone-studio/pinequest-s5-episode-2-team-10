@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import mimetypes
+import re
 import secrets
 import shutil
 from contextlib import asynccontextmanager
@@ -26,6 +27,8 @@ from pipeline.points import clean_points
 from . import config, db, errors, storage
 from .db import AccessToken, AnalysisReport, AppUser, AudioAsset, PitchSession, Project, Slide, Transcript, utcnow
 from .errors import ApiError, not_found
+from .passwords import hash_password, verify_password
+from . import supabase_auth
 from .worker import worker
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -273,6 +276,15 @@ class AnalyzeBody(BaseModel):
     feedback_backend: Optional[str] = None
 
 
+class AuthCredentials(BaseModel):
+    email: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class GoogleAuthBody(BaseModel):
+    access_token: str = Field(min_length=1, max_length=8192)
+
+
 # ---- Users and projects ----------------------------------------------------
 
 
@@ -288,13 +300,106 @@ def health():
     }
 
 
-@api.post("/users", status_code=201)
-def create_user(database: DB):
+def _normalized_email(email: str) -> str:
+    normalized = email.strip().lower()
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
+        raise ApiError(422, "invalid_email", "Enter a valid email address.")
+    return normalized
+
+
+def _auth_response(user: AppUser, token: str) -> dict:
+    return {"id": user.id, "email": user.email, "access_token": token}
+
+
+def _replace_user_token(database: Session, user: AppUser) -> dict:
     token = secrets.token_urlsafe(32)
-    user = AppUser(token_hash=_hash(token))
+    for old_token in database.exec(select(AccessToken).where(AccessToken.user_id == user.id)).all():
+        database.delete(old_token)
+    user.token_hash = _hash(token)
     database.add(user)
     database.commit()
-    return {"id": user.id, "access_token": token}
+    return _auth_response(user, token)
+
+
+@api.post("/auth/register", status_code=201)
+def register(body: AuthCredentials, database: DB):
+    email = _normalized_email(body.email)
+    if email == "demo@pitchcoach.local":
+        raise ApiError(409, "email_taken", "This email address is already registered.")
+    if database.exec(select(AppUser).where(func.lower(AppUser.email) == email)).first():
+        raise ApiError(409, "email_taken", "This email address is already registered.")
+
+    token = secrets.token_urlsafe(32)
+    user = AppUser(
+        email=email,
+        password_hash=hash_password(body.password),
+        token_hash=_hash(token),
+    )
+    database.add(user)
+    database.commit()
+    database.refresh(user)
+    return _auth_response(user, token)
+
+
+@api.post("/auth/login")
+def login(body: AuthCredentials, database: DB):
+    email = body.email.strip().lower()
+    user = database.exec(select(AppUser).where(func.lower(AppUser.email) == email)).first()
+    if not user or not verify_password(body.password, user.password_hash):
+        raise ApiError(401, "invalid_credentials", "Email or password is incorrect.")
+    return _replace_user_token(database, user)
+
+
+@api.post("/auth/demo")
+def demo_login(database: DB):
+    email = "demo@pitchcoach.local"
+    user = database.exec(select(AppUser).where(AppUser.email == email)).first()
+    token = secrets.token_urlsafe(32)
+    if user is None:
+        user = AppUser(email=email, password_hash=None, token_hash=_hash(token))
+        database.add(user)
+    else:
+        database.add(AccessToken(token_hash=_hash(token), user_id=user.id))
+    database.commit()
+    database.refresh(user)
+    return _auth_response(user, token)
+
+
+@api.post("/auth/google")
+def google_login(body: GoogleAuthBody, database: DB):
+    email = _normalized_email(supabase_auth.google_email(body.access_token))
+    if email == "demo@pitchcoach.local":
+        raise ApiError(401, "invalid_google_token", "This Google account cannot use the demo account.")
+    user = database.exec(select(AppUser).where(func.lower(AppUser.email) == email)).first()
+    if user is None:
+        user = AppUser(email=email, token_hash=_hash(secrets.token_urlsafe(32)))
+        database.add(user)
+        database.commit()
+        database.refresh(user)
+    return _replace_user_token(database, user)
+
+
+@api.get("/auth/me")
+def auth_me(user: User):
+    return {"id": user.id, "email": user.email}
+
+
+@api.post("/auth/logout", status_code=204)
+def logout(
+    user: User,
+    database: DB,
+    x_access_token: Annotated[str, Header()],
+):
+    token_hash = _hash(x_access_token)
+    if user.token_hash == token_hash:
+        user.token_hash = _hash(secrets.token_urlsafe(32))
+        database.add(user)
+    else:
+        extra_token = database.get(AccessToken, token_hash)
+        if extra_token and extra_token.user_id == user.id:
+            database.delete(extra_token)
+    database.commit()
+    return Response(status_code=204)
 
 
 @api.get("/projects")
@@ -360,7 +465,7 @@ def create_attempt(p: OwnedProject, database: DB, body: Optional[NewAttempt] = N
         prev = previous[0]
         s.script = prev.script
         src = _slides_path(prev)
-        if storage.configured() and prev.slides_filename:
+        if db.shared_storage_enabled() and prev.slides_filename:
             source_key = _slides_object_key(prev)
             target_key = _slides_object_key(s)
             if source_key is None or target_key is None:
@@ -419,7 +524,7 @@ def upload_audio(s: Owned, database: DB, file: UploadFile):
     asset = database.get(AudioAsset, s.id)
     old_paths = (asset.path, asset.original_path) if asset else ()
     asset = asset or AudioAsset(session_id=s.id, path="", original_path="", duration_s=0, format="")
-    if storage.configured():
+    if db.shared_storage_enabled():
         original_key = f"sessions/{s.id}/original{suffix}"
         wav_key = f"sessions/{s.id}/audio.wav"
         uploaded_keys = []
@@ -448,7 +553,7 @@ def upload_audio(s: Owned, database: DB, file: UploadFile):
     s.status, s.stage, s.error = "uploaded", None, None
     database.add(s)
     database.commit()
-    if storage.configured():
+    if db.shared_storage_enabled():
         original.unlink(missing_ok=True)
         wav.unlink(missing_ok=True)
         obsolete_keys = [
@@ -507,7 +612,7 @@ def upload_slides(s: Owned, database: DB, file: UploadFile):
     s.slides_filename = Path(file.filename or f"slides{suffix}").name
     database.add(s)
     database.commit()
-    if storage.configured() and old_key and old_key != new_key:
+    if db.shared_storage_enabled() and old_key and old_key != new_key:
         try:
             storage.delete_objects([old_key])
         except storage.StorageError as exc:
@@ -526,7 +631,7 @@ def remove_slides(s: Owned, database: DB):
         database.delete(old)
     path = _slides_path(s)
     key = _slides_object_key(s)
-    if storage.configured() and key:
+    if db.shared_storage_enabled() and key:
         try:
             storage.delete_objects([key])
         except storage.StorageError as exc:
@@ -587,7 +692,7 @@ def get_slides(s: Owned, database: DB):
 @api.get("/sessions/{session_id}/slides/file")
 def get_slides_file(s: Owned):
     object_key = _slides_object_key(s)
-    if storage.configured() and object_key:
+    if db.shared_storage_enabled() and object_key:
         try:
             content = storage.download_bytes(object_key)
         except storage.StorageNotFound as exc:

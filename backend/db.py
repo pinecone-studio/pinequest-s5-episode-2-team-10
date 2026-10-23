@@ -195,9 +195,8 @@ def init() -> None:
     from . import storage
 
     shared_database = engine.dialect.name == "postgresql"
-    storage.validate_configuration(required=shared_database)
-    if not shared_database and storage.configured():
-        raise storage.StorageError("Use Supabase Storage together with the shared PostgreSQL database.")
+    if shared_database:
+        storage.validate_configuration(required=True)
     SQLModel.metadata.create_all(engine)
     _add_missing_columns()
     _ensure_email_unique()
@@ -208,6 +207,14 @@ def init() -> None:
         with engine.begin() as conn:
             for table in SQLModel.metadata.sorted_tables:
                 conn.exec_driver_sql(f'ALTER TABLE "{table.name}" ENABLE ROW LEVEL SECURITY')
+
+
+def shared_storage_enabled() -> bool:
+    if engine.dialect.name != "postgresql":
+        return False
+    from . import storage
+
+    return storage.configured()
 
 
 def session_dir(session_id: str):
