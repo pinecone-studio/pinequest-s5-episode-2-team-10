@@ -5,6 +5,7 @@ import { api, ApiRequestError } from "@/lib/api";
 import { useLang } from "@/lib/i18nClient";
 import { clearSession, saveSession, useAccount } from "@/lib/session";
 import LangToggle from "./LangToggle";
+import SayloMark from "./SayloMark";
 
 type Mode = "login" | "register";
 
@@ -58,8 +59,8 @@ export default function AuthScreen() {
     <div className="desk">
       <div className="desk-col">
         <div className="desk-bar">
-          <WaveMark />
-          <span>Pitch Coach</span>
+          <SayloMark />
+          <span className="desk-brand">SAYLO</span>
           {process.env.NODE_ENV === "development" && <LangToggle />}
         </div>
         <div className="desk-title">
@@ -153,20 +154,5 @@ export function AccountMenu() {
       </button>
       {process.env.NODE_ENV === "development" && <LangToggle />}
     </div>
-  );
-}
-
-function WaveMark() {
-  return (
-    <svg width="22" height="14" viewBox="0 0 22 14" aria-hidden>
-      <path
-        d="M1 7h2l2-5 3 10 3-8 2 3h8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

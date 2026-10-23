@@ -62,7 +62,13 @@ body {
 }
 
 .desk-bar svg {
-  color: var(--accent);
+  color: var(--text);
+}
+
+.desk-brand {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
 }
 
 .desk-title {

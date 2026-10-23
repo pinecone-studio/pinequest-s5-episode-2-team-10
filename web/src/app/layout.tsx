@@ -10,7 +10,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "AI Pitch Coach",
+  title: "Saylo",
   description: "Scored, timestamped feedback on Mongolian pitches with slides.",
 };
 
