@@ -221,7 +221,7 @@ export function AccountMenu() {
 
 function WaveMark() {
   return (
-    <svg width="36" height="22" viewBox="0 0 22 14" aria-hidden>
+    <svg width="30" height="18" viewBox="0 0 22 14" aria-hidden>
       <path
         d="M1 7h2l2-5 3 10 3-8 2 3h8"
         fill="none"

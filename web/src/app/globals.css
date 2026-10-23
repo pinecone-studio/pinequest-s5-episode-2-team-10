@@ -297,34 +297,34 @@ body {
 }
 
 .auth-form {
-  width: min(400px, 100%);
+  width: min(360px, 100%);
   text-align: center;
 }
 
 .auth-logo {
   display: grid;
-  width: 76px;
-  height: 76px;
-  margin: 0 auto 52px;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 36px;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 22px;
+  border-radius: 18px;
   background: #242326;
   color: #f5f5f5;
 }
 
 .auth-form h1 {
   margin: 0;
-  font-size: 36px;
+  font-size: 30px;
   font-weight: 500;
   letter-spacing: -0.03em;
   line-height: 1.15;
 }
 
 .auth-sub {
-  margin: 12px 0 0;
+  margin: 10px 0 0;
   color: #a3a3a3;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -341,19 +341,19 @@ body {
 .auth-fields {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 28px;
+  gap: 10px;
+  margin-top: 22px;
 }
 
 .auth-fields input {
   width: 100%;
-  height: 52px;
-  padding: 0 16px;
+  height: 46px;
+  padding: 0 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.02);
   color: #f5f5f5;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .auth-fields input::placeholder {
@@ -363,9 +363,9 @@ body {
 .auth-primary,
 .auth-sso {
   width: 100%;
-  height: 54px;
-  border-radius: 16px;
-  font-size: 16px;
+  height: 46px;
+  border-radius: 14px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -392,21 +392,21 @@ body {
   border: 0;
   background: none;
   color: #f5f5f5;
-  font-size: 15px;
+  font-size: 14px;
   cursor: pointer;
 }
 
 .auth-text {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .auth-or {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin: 22px 0;
+  gap: 12px;
+  margin: 16px 0;
   color: #8a8a8a;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .auth-or::before,
@@ -443,16 +443,16 @@ body {
 }
 
 .auth-demo {
-  margin-top: 16px;
+  margin-top: 14px;
   color: #a3a3a3;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
 .auth-legal {
-  margin: 28px 0 0;
+  margin: 22px 0 0;
   color: #8a8a8a;
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
@@ -467,11 +467,11 @@ body {
   }
 
   .auth-form h1 {
-    font-size: 30px;
+    font-size: 26px;
   }
 
   .auth-logo {
-    margin-bottom: 40px;
+    margin-bottom: 28px;
   }
 }
 
