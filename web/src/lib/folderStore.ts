@@ -55,11 +55,11 @@ export const FIGMA_FOLDER: FolderMeta = {
   audioName: null,
 };
 
+/** The saved list, or null when there is none. An empty list is kept: every folder was deleted. */
 function parseList(raw: string | null): FolderMeta[] | null {
   if (!raw) return null;
   const parsed = JSON.parse(raw) as FolderMeta[];
-  if (!Array.isArray(parsed) || parsed.length === 0) return null;
-  return parsed;
+  return Array.isArray(parsed) ? parsed : null;
 }
 
 const SHARED_FLAG = "pitchcoach:shared-ok";
@@ -169,6 +169,17 @@ export async function deleteFolderBlob(key: string) {
 export const slideKey = (id: string) => `${id}:slide`;
 export const audioKey = (id: string) => `${id}:audio`;
 const speechKey = (id: string) => `pitchcoach:speech:${id}`;
+
+/** Removes a folder's files and saved speech text from this browser. The list is saved separately. */
+export async function deleteFolderData(folder: FolderMeta) {
+  const keys = new Set([slideKey(folder.id), audioKey(folder.id), ...(folder.audios ?? []).map((a) => a.storageKey)]);
+  await Promise.all([...keys].map((key) => deleteFolderBlob(key).catch(() => undefined)));
+  try {
+    localStorage.removeItem(speechKey(folder.id));
+  } catch {
+    /* storage blocked: nothing saved to remove */
+  }
+}
 
 export function loadSpeech(id: string): string {
   if (typeof window === "undefined") return "";
