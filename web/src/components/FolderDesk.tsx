@@ -8,6 +8,7 @@ import {
   attachSlide,
   audioFileError,
   deleteFolderBlob,
+  deleteFolderData,
   detachAudio,
   getFolderBlob,
   loadFolders,
@@ -241,11 +242,18 @@ export default function FolderDesk() {
     );
   }
 
+  async function deleteFolder(folder: FolderMeta) {
+    setOpenId(null);
+    persist(folders.filter((f) => f.id !== folder.id));
+    await deleteFolderData(folder);
+  }
+
   return (
     <FolderRoom
       folder={open}
       onBack={() => setOpenId(null)}
       onChange={(next) => persist(folders.map((f) => (f.id === next.id ? next : f)))}
+      onDelete={() => void deleteFolder(open)}
     />
   );
 }
@@ -254,12 +262,16 @@ function FolderRoom({
   folder,
   onBack,
   onChange,
+  onDelete,
 }: {
   folder: FolderMeta;
   onBack: () => void;
   onChange: (folder: FolderMeta) => void;
+  /** Deletes the whole folder (after the user confirms). */
+  onDelete: () => void;
 }) {
   const { tr } = useLang();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const theme = useTheme();
   const recRef = useRef<PieceRecorder | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
@@ -1194,6 +1206,25 @@ function FolderRoom({
           )}
         </section>
         </div>
+
+        <div className="folder-delete">
+          <button type="button" className="folder-delete-btn" onClick={() => setConfirmDelete(true)}>
+            {tr("deleteFolder")}
+          </button>
+        </div>
+        {confirmDelete && (
+          <Modal title={tr("deleteFolderTitle", { name: folder.name })} onClose={() => setConfirmDelete(false)}>
+            <p className="folder-delete-text">{tr("deleteFolderText")}</p>
+            <div className="app-modal-actions folder-delete-actions">
+              <button type="button" className="ui-btn" onClick={() => setConfirmDelete(false)}>
+                {tr("cancel")}
+              </button>
+              <button type="button" className="folder-delete-btn is-confirm" autoFocus onClick={onDelete}>
+                {tr("deleteFolder")}
+              </button>
+            </div>
+          </Modal>
+        )}
       </div>
     </div>
   );

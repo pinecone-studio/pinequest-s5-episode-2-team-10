@@ -2320,6 +2320,49 @@ textarea.ui-input {
   margin-top: 4px;
 }
 
+/* "Delete folder" at the bottom of a folder, and its confirmation. */
+.folder-delete {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--gap, 24px);
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.folder-delete-btn {
+  padding: 8px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--line));
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--danger);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.folder-delete-btn:hover {
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.folder-delete-btn.is-confirm {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.folder-delete-btn:focus-visible {
+  outline: 2px solid var(--danger);
+  outline-offset: 2px;
+}
+
+.folder-delete-text {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.folder-delete-actions {
+  gap: 8px;
+}
+
 .app-modal-card .desk-panel {
   margin: 0;
   padding: 0;
