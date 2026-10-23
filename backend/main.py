@@ -13,13 +13,14 @@ from typing import Annotated, Literal, Optional
 from fastapi import APIRouter, Depends, FastAPI, Header, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 from sqlmodel import Session, func, select
 
 from pipeline import audio as audio_tools
 from pipeline import config as pipeline_config
 from pipeline import slides as slide_tools
 from pipeline.feedback import BACKENDS
+from pipeline.points import clean_points
 
 from . import config, db, errors
 from .db import AnalysisReport, AppUser, AudioAsset, PitchSession, Project, Slide, Transcript, utcnow
@@ -175,6 +176,8 @@ def _project(database: Session, p: Project, with_attempts: bool) -> dict:
         "name": p.name,
         "goal": p.goal,
         "audience": p.audience,
+        "idea": p.idea,
+        "key_points": p.key_points or [],
         "planned_s": p.planned_s,
         "pitch_type": p.pitch_type,
         "created_at": _iso(p.created_at),
@@ -212,10 +215,20 @@ def _touch(database: Session, project_id: str) -> None:
 PitchType = Literal["startup", "academic"]
 
 
+# Up to 6 main points; blank ones are dropped and spaces trimmed (same rules as the pipeline).
+KeyPoints = Annotated[
+    list[Annotated[str, Field(max_length=200)]],
+    Field(max_length=6),
+    AfterValidator(clean_points),
+]
+
+
 class ProjectBody(BaseModel):
     name: str = Field(default="Untitled project", max_length=200)
     goal: str = Field(default="", max_length=500)
     audience: str = Field(default="", max_length=500)
+    idea: str = Field(default="", max_length=500)
+    key_points: KeyPoints = []
     planned_s: int = Field(default=180, ge=30, le=900)
     pitch_type: PitchType = "startup"
 
@@ -224,6 +237,8 @@ class ProjectPatch(BaseModel):
     name: Optional[str] = Field(default=None, max_length=200)
     goal: Optional[str] = Field(default=None, max_length=500)
     audience: Optional[str] = Field(default=None, max_length=500)
+    idea: Optional[str] = Field(default=None, max_length=500)
+    key_points: Optional[KeyPoints] = None
     planned_s: Optional[int] = Field(default=None, ge=30, le=900)
     pitch_type: Optional[PitchType] = None
 
@@ -313,6 +328,7 @@ def delete_project(p: OwnedProject, database: DB):
 def create_attempt(p: OwnedProject, database: DB, body: Optional[NewAttempt] = None):
     s = PitchSession(
         project_id=p.id, title=p.name, goal=p.goal, audience=p.audience,
+        idea=p.idea, key_points=list(p.key_points or []),
         planned_s=p.planned_s, pitch_type=p.pitch_type,
     )
     previous = _sessions(database, p.id)
@@ -479,6 +495,7 @@ def analyze(s: Owned, database: DB, body: Optional[AnalyzeBody] = None):
     # Use the project's details as they are now.
     p = database.get(Project, s.project_id)
     s.title, s.goal, s.audience, s.planned_s, s.pitch_type = p.name, p.goal, p.audience, p.planned_s, p.pitch_type
+    s.idea, s.key_points = p.idea, list(p.key_points or [])
     s.status, s.stage, s.error, s.feedback_backend = "processing", None, None, backend
     database.add(s)
     _touch(database, p.id)

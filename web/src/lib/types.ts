@@ -24,6 +24,8 @@ export interface ProjectDetails {
   name: string;
   goal: string;
   audience: string;
+  idea: string;
+  key_points: string[]; // up to 6 main points the speech should get across
   planned_s: number;
   pitch_type: PitchType;
 }
@@ -127,6 +129,24 @@ export interface Feedback {
   slide_feedback: SlideFeedback[];
   number_checks: NumberCheck[];
   recommendations: Recommendation[];
+  // Missing on reports made before main points existed.
+  main_points?: MainPoints;
+}
+
+// Did the speech make the project's main points? Quotes are checked and coverage computed in code.
+export interface MainPoints {
+  method: "llm" | "words";
+  points: {
+    point: number;
+    text: string;
+    status: "covered" | "partial" | "missed";
+    verified: boolean; // false: the model's quote wasn't in the transcript, so it counts as missed
+    evidence: string;
+    note: string;
+  }[];
+  coverage: number | null;
+  off_topic: { sentence_id: number; start: number | null; text: string; reason: string }[];
+  idea_comment: string;
 }
 
 export interface Metrics {

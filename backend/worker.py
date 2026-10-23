@@ -99,6 +99,8 @@ class Worker:
                 "planned_s": s.planned_s,
                 "pitch_type": s.pitch_type,
                 "script": s.script,
+                "idea": s.idea,
+                "key_points": list(s.key_points or []),
             }
             slide_data = [
                 {"number": sl.number, "text": sl.text, "notes": sl.notes, "image_only": sl.image_only,

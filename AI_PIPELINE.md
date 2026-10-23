@@ -26,11 +26,11 @@ The worker runs these steps for each attempt (`pipeline/run.py`):
 
 5. **LLM analysis** (`feedback.py`, prompt in `prompts/feedback_v2.md`)
    - One call to the chosen model: Claude (Anthropic API) or Gemma 4 through Ollama (fine-tuned or base). All get the same prompt and JSON schema.
-   - The model scores content criteria with exact transcript quotes as evidence, confirms filler words in context, checks slide numbers, and writes up to 5 recommendations with an example sentence. If a planned script is given, it flags important points that were skipped or changed.
+   - The model scores content criteria with exact transcript quotes as evidence, confirms filler words in context, checks slide numbers, and writes up to 5 recommendations with an example sentence. If a planned script is given, it flags important points that were skipped or changed. If the project has a pitch idea and main points, it marks each point covered, partial or missed with a quote, and flags off-topic sentences.
 
 6. **Output validation** (`feedback.py`)
    - The JSON schema is enforced by the provider and checked again with Pydantic; failures become a readable error.
-   - Code then checks the content: timestamps must match a transcript sentence, slide numbers must exist, filler occurrences must be in the named sentence, and number checks must match the candidates. Anything else is dropped.
+   - Code then checks the content: timestamps must match a transcript sentence, slide numbers must exist, filler occurrences must be in the named sentence, main-point quotes must be in the transcript, and number checks must match the candidates. Anything else is dropped.
 
 7. **Scoring** (`scoring.py`)
    - Overall = 0.35 Content + 0.30 Delivery + 0.25 Slide alignment + 0.10 Timing, computed in code; a category without data is null and the rest are reweighted.
@@ -79,3 +79,15 @@ Built in the FastAPI pipeline (`pipeline/fillers.py`, `pipeline/feedback.py`):
 5. **Limits are shown.** With no model (`rules` backend), `method` is `"list"` and the UI says the words were not checked in context. When nothing is found, the report notes that speech recognition can drop hesitation sounds.
 
 The prompt version is stored with each report (`prompt_version`). Tests: `tests/test_fillers.py`.
+
+## Implemented: main points
+
+Does the speech make the points the speaker meant to make? Built in `pipeline/points.py` and `pipeline/feedback.py`:
+
+1. **Input.** A project has an optional `idea` and up to 6 `key_points`. They are copied to the attempt and sent to the model as `pitch`.
+2. **Judgement by the LLM.** For each point the model returns `point_checks`: `covered`, `partial` or `missed`, an exact `evidence` quote and a short `note`. It also lists `off_topic` sentences and writes an `idea_comment`.
+3. **Verification in code.** One result per point (a skipped point counts as missed). A covered or partial point whose quote is not in the transcript is marked `verified: false` and scored as missed. Off-topic sentences must exist, and their text is quoted by code, not by the model.
+4. **Coverage in code.** covered = 1, partial = 0.5, missed = 0, averaged over the points, as `main_points.coverage` (0–100). It is reported on its own and does not change the overall score yet.
+5. **Without a model** (`rules`), points are matched to sentences by key words (first 5 letters, so suffixes still match), with `method: "words"`; the report says it is a rough estimate.
+
+The folder page's "send to model" route (`web/src/lib/server/points.ts`) applies the same rules to the saved speech; keep the two in step. Tests: `tests/test_points.py`.

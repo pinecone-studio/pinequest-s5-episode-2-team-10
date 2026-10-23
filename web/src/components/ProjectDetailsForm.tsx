@@ -12,6 +12,8 @@ export default function ProjectDetailsForm({ project, onSaved }: { project: Proj
     name: project.name,
     goal: project.goal,
     audience: project.audience,
+    idea: project.idea ?? "",
+    key_points: project.key_points ?? [],
     planned_s: project.planned_s,
     pitch_type: project.pitch_type,
   });
@@ -22,8 +24,11 @@ export default function ProjectDetailsForm({ project, onSaved }: { project: Proj
     setValues((v) => ({ ...v, [key]: value }));
   }
 
+  // One main point per line in the text box.
+  const [pointsText, setPointsText] = useState((project.key_points ?? []).join("\n"));
+
   async function save(key: keyof ProjectDetails, value = values[key]) {
-    if (value === project[key]) return;
+    if (JSON.stringify(value) === JSON.stringify(project[key] ?? (key === "key_points" ? [] : ""))) return;
     setState("saving");
     setError(null);
     try {
@@ -63,6 +68,31 @@ export default function ProjectDetailsForm({ project, onSaved }: { project: Proj
             onChange={(e) => set("audience", e.target.value)}
             onBlur={() => save("audience")}
             placeholder="Judges, investors"
+          />
+        </Field>
+        <Field label="Pitch idea" className="sm:col-span-2">
+          <input
+            className={inputClass}
+            value={values.idea}
+            maxLength={500}
+            onChange={(e) => set("idea", e.target.value)}
+            onBlur={() => save("idea")}
+            placeholder="A coach that gives students feedback on their pitch in a minute"
+          />
+        </Field>
+        <Field label="Main points (one per line, up to 6)" className="sm:col-span-2">
+          <textarea
+            className={`${inputClass} h-auto py-2`}
+            rows={4}
+            value={pointsText}
+            onChange={(e) => setPointsText(e.target.value)}
+            onBlur={() => {
+              const lines = pointsText.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 6);
+              setPointsText(lines.join("\n"));
+              set("key_points", lines);
+              void save("key_points", lines);
+            }}
+            placeholder={"Students rarely get to practise\nFeedback in under a minute\nWorks in Mongolian"}
           />
         </Field>
         <Field label="Planned length">

@@ -114,6 +114,7 @@ def _model_output(occurrences):
     return {
         "summary": "s", "strengths": [], "content_scores": [], "slide_feedback": [],
         "number_checks": [], "recommendations": [], "filler_occurrences": occurrences,
+        "point_checks": [], "off_topic": [], "idea_comment": "",
     }
 
 
