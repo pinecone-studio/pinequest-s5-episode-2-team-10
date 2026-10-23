@@ -1,35 +1,89 @@
 @import "tailwindcss";
 
+/* The app is dark regardless of the operating system theme. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
-  --ground: #000000;
-  --surface: #111111;
-  --raised: #2a2a2a;
-  --border: #1a1a1a;
-  --rule: #161616;
-  --control: #444444;
-  --text: #ffffff;
-  --muted: #b4b4b4;
-  --faint: #949494;
-  --accent: #5b8def;
-  --positive: #5b8def;
-  --negative: #e5566f;
-  --primary: #ffffff;
-  --radius-card: 20px;
+  --bg: #202122;
+  --sidebar: #151617;
+  --card: #242526;
+  --inset: #1a1b1c;
+  --text-primary: #e6e6e6;
+  --text-secondary: #a0a1a3;
+  --text-helper: #8b8c8e;
+  --line: #333436;
+  --on-primary: #151617;
+  --font-size-title: 21px;
+  --font-size-section: 16px;
+  --font-size-body: 14px;
+  --font-size-nav: 14px;
+  --font-size-table: 13px;
+  --font-size-helper: 12px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --status-positive: #8eae9b;
+  --status-negative: #c48b94;
+  --status-warning: #c4b08a;
+
+  /* Names the existing desk styles already use. */
+  --background: var(--bg);
+  --foreground: var(--text-primary);
+  --ground: var(--bg);
+  --surface: var(--card);
+  --raised: var(--inset);
+  --border: var(--line);
+  --rule: var(--line);
+  --control: var(--line);
+  --text: var(--text-primary);
+  --muted: var(--text-secondary);
+  --faint: var(--text-helper);
+  --accent: var(--text-primary);
+  --positive: var(--status-positive);
+  --negative: var(--status-negative);
+  --warning: var(--status-warning);
+  --primary: var(--text-primary);
+  --radius-card: var(--radius-lg);
   --gap: 14px;
   /* 1150 = 6×180 + 5×14. Slide is 4 columns (762). Transcript is 2 (374). */
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--bg);
+  --color-foreground: var(--text-primary);
+  --color-sidebar: var(--sidebar);
+  --color-card: var(--card);
+  --color-inset: var(--inset);
+  --color-ink: var(--text-primary);
+  --color-secondary: var(--text-secondary);
+  --color-helper: var(--text-helper);
+  --color-line: var(--line);
+  --color-on-primary: var(--on-primary);
+  --color-positive: var(--status-positive);
+  --color-negative: var(--status-negative);
+  --color-warning: var(--status-warning);
+  --text-title: var(--font-size-title);
+  --text-section: var(--font-size-section);
+  --text-body: var(--font-size-body);
+  --text-nav: var(--font-size-nav);
+  --text-table: var(--font-size-table);
+  --text-helper: var(--font-size-helper);
+  --radius-tight: var(--radius-sm);
+  --radius-control: var(--radius-md);
+  --radius-card: var(--radius-lg);
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--ground);
-  color: var(--text);
+  background: var(--bg);
+  color: var(--text-primary);
   font-family: var(--font-inter), "Inter", system-ui, sans-serif;
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .desk {
@@ -51,8 +105,8 @@ body {
   gap: 10px;
   min-height: 48px;
   padding: 8px 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--font-size-nav);
+  font-weight: 500;
   color: var(--text);
 }
 
@@ -75,8 +129,8 @@ body {
 
 .desk h1 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 600;
+  font-size: var(--font-size-title);
+  font-weight: 500;
   line-height: 1.2;
   letter-spacing: -0.02em;
 }
@@ -84,7 +138,7 @@ body {
 .desk-sub {
   margin: 6px 0 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: var(--font-size-body);
   line-height: 20px;
 }
 
@@ -103,7 +157,7 @@ body {
 .desk-primary {
   border: 0;
   background: var(--primary);
-  color: #111111;
+  color: var(--on-primary);
 }
 
 .desk-primary:hover {
@@ -170,7 +224,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #000000;
+  background: var(--sidebar);
 }
 
 .desk-full .desk-slide {
@@ -196,7 +250,8 @@ body {
 .desk-panel {
   margin-bottom: 14px;
   padding: 22px;
-  border-radius: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 
@@ -224,7 +279,7 @@ body {
   height: 40px;
   padding: 0 12px;
   border: 1px solid var(--control);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--raised);
   color: var(--text);
   font-size: 14px;
@@ -505,7 +560,7 @@ body {
   min-height: 40px;
   padding: 8px 12px;
   border: 1px dashed var(--control);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   color: var(--muted);
   font-size: 14px;
   font-weight: 400;
@@ -542,7 +597,7 @@ body {
 
 .desk-row strong {
   display: block;
-  font-size: 16px;
+  font-size: var(--font-size-section);
   font-weight: 500;
 }
 
@@ -550,14 +605,14 @@ body {
   display: block;
   margin-top: 2px;
   color: var(--faint);
-  font-size: 12px;
+  font-size: var(--font-size-helper);
   font-style: normal;
 }
 
 .desk-empty {
   padding: 22px;
   border: 1px dashed var(--control);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   color: var(--muted);
   font-size: 14px;
 }
@@ -571,7 +626,7 @@ body {
 
 .desk-slide {
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   background: #ffffff;
 }
 
@@ -590,7 +645,7 @@ body {
   justify-content: center;
   gap: 4px;
   border: 1px dashed var(--control);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   color: var(--muted);
   font-size: 14px;
   cursor: pointer;
@@ -635,19 +690,20 @@ body {
   min-height: 280px;
   flex-direction: column;
   padding: 22px;
-  border-radius: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 
 .desk-speech h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--font-size-section);
   font-weight: 500;
 }
 
 .desk-speech .desk-sub {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--font-size-helper);
 }
 
 .desk-speech p:last-child,
@@ -698,7 +754,7 @@ body {
   margin-top: 16px;
   padding: 14px;
   border: 1px dashed var(--control);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 
 .desk-tests h3 {
@@ -843,19 +899,20 @@ body {
 .desk-points {
   margin-top: var(--gap);
   padding: 22px;
-  border-radius: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: var(--surface);
 }
 
 .desk-points h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--font-size-section);
   font-weight: 500;
 }
 
 .desk-points > .desk-sub {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: var(--font-size-helper);
 }
 
 .desk-points-field {
@@ -938,8 +995,8 @@ body {
 }
 
 .desk-chip.is-partial {
-  background: color-mix(in srgb, #e0a43a 22%, transparent);
-  color: #e0a43a;
+  background: color-mix(in srgb, var(--warning) 22%, transparent);
+  color: var(--warning);
 }
 
 .desk-chip.is-missed {
