@@ -1090,6 +1090,16 @@ function latestUpdated(folder: FolderMeta): string | null {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+async function figmaThumbnail(link: string): Promise<string | null> {
+  try {
+    const res = await fetch(`/api/figma-thumbnail?url=${encodeURIComponent(link)}`);
+    if (!res.ok) return null;
+    return ((await res.json()) as { thumbnailUrl: string | null }).thumbnailUrl;
+  } catch {
+    return null;
+  }
+}
+
 function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void }) {
   const { tr } = useLang();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1106,7 +1116,14 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
     setPdf(false);
     void (async () => {
       const blob = await getFolderBlob(slideKey(folder.id));
-      if (cancelled || !blob) return;
+      if (cancelled) return;
+      if (!blob) {
+        // No slide file: show the Figma deck's cover image, when its link is shared publicly.
+        if (!folder.figmaUrl) return;
+        const thumbnail = await figmaThumbnail(folder.figmaUrl);
+        if (!cancelled && thumbnail) setImageUrl(thumbnail);
+        return;
+      }
       if (!isPdf(blob)) {
         url = URL.createObjectURL(blob);
         if (!cancelled) setImageUrl(url);
@@ -1126,7 +1143,7 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
       if (url) URL.revokeObjectURL(url);
       void doc?.loadingTask.destroy().catch(() => undefined);
     };
-  }, [folder.id, folder.slide?.storageKey, folder.slideName]);
+  }, [folder.id, folder.slide?.storageKey, folder.slideName, folder.figmaUrl]);
 
   return (
     <li>
