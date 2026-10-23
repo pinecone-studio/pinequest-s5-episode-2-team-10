@@ -5,7 +5,7 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 ## Common rules
 
 - JSON bodies, except uploads, which are `multipart/form-data` with one `file` field.
-- Identity: `POST /auth/register`, `POST /auth/login` or `POST /auth/google` returns an access token. The browser sends it as `X-Access-Token` on every other request. A missing or unknown token returns `401`. Login replaces the previous token, so an older sign-in on another device stops working. `POST /auth/logout` does the same without returning a new token.
+- Identity: `POST /auth/register`, `POST /auth/login`, `POST /auth/demo`, or `POST /auth/google` returns an access token. The browser sends it as `X-Access-Token` on every other request. A missing or unknown token returns `401`. Login and Google sign-in replace the previous token, so an older sign-in on another device stops working. Demo sign-in does not: each computer keeps its own token for the shared account. `POST /auth/logout` forgets only the token that was sent.
 - Ownership is checked on every project and attempt; anything owned by another user returns `404`, so IDs can't be probed.
 - Errors always use this shape, with a message safe to show the user:
 
@@ -19,7 +19,7 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 | --- | --- | --- |
 | `POST /auth/register` | Create an account. `{email, password}` (password 8–128 characters). Email is stored in lowercase | `201 {id, email, access_token}`; `409 email_taken`; `422` for a bad email or short password |
 | `POST /auth/login` | Sign in. Same body. Wrong email and wrong password return the same error | `200 {id, email, access_token}`; `401 invalid_credentials` |
-| `POST /auth/demo` | Sign in to the shared demo account. Creates it the first time. No body | `200 {id, email, access_token}` |
+| `POST /auth/demo` | Sign in to the shared demo account from any browser. Creates it the first time. No body. Earlier demo sign-ins stay valid | `200 {id, email, access_token}` |
 | `POST /auth/google` | Sign in with Google. `{access_token}` is the Supabase Auth token from the Google redirect; the server checks it with Supabase (`GET /auth/v1/user`) and accepts only a confirmed email from the `google` provider. An existing account with that email is reused, otherwise one is created without a password | `200 {id, email, access_token}`; `401 invalid_google_token`; `502 google_unreachable`; `503 google_disabled` when `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY` are unset |
 | `GET /auth/me` | The signed-in account | `{id, email}` |
 | `POST /auth/logout` | Forget the current token | `204` |

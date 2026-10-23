@@ -12,6 +12,12 @@ An account. The browser keeps the access token.
 - `password_hash`: PBKDF2-SHA256 (`pbkdf2_sha256$iterations$salt$digest`). The password itself is never stored
 - `created_at`
 
+### `access_token`
+An extra sign-in for the shared demo account. Created on startup for existing databases; no need to drop tables.
+- `token_hash`: SHA-256 of that computer's access token (primary key)
+- `user_id` → `app_user.id` (indexed)
+- `created_at`
+
 ### `project`
 A folder for one pitch.
 - `id`: UUID primary key

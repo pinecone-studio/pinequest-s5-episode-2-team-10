@@ -27,7 +27,6 @@ function googleMessage(err: unknown, tr: (key: "serverUnreachable" | "googleFail
   return tr("googleFailed");
 }
 
-const UNAVAILABLE = "This sign-in method isn't available yet.";
 const OAUTH_PARAMS = ["code", "error", "error_code", "error_description"];
 
 function clearOAuthParams() {
@@ -47,7 +46,6 @@ export default function AuthScreen() {
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const exchanging = useRef(false);
   const registering = mode === "register";
@@ -86,7 +84,6 @@ export default function AuthScreen() {
     const sb = supabase();
     if (!sb) return;
     setError(null);
-    setNotice(null);
     setBusy(true);
     if (!(await googleEnabled())) {
       setError(tr("googleNotEnabled"));
@@ -106,7 +103,6 @@ export default function AuthScreen() {
   function switchMode(next: Mode) {
     setMode(next);
     setError(null);
-    setNotice(null);
     setAgain("");
   }
 
@@ -118,14 +114,8 @@ export default function AuthScreen() {
     if (window.history.length > 1) window.history.back();
   }
 
-  function showUnavailable() {
-    setError(null);
-    setNotice(UNAVAILABLE);
-  }
-
   async function enterDemo() {
     setError(null);
-    setNotice(null);
     setBusy(true);
     try {
       saveSession(await api.demo());
@@ -138,7 +128,6 @@ export default function AuthScreen() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setNotice(null);
     if (registering && password !== again) {
       setError(tr("authMismatch"));
       return;
@@ -234,9 +223,6 @@ export default function AuthScreen() {
           </button>
           {!registering && (
             <>
-              <button type="button" className="auth-text" onClick={showUnavailable} disabled={busy}>
-                Sign in using magic link
-              </button>
               <div className="auth-or" role="separator">
                 or
               </div>
@@ -245,11 +231,6 @@ export default function AuthScreen() {
                   <GoogleMark />
                   {tr("signInGoogle")}
                 </button>
-              )}
-              {notice && (
-                <p className="auth-note" role="status">
-                  {notice}
-                </p>
               )}
               <button type="button" className="auth-demo" onClick={enterDemo} disabled={busy}>
                 {tr("signInDemo")}
