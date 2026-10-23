@@ -27,7 +27,6 @@ import { streamModelReply } from "@/lib/modelStream";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
-import DevTests from "./DevTests";
 import Modal from "./Modal";
 import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
@@ -423,6 +422,11 @@ function FolderRoom({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        if (figmaEditing) {
+          setFigmaEditing(false);
+          setFigmaError(false);
+          return;
+        }
         setFull(false);
         return;
       }
@@ -437,7 +441,7 @@ function FolderRoom({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pageCount]);
+  }, [pageCount, figmaEditing]);
 
   function writeSpeech(next: string) {
     const cleaned = next.replace(/\s+/g, " ").trim();
@@ -660,16 +664,6 @@ function FolderRoom({
     replaceAudioUrl(blob ? URL.createObjectURL(blob) : null);
   }
 
-  /** Local test: uses the bundled Mongolian sample as the folder audio and transcribes it. */
-  async function loadSample(audio: Blob): Promise<string> {
-    stopStt();
-    const stored = await storeAudio(audio, tr("sampleName"), audio.type || "audio/webm");
-    if (!stored) return "";
-    const reply = await transcribeBlob(audio, "mn-sample.webm");
-    if (aliveRef.current) writeSpeech(reply.text);
-    return tr("sampleLoaded", { n: reply.text.split(/\s+/).filter(Boolean).length });
-  }
-
   function toggleSpeak() {
     if (playingRef.current) stopStt();
     else void beginStt();
@@ -836,31 +830,34 @@ function FolderRoom({
             </p>
           </div>
         </div>
-        <div className="desk-actions" hidden={full && anySlide}>
-          {speakButton()}
+        <div className="desk-actions" style={{ justifyContent: "flex-end" }} hidden={full && anySlide}>
           {anySlide && (
             <button type="button" className="desk-ghost" onClick={() => setFull(true)}>
               {tr("fullscreen")}
             </button>
           )}
+          <FeedbackModelSelect value={model} onChange={setModel} />
         </div>
 
         <div className="desk-stage">
           <div>
-            <div className={full && anySlide ? (showFigma ? "desk-full desk-full-figma" : "desk-full") : undefined}>
+            <div
+              className={`desk-slide-frame${full && anySlide ? (showFigma ? " desk-full desk-full-figma" : " desk-full") : ""}`}
+              style={full && anySlide ? undefined : { position: "relative", aspectRatio: "16 / 9" }}
+            >
               {showFigma ? (
-                <div className="desk-slide desk-figma">
+                <div className="desk-slide desk-figma" style={{ height: "100%" }}>
                   <iframe src={figmaEmbed!} title={tr("figmaLive")} allow="fullscreen" allowFullScreen />
                 </div>
               ) : slidePdf ? (
-                <div ref={frameRef} className="desk-slide">
-                  <canvas ref={canvasRef} width={1920} height={1080} />
+                <div ref={frameRef} className="desk-slide" style={{ height: "100%" }}>
+                  <canvas ref={canvasRef} width={1920} height={1080} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                 </div>
               ) : slideUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img className="desk-slide" src={slideUrl} alt={folder.slideName ?? tr("figmaSlide")} />
+                <img className="desk-slide" src={slideUrl} alt={folder.slideName ?? tr("figmaSlide")} style={{ height: "100%", objectFit: "contain" }} />
               ) : (
-                <label className="desk-slide-empty">
+                <label className="desk-slide-empty" style={{ height: "100%", minHeight: 0 }}>
                   <span>{tr("figmaSlide")}</span>
                   {tr("addImage")}
                   <input
@@ -870,6 +867,82 @@ function FolderRoom({
                     onChange={(e) => chooseSlide(e.target.files?.[0])}
                   />
                 </label>
+              )}
+              {!full && (
+                <div className="desk-speak" style={{ position: "absolute", zIndex: 2, left: 14, bottom: 14 }}>
+                  {speakButton()}
+                </div>
+              )}
+              {!full && figmaEditing && (
+                <button
+                  type="button"
+                  aria-label={tr("close")}
+                  onClick={() => (setFigmaEditing(false), setFigmaError(false))}
+                  style={{ position: "absolute", inset: 0, zIndex: 2, border: 0, padding: 0, background: "transparent" }}
+                />
+              )}
+              {!full && (
+                <div className="desk-slide-link" style={{ position: "absolute", zIndex: 3, top: 14, right: 14, width: "max-content" }}>
+                  <button
+                    type="button"
+                    className="desk-ghost"
+                    aria-expanded={figmaEditing}
+                    style={{ background: "rgba(20, 20, 20, 0.72)", color: "#e6e6e6", borderColor: "#3a3a3a" }}
+                    onClick={() => {
+                      if (figmaEditing) {
+                        setFigmaEditing(false);
+                        setFigmaError(false);
+                        return;
+                      }
+                      setFigmaDraft(folder.figmaUrl ?? "");
+                      setFigmaEditing(true);
+                    }}
+                  >
+                    {tr("figmaAdd")}
+                  </button>
+                  {figmaEditing && (
+                    <form
+                      onSubmit={saveFigma}
+                      className="desk-link-popover"
+                      role="dialog"
+                      aria-label={tr("figmaLinkLabel")}
+                      style={{
+                        position: "absolute",
+                        top: "calc(100% + 6px)",
+                        right: 0,
+                        width: 200,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                        padding: 8,
+                        border: "1px solid #3a3a3a",
+                        borderRadius: 10,
+                        background: "#2b2b2b",
+                        color: "#e6e6e6",
+                        boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
+                      }}
+                    >
+                      <input
+                        type="url"
+                        value={figmaDraft}
+                        onChange={(e) => setFigmaDraft(e.target.value)}
+                        placeholder="https://www.figma.com/slides/…"
+                        aria-label={tr("figmaLinkLabel")}
+                        autoFocus
+                        style={{ width: "100%", height: 28, padding: "0 8px", fontSize: 12, boxSizing: "border-box" }}
+                      />
+                      {figmaError && <p className="desk-note">{tr("figmaBad")}</p>}
+                      <div className="desk-link-actions">
+                        <button type="button" className="desk-ghost" style={{ height: 28, padding: "0 10px", fontSize: 12 }} onClick={() => (setFigmaEditing(false), setFigmaError(false))}>
+                          {tr("figmaCancel")}
+                        </button>
+                        <button type="submit" className="desk-primary" style={{ height: 28, padding: "0 10px", fontSize: 12 }}>
+                          {tr("figmaSave")}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
               )}
               {full && anySlide && (
                 <div className="desk-full-bar">
@@ -887,54 +960,25 @@ function FolderRoom({
               <div className="desk-tools">
                 <div className="desk-pages">{!showFigma && pageButtons()}</div>
                 <div className="desk-figma-tools">
-                  {figmaEditing ? (
-                    <form onSubmit={saveFigma} className="desk-figma-form">
-                      <input
-                        type="url"
-                        value={figmaDraft}
-                        onChange={(e) => setFigmaDraft(e.target.value)}
-                        placeholder="https://www.figma.com/slides/…"
-                        aria-label={tr("figmaLinkLabel")}
-                        autoFocus
-                      />
-                      <button type="submit" className="desk-ghost">
-                        {tr("figmaSave")}
-                      </button>
-                      <button type="button" className="desk-ghost" onClick={() => (setFigmaEditing(false), setFigmaError(false))}>
-                        {tr("figmaCancel")}
-                      </button>
-                    </form>
-                  ) : (
-                    <>
-                      {figmaEmbed && hasSlide && (
-                        <button type="button" className="desk-link" onClick={() => setPreferPdf((p) => !p)}>
-                          {showFigma ? tr("showPdf") : tr("showFigma")}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="desk-link"
-                        onClick={() => (setFigmaDraft(folder.figmaUrl ?? ""), setFigmaEditing(true))}
-                      >
-                        {folder.figmaUrl ? tr("figmaChange") : tr("figmaAdd")}
-                      </button>
-                      {folder.figmaUrl && (
-                        <button type="button" className="desk-link" onClick={removeFigma}>
-                          {tr("figmaRemove")}
-                        </button>
-                      )}
-                      {hasSlide && (
-                        <label className="desk-link">
-                          {tr("changeSlide")}
-                          <input type="file" accept={SLIDE_ACCEPT} className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
-                        </label>
-                      )}
-                    </>
+                  {figmaEmbed && hasSlide && (
+                    <button type="button" className="desk-link" onClick={() => setPreferPdf((p) => !p)}>
+                      {showFigma ? tr("showPdf") : tr("showFigma")}
+                    </button>
+                  )}
+                  {folder.figmaUrl && (
+                    <button type="button" className="desk-link" onClick={removeFigma}>
+                      {tr("figmaRemove")}
+                    </button>
+                  )}
+                  {hasSlide && (
+                    <label className="desk-link">
+                      {tr("changeSlide")}
+                      <input type="file" accept={SLIDE_ACCEPT} className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
+                    </label>
                   )}
                 </div>
               </div>
             )}
-            {figmaError && <p className="desk-note">{tr("figmaBad")}</p>}
             {showFigma && !full && (
               <p className="desk-hint">
                 {tr("figmaShareHint")}
@@ -979,7 +1023,6 @@ function FolderRoom({
               </button>
             </div>
             <div className="desk-probe">
-              <FeedbackModelSelect value={model} onChange={setModel} />
               <button
                 type="button"
                 className="desk-ghost"
@@ -1013,7 +1056,6 @@ function FolderRoom({
                 </>
               )}
             </div>
-            {process.env.NODE_ENV === "development" && <DevTests model={model} onLoadSample={loadSample} />}
           </aside>
         </div>
 
