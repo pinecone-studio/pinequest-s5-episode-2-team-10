@@ -217,6 +217,7 @@ const mn = {
   authMismatch: "Нууц үг таарахгүй байна.",
   authFailed: "Нэвтэрч чадсангүй. Дахин оролдоно уу.",
   logOut: "Гарах",
+  currentAccount: "Одоогийн бүртгэл",
 };
 
 export type MessageKey = keyof typeof mn;
@@ -428,6 +429,7 @@ const en: Record<MessageKey, string> = {
   authMismatch: "The passwords don't match.",
   authFailed: "Could not sign in. Try again.",
   logOut: "Log out",
+  currentAccount: "Current account",
 };
 
 const DICTS: Record<Lang, Record<MessageKey, string>> = { mn, en };

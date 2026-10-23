@@ -28,6 +28,7 @@ import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import DevTests from "./DevTests";
+import Modal from "./Modal";
 import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
@@ -125,47 +126,49 @@ export default function FolderDesk() {
                 {folders.length === 0 ? tr("foldersNone") : tr("foldersCount", { n: folders.length })}
               </p>
             </div>
-            {!naming && (
-              <button type="button" className="desk-primary" onClick={() => setNaming(true)}>
-                {tr("addFolder")}
-              </button>
-            )}
+            <button type="button" className="desk-primary" onClick={() => setNaming(true)}>
+              {tr("addFolder")}
+            </button>
           </div>
 
           {naming && (
-            <form onSubmit={createFolder} className="desk-panel">
-              <label>
-                <span>{tr("folderName")}</span>
-                <input
-                  type="text"
-                  autoFocus
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  placeholder="figma tdd"
-                />
-              </label>
-              <label>
-                <span>{tr("slide")}</span>
-                <span className="desk-file">
-                  <span>{slideFile ? slideFile.name : tr("uploadSlideHint")}</span>
-                  <span>{slideFile ? tr("change") : tr("upload")}</span>
+            <Modal title={tr("addFolder")} onClose={() => setNaming(false)}>
+              <form onSubmit={createFolder} className="desk-panel">
+                <label>
+                  <span>{tr("folderName")}</span>
                   <input
-                    type="file"
-                    accept={SLIDE_ACCEPT}
-                    className="sr-only"
-                    onChange={(e) => void pickNewSlide(e.target.files?.[0] ?? null)}
+                    type="text"
+                    autoFocus
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    placeholder="figma tdd"
                   />
-                </span>
-              </label>
-              {newSlideError && <p className="desk-note">{newSlideError}</p>}
-              <button
-                type="submit"
-                className="desk-primary"
-                disabled={!draft.trim() || !slideFile || creating || Boolean(newSlideError)}
-              >
-                {creating ? tr("convertingSlide") : tr("createOpen")}
-              </button>
-            </form>
+                </label>
+                <label>
+                  <span>{tr("slide")}</span>
+                  <span className="desk-file">
+                    <span>{slideFile ? slideFile.name : tr("uploadSlideHint")}</span>
+                    <span>{slideFile ? tr("change") : tr("upload")}</span>
+                    <input
+                      type="file"
+                      accept={SLIDE_ACCEPT}
+                      className="sr-only"
+                      onChange={(e) => void pickNewSlide(e.target.files?.[0] ?? null)}
+                    />
+                  </span>
+                </label>
+                {newSlideError && <p className="desk-note">{newSlideError}</p>}
+                <div className="app-modal-actions">
+                  <button
+                    type="submit"
+                    className="desk-primary"
+                    disabled={!draft.trim() || !slideFile || creating || Boolean(newSlideError)}
+                  >
+                    {creating ? tr("convertingSlide") : tr("createOpen")}
+                  </button>
+                </div>
+              </form>
+            </Modal>
           )}
 
           {folders.length === 0 ? (
@@ -872,8 +875,10 @@ function FolderRoom({
                 <div className="desk-full-bar">
                   {speakButton()}
                   {!showFigma && pageButtons()}
-                  <button type="button" className="desk-ghost" onClick={() => setFull(false)}>
-                    {tr("close")}
+                  <button type="button" className="desk-ghost" aria-label={tr("close")} onClick={() => setFull(false)}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+                      <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                    </svg>
                   </button>
                 </div>
               )}
