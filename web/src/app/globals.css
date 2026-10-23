@@ -117,6 +117,11 @@ body {
   color: var(--text);
 }
 
+.app-brand .desk-lang {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .app-side-top {
   position: relative;
 }
@@ -370,8 +375,25 @@ body {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   margin: 0 0 24px;
+}
+
+.desk-title > div {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+.desk-title .desk-primary,
+.desk-actions .desk-primary {
+  margin-left: auto;
+  max-width: 100%;
+  height: auto;
+  min-height: 36px;
+  white-space: normal;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .desk h1 {
@@ -1892,4 +1914,200 @@ textarea.ui-input {
   .folder-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.app-modal {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.app-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.app-modal-card {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 18px;
+  border: 1px solid #3a3a3a;
+  border-radius: 12px;
+  background: #323232;
+  color: #e6e6e6;
+}
+
+.app-modal-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.app-modal-x {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #e6e6e6;
+  cursor: pointer;
+}
+
+.app-modal-x:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.app-modal-x:focus-visible {
+  outline: 2px solid #e6e6e6;
+  outline-offset: 2px;
+}
+
+.app-modal-bar h2 {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-modal-email {
+  margin: 0 0 14px;
+  color: #a0a1a3;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.app-modal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  color: #a0a1a3;
+  font-size: 13px;
+}
+
+.app-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.app-modal-card .desk-panel {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.app-modal-card .desk-lang {
+  margin-left: 0;
+}
+
+.account-panel-backdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.account-panel {
+  position: fixed;
+  z-index: 61;
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid #3a3a3a;
+  border-radius: 12px;
+  background: #2b2b2b;
+  color: #e6e6e6;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.account-panel-section {
+  padding: 10px 4px 8px;
+  border-bottom: 1px solid #3a3a3a;
+}
+
+.account-panel-section > p {
+  margin: 0 8px 6px;
+  color: #a0a1a3;
+  font-size: 12px;
+}
+
+.account-panel-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 4px 8px;
+}
+
+.account-panel-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.account-panel-copy strong,
+.account-panel-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-panel-user strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.account-panel-user span span {
+  color: #a0a1a3;
+  font-size: 12px;
+}
+
+.account-panel .desk-lang {
+  margin: 0 8px;
+}
+
+.account-panel-logout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 40px;
+  margin-top: 4px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #e6e6e6;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.account-panel-logout:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.account-panel-logout:disabled {
+  opacity: 0.45;
+  cursor: default;
 }

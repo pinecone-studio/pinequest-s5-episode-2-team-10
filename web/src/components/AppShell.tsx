@@ -15,10 +15,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const account = useAccount();
   const pathname = usePathname();
   const menuId = useId();
-  const accountMenuId = useId();
-  const accountRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const accountBtnRef = useRef<HTMLButtonElement>(null);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [panelBox, setPanelBox] = useState<{ top: number; left: number; width: number } | null>(null);
   const [narrow, setNarrow] = useState(false);
   const [busy, setBusy] = useState(false);
   const home = pathname === "/" || pathname === "/figma";
@@ -48,14 +48,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen, accountOpen]);
 
-  useEffect(() => {
-    if (!accountOpen) return;
-    function onPointer(event: MouseEvent) {
-      if (!accountRef.current?.contains(event.target as Node)) setAccountOpen(false);
+  function toggleAccount() {
+    if (accountOpen) {
+      setAccountOpen(false);
+      return;
     }
-    document.addEventListener("mousedown", onPointer);
-    return () => document.removeEventListener("mousedown", onPointer);
-  }, [accountOpen]);
+    const rect = accountBtnRef.current?.getBoundingClientRect();
+    if (rect) setPanelBox({ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 220) });
+    setAccountOpen(true);
+  }
 
   async function logout() {
     setBusy(true);
@@ -75,10 +76,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           className="app-menu"
           aria-expanded={menuOpen}
           aria-controls={menuId}
+          aria-label={menuOpen ? tr("close") : undefined}
           onClick={() => setMenuOpen((open) => !open)}
         >
-          <MenuIcon />
-          {menuOpen ? tr("close") : tr("menu")}
+          {menuOpen ? <CloseIcon /> : <MenuIcon />}
+          {menuOpen ? null : tr("menu")}
         </button>
         <span className="app-brand">
           <SayloMark />
@@ -92,15 +94,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="app-brand">
           <SayloMark />
           <span className="desk-brand">SAYLO</span>
+          {process.env.NODE_ENV === "development" && <LangToggle />}
         </div>
-        <div className="app-side-top" ref={accountRef}>
+        <div className="app-side-top">
           <button
+            ref={accountBtnRef}
             type="button"
             className="app-account"
             aria-expanded={accountOpen}
-            aria-controls={accountMenuId}
-            aria-haspopup="menu"
-            onClick={() => setAccountOpen((open) => !open)}
+            aria-haspopup="dialog"
+            onClick={toggleAccount}
           >
             <span className="app-avatar" aria-hidden>
               {(label || email || "?").slice(0, 1).toUpperCase()}
@@ -111,14 +114,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </span>
             <ChevronIcon />
           </button>
-          {accountOpen && (
-            <div id={accountMenuId} className="app-account-menu" role="menu">
-              <button type="button" role="menuitem" onClick={logout} disabled={busy}>
-                {tr("logOut")}
-              </button>
-              {process.env.NODE_ENV === "development" && <LangToggle />}
-            </div>
-          )}
         </div>
         <nav className="app-nav" aria-label="SAYLO">
           <Link href="/" aria-current={home ? "page" : undefined} onClick={() => setMenuOpen(false)}>
@@ -128,7 +123,68 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
       <div className="app-main">{children}</div>
+      {accountOpen && panelBox && (
+        <>
+          <button type="button" className="account-panel-backdrop" aria-label={tr("close")} onClick={() => setAccountOpen(false)} />
+          <div
+            className="account-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label={label || "SAYLO"}
+            style={{
+              position: "fixed",
+              zIndex: 61,
+              top: panelBox.top,
+              left: panelBox.left,
+              width: panelBox.width,
+              maxHeight: "calc(100vh - 24px)",
+              overflow: "auto",
+              boxSizing: "border-box",
+              padding: 8,
+              border: "1px solid #3a3a3a",
+              borderRadius: 12,
+              background: "#2b2b2b",
+              color: "#e6e6e6",
+            }}
+          >
+            <div className="account-panel-section">
+              <p>{tr("currentAccount")}</p>
+              <div className="account-panel-user" style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <span className="app-avatar" aria-hidden>
+                  {(label || email || "?").slice(0, 1).toUpperCase()}
+                </span>
+                <span className="account-panel-copy" style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
+                  <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label || "SAYLO"}</strong>
+                  {email && (
+                    <span style={{ display: "block", overflow: "hidden", color: "#a0a1a3", fontSize: 12, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {email}
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="account-panel-logout"
+              onClick={logout}
+              disabled={busy}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}
+            >
+              {tr("logOut")}
+              <ChevronRight />
+            </button>
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
   );
 }
 
@@ -136,6 +192,14 @@ function MenuIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>
       <path d="M3 5h12M3 9h12M3 13h12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ChevronRight() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+      <path d="M5 3.5 8.5 7 5 10.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
