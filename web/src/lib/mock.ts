@@ -200,6 +200,28 @@ export const mockApi = {
     return { id: user.id, email: user.email, access_token: user.token };
   },
 
+  async demo(): Promise<AuthSession> {
+    await wait();
+    const email = "demo@pitchcoach.local";
+    const users = loadUsers();
+    let user = users.find((row) => row.email === email);
+    if (!user) {
+      const salt = crypto.randomUUID();
+      user = {
+        id: crypto.randomUUID(),
+        email,
+        salt,
+        password_hash: await mockDigest(crypto.randomUUID(), salt),
+        token: crypto.randomUUID(),
+      };
+      users.push(user);
+    } else {
+      user.token = crypto.randomUUID();
+    }
+    saveUsers(users);
+    return { id: user.id, email: user.email, access_token: user.token };
+  },
+
   async login(email: string, password: string): Promise<AuthSession> {
     await wait();
     const cleaned = cleanMockEmail(email);

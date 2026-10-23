@@ -249,23 +249,236 @@ body {
   outline-offset: 1px;
 }
 
-.auth-panel {
-  max-width: 420px;
+.auth-screen {
+  position: relative;
+  min-height: 100vh;
+  background: #1c1b1d;
+  color: #f5f5f5;
 }
 
-.auth-actions {
-  display: flex;
-  flex-wrap: wrap;
+.auth-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 48% 42% at 100% -8%, rgba(210, 210, 210, 0.16), transparent 62%),
+    radial-gradient(ellipse 42% 36% at -6% 108%, rgba(190, 190, 190, 0.1), transparent 58%);
+}
+
+.auth-back {
+  position: absolute;
+  top: 22px;
+  left: 22px;
+  z-index: 2;
+  display: inline-flex;
   align-items: center;
-  gap: 14px;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #f5f5f5;
+  font-size: 14px;
+  font-weight: 500;
 }
 
-.auth-actions .desk-link {
+.auth-back:focus-visible,
+.auth-screen button:focus-visible,
+.auth-screen input:focus-visible,
+.auth-screen a:focus-visible {
+  outline: 2px solid #f5f5f5;
+  outline-offset: 2px;
+}
+
+.auth-frame {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: 88px 24px 40px;
+}
+
+.auth-form {
+  width: min(360px, 100%);
+  text-align: center;
+}
+
+.auth-logo {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 36px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: #242326;
+  color: #f5f5f5;
+}
+
+.auth-form h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.auth-sub {
+  margin: 10px 0 0;
+  color: #a3a3a3;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.auth-sub button {
   border: 0;
   background: none;
-  padding: 0;
+  color: #f5f5f5;
   font: inherit;
   text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.auth-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.auth-fields input {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  color: #f5f5f5;
+  font-size: 14px;
+}
+
+.auth-fields input::placeholder {
+  color: #8a8a8a;
+}
+
+.auth-primary,
+.auth-sso {
+  width: 100%;
+  height: 46px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.auth-primary {
+  margin-top: 14px;
+  border: 0;
+  background: #f5f5f5;
+  color: #1c1b1d;
+}
+
+.auth-primary:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+.auth-primary:disabled,
+.auth-sso:disabled,
+.auth-text:disabled,
+.auth-demo:disabled {
+  opacity: 0.55;
+}
+
+.auth-text,
+.auth-demo {
+  border: 0;
+  background: none;
+  color: #f5f5f5;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.auth-text {
+  margin-top: 14px;
+}
+
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: #8a8a8a;
+  font-size: 13px;
+}
+
+.auth-or::before,
+.auth-or::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.auth-sso {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: #f5f5f5;
+}
+
+.auth-sso:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.auth-note,
+.auth-alert {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.auth-note {
+  color: #a3a3a3;
+}
+
+.auth-alert {
+  color: #e7b4bc;
+}
+
+.auth-demo {
+  margin-top: 14px;
+  color: #a3a3a3;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-legal {
+  margin: 22px 0 0;
+  color: #8a8a8a;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .auth-back {
+    top: 16px;
+    left: 16px;
+  }
+
+  .auth-frame {
+    padding: 80px 20px 32px;
+  }
+
+  .auth-form h1 {
+    font-size: 26px;
+  }
+
+  .auth-logo {
+    margin-bottom: 28px;
+  }
 }
 
 .desk-account {

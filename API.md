@@ -19,6 +19,7 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 | --- | --- | --- |
 | `POST /auth/register` | Create an account. `{email, password}` (password 8–128 characters). Email is stored in lowercase | `201 {id, email, access_token}`; `409 email_taken`; `422` for a bad email or short password |
 | `POST /auth/login` | Sign in. Same body. Wrong email and wrong password return the same error | `200 {id, email, access_token}`; `401 invalid_credentials` |
+| `POST /auth/demo` | Sign in to the shared demo account. Creates it the first time. No body | `200 {id, email, access_token}` |
 | `GET /auth/me` | The signed-in account | `{id, email}` |
 | `POST /auth/logout` | Forget the current token | `204` |
 | `GET /projects` | The user's projects, most recently used first | `[{id, name, goal, audience, idea, key_points, planned_s, pitch_type, created_at, updated_at, attempt_count, latest_overall, processing}]` |
