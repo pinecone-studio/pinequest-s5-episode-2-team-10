@@ -72,14 +72,18 @@ function difference(a: Float32Array, b: Float32Array): number {
 
 const isSubset = (a: Set<string>, b: Set<string>) => [...a].every((w) => b.has(w));
 
+const TRANSITION_WORDS = 6; // a shown slide with fewer distinct words is a title or section divider
+
 /**
  * PDF page numbers worth showing, in order. A page is hidden when it is
  * - empty: no text and a single flat colour, or
  * - an animation step: everything on it reappears on the next page, which looks almost the same.
  * Picture slides without text are kept, and so are different slides that share words
  * (an agenda followed by its first topic looks different, so both stay).
+ * `transitions` are the shown slides (numbered as shown, from 1) with hardly any text: titles,
+ * section dividers, "thank you". They stay visible but carry no point of their own.
  */
-export async function pickSlides(doc: PDFDocumentProxy): Promise<{ pages: number[]; hidden: number }> {
+export async function pickSlides(doc: PDFDocumentProxy): Promise<{ pages: number[]; hidden: number; transitions: number[] }> {
   const infos: PageInfo[] = [];
   for (let n = 1; n <= doc.numPages; n++) infos.push(await pageInfo(doc, n));
 
@@ -97,7 +101,8 @@ export async function pickSlides(doc: PDFDocumentProxy): Promise<{ pages: number
     if (!empty && !step) pages.push(i + 1);
   });
   if (pages.length === 0) pages.push(doc.numPages); // never hide everything
-  return { pages, hidden: doc.numPages - pages.length };
+  const transitions = pages.flatMap((page, i) => (infos[page - 1].words.size < TRANSITION_WORDS ? [i + 1] : []));
+  return { pages, hidden: doc.numPages - pages.length, transitions };
 }
 
 /** Slide text for the model, numbered as shown (hidden pages skipped). */
