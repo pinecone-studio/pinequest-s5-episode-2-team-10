@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
-import { isProtoModel, type ModelStatus, type ProtoModel } from "@/lib/feedbackModels";
+import { FULL_ANALYSIS_ENABLED, isProtoModel, type ModelStatus, type ProtoModel } from "@/lib/feedbackModels";
 import { t, type Lang } from "@/lib/i18n";
 
 export { isProtoModel };
@@ -67,7 +67,7 @@ export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
   } catch {
     ollama = { available: false, reason: t(lang, "ollamaDown") };
   }
-  const backend = await backendStatus(lang);
+  const backend = FULL_ANALYSIS_ENABLED ? await backendStatus(lang) : null;
   const remoteOllama = /^https?:\/\//.test(ollamaUrl()) && !/localhost|127\.0\.0\.1/.test(ollamaUrl());
   return [
     { id: "ollama", name: `Gemma · Ollama (${ollamaModel()})`, local: !remoteOllama, server: remoteOllama, ...ollama },
@@ -79,7 +79,7 @@ export async function modelStatuses(lang: Lang): Promise<ModelStatus[]> {
       available: claudeKey,
       reason: claudeKey ? null : t(lang, "claudeKeyMissing"),
     },
-    { id: "backend", name: t(lang, "backendName"), local: false, server: true, ...backend },
+    ...(backend ? [{ id: "backend" as const, name: t(lang, "backendName"), local: false, server: true, ...backend }] : []),
   ];
 }
 

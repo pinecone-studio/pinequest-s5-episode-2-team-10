@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useState, useSyncExternalStore } from "react";
-import { isProtoModel, parseModelStatuses, type ModelStatus, type ProtoModel } from "@/lib/feedbackModels";
+import { FULL_ANALYSIS_ENABLED, isProtoModel, parseModelStatuses, type ModelStatus, type ProtoModel } from "@/lib/feedbackModels";
 import { t } from "@/lib/i18n";
 import { currentLang, langHeaders, useLang } from "@/lib/i18nClient";
 
@@ -26,7 +26,8 @@ function snapshot(): ProtoModel {
   if (current) return current;
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    current = isProtoModel(saved) && saved !== "rules" ? saved : "ollama";
+    // A saved "backend" falls back to Gemma where Full analysis is hidden.
+    current = isProtoModel(saved) && saved !== "rules" && (saved !== "backend" || FULL_ANALYSIS_ENABLED) ? saved : "ollama";
   } catch {
     current = "ollama"; // storage blocked
   }
