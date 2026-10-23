@@ -9,11 +9,12 @@ export { isProtoModel };
 export type { ProtoModel };
 
 export class LlmError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
+  readonly status: number;
+
+  // Plain fields, not constructor shorthand: some compilers reset shorthand fields after the constructor.
+  constructor(message: string, status: number) {
     super(message);
+    this.status = status;
   }
 }
 

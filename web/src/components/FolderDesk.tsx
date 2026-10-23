@@ -15,6 +15,7 @@ import {
 } from "@/lib/folderStore";
 import { openPdf, paintPage, readSlideText } from "@/lib/slidePdf";
 import { streamModelReply } from "@/lib/modelStream";
+import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import DevTests from "./DevTests";
@@ -53,6 +54,14 @@ export default function FolderDesk() {
   const [naming, setNaming] = useState(false);
   const [draft, setDraft] = useState("");
   const [slideFile, setSlideFile] = useState<File | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newSlideError, setNewSlideError] = useState<string | null>(null);
+
+  async function pickNewSlide(file: File | null) {
+    setNewSlideError(null);
+    setSlideFile(file);
+    if (file && !(await slideKind(file))) setNewSlideError(tr("slideWrongType"));
+  }
 
   useEffect(() => {
     setFolders(loadFolders());
@@ -68,13 +77,24 @@ export default function FolderDesk() {
     e.preventDefault();
     const name = draft.trim();
     if (!name || !slideFile) return;
+    setCreating(true);
+    setNewSlideError(null);
+    let slide: File;
+    try {
+      slide = await prepareSlide(slideFile); // PowerPoint decks become PDF here
+    } catch (err) {
+      setNewSlideError(err instanceof Error ? err.message : tr("deckConvertFailed"));
+      setCreating(false);
+      return;
+    }
+    setCreating(false);
     const folder: FolderMeta = {
       id: crypto.randomUUID(),
       name,
-      slideName: slideFile.name,
+      slideName: slide.name,
       audioName: null,
     };
-    await putFolderBlob(slideKey(folder.id), slideFile);
+    await putFolderBlob(slideKey(folder.id), slide);
     persist([folder, ...folders]);
     setDraft("");
     setSlideFile(null);
@@ -128,14 +148,19 @@ export default function FolderDesk() {
                   <span>{slideFile ? tr("change") : tr("upload")}</span>
                   <input
                     type="file"
-                    accept="image/*,.pdf"
+                    accept={SLIDE_ACCEPT}
                     className="sr-only"
-                    onChange={(e) => setSlideFile(e.target.files?.[0] ?? null)}
+                    onChange={(e) => void pickNewSlide(e.target.files?.[0] ?? null)}
                   />
                 </span>
               </label>
-              <button type="submit" className="desk-primary" disabled={!draft.trim() || !slideFile}>
-                {tr("createOpen")}
+              {newSlideError && <p className="desk-note">{newSlideError}</p>}
+              <button
+                type="submit"
+                className="desk-primary"
+                disabled={!draft.trim() || !slideFile || creating || Boolean(newSlideError)}
+              >
+                {creating ? tr("convertingSlide") : tr("createOpen")}
               </button>
             </form>
           )}
@@ -214,6 +239,7 @@ function FolderRoom({
   const textRef = useRef("");
   const [sttNote, setSttNote] = useState<string | null>(null);
   const [slideNote, setSlideNote] = useState<"pdfOpenFail" | "slideDrawFail" | null>(null);
+  const [slideMsg, setSlideMsg] = useState<string | null>(null); // converting, or why a picked file was refused
   const [full, setFull] = useState(false);
   const [probing, setProbing] = useState(false);
   const [probeNote, setProbeNote] = useState<string | null>(null);
@@ -524,8 +550,17 @@ function FolderRoom({
     }
   }
 
-  async function chooseSlide(file: File | undefined) {
-    if (!file) return;
+  async function chooseSlide(picked: File | undefined) {
+    if (!picked) return;
+    setSlideMsg(tr("convertingSlide"));
+    let file: File;
+    try {
+      file = await prepareSlide(picked); // PowerPoint decks become PDF here
+    } catch (err) {
+      setSlideMsg(err instanceof Error ? err.message : tr("deckConvertFailed"));
+      return;
+    }
+    setSlideMsg(null);
     await putFolderBlob(slideKey(folder.id), file);
     onChange({ ...folder, slideName: file.name });
     await loadSlide(file);
@@ -711,7 +746,7 @@ function FolderRoom({
                   {tr("addImage")}
                   <input
                     type="file"
-                    accept="image/*,.pdf"
+                    accept={SLIDE_ACCEPT}
                     className="sr-only"
                     onChange={(e) => chooseSlide(e.target.files?.[0])}
                   />
@@ -732,11 +767,12 @@ function FolderRoom({
                 <div className="desk-pages">{pageButtons()}</div>
                 <label className="desk-link">
                   {tr("changeSlide")}
-                  <input type="file" accept="image/*,.pdf" className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
+                  <input type="file" accept={SLIDE_ACCEPT} className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
                 </label>
               </div>
             )}
             {slideNote && <p className="desk-note">{tr(slideNote)}</p>}
+            {slideMsg && <p className="desk-note" aria-live="polite">{slideMsg}</p>}
           </div>
           <aside className="desk-speech">
             <h2>{tr("speechText")}</h2>
