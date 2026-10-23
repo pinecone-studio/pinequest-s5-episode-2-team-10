@@ -43,14 +43,19 @@ Feedback is primarily **transcript-based**. Do not claim to evaluate confidence,
 # API (from the repo root)
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt          # add requirements-ml.txt on the GPU machine
-cp .env.example .env                     # set PITCH_DB_URL to Supabase, ANTHROPIC_API_KEY, etc.
-set -a && source .env && set +a
+# If backend/.env.local does not exist, copy backend/.env.example to that path.
+# Set PITCH_DB_URL to the Supabase session pooler URI in a loaded env file.
 uvicorn backend.main:app --reload --port 8000
 
 # Web app
 cd web && npm install
 NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 ```
+
+The backend automatically loads `backend/.env.local`, `backend/.env`, then the
+repository-root `.env`; shell environment variables take precedence. The backend
+example selects Gemma through local Ollama; keep Ollama running and ensure the
+configured model is available. Do not overwrite existing `.env` files.
 
 Without a GPU, set `PITCH_ASR=stub PITCH_EMBEDDINGS=none`. Without `NEXT_PUBLIC_API_URL`, the web app runs in demo mode with sample data. To try only the AI analysis on a transcript, see `TESTING.md`.
 
