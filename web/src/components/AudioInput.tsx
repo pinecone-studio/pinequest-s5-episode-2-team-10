@@ -153,15 +153,15 @@ export default function AudioInput({
           <button
             type="button"
             onClick={recording ? stopRecording : startRecording}
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#151617] ${
-              recording ? "bg-[#c48b94]" : "bg-[#e6e6e6]"
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--on-primary)] ${
+              recording ? "bg-[var(--status-negative)]" : "bg-[var(--text-primary)]"
             }`}
             aria-label={recording ? "Stop recording" : "Start recording"}
           >
             {recording ? (
-              <span className="h-3.5 w-3.5 rounded-sm bg-[#151617]" />
+              <span className="h-3.5 w-3.5 rounded-sm bg-[var(--on-primary)]" />
             ) : (
-              <span className="h-3.5 w-3.5 rounded-full bg-[#c48b94]" />
+              <span className="h-3.5 w-3.5 rounded-full bg-[var(--status-negative)]" />
             )}
           </button>
           <div className="text-sm">

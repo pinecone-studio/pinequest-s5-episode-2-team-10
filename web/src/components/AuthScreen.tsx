@@ -8,6 +8,7 @@ import { clearSession, saveSession, useAccount } from "@/lib/session";
 import { googleEnabled, supabase } from "@/lib/supabase";
 import LangToggle from "./LangToggle";
 import SayloMark from "./SayloMark";
+import ThemeToggle from "./ThemeToggle";
 
 type Mode = "login" | "register";
 
@@ -149,6 +150,9 @@ export default function AuthScreen() {
         </svg>
         Back
       </button>
+      <div className="auth-theme">
+        <ThemeToggle />
+      </div>
       <div className="auth-frame">
         <form className="auth-form" onSubmit={submit}>
           <div className="auth-logo" aria-hidden>

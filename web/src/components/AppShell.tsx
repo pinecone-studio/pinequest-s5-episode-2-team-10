@@ -8,6 +8,7 @@ import { useLang } from "@/lib/i18nClient";
 import { clearSession, useAccount } from "@/lib/session";
 import LangToggle from "./LangToggle";
 import SayloMark from "./SayloMark";
+import ThemeToggle from "./ThemeToggle";
 
 /** Shared signed-in frame: one sidebar, one content area. */
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -86,6 +87,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <SayloMark />
           <span className="desk-brand">SAYLO</span>
         </span>
+        <ThemeToggle compact />
       </header>
       {menuOpen && (
         <button type="button" className="app-backdrop" aria-label={tr("close")} onClick={() => setMenuOpen(false)} />
@@ -121,6 +123,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {tr("folders")}
           </Link>
         </nav>
+        <ThemeToggle />
       </aside>
       <div className="app-main">{children}</div>
       {accountOpen && panelBox && (
@@ -141,10 +144,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               overflow: "auto",
               boxSizing: "border-box",
               padding: 8,
-              border: "1px solid #3a3a3a",
-              borderRadius: 12,
-              background: "#2b2b2b",
-              color: "#e6e6e6",
             }}
           >
             <div className="account-panel-section">
@@ -156,7 +155,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <span className="account-panel-copy" style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
                   <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label || "SAYLO"}</strong>
                   {email && (
-                    <span style={{ display: "block", overflow: "hidden", color: "#a0a1a3", fontSize: 12, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ display: "block", overflow: "hidden", color: "var(--text-secondary)", fontSize: 12, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {email}
                     </span>
                   )}
