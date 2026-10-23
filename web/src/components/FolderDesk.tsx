@@ -788,7 +788,7 @@ function FolderRoom({
 
         <div className="desk-stage">
           <div>
-            <div className={full && anySlide ? "desk-full" : undefined}>
+            <div className={full && anySlide ? (showFigma ? "desk-full desk-full-figma" : "desk-full") : undefined}>
               {showFigma ? (
                 <div className="desk-slide desk-figma">
                   <iframe src={figmaEmbed!} title={tr("figmaLive")} allow="fullscreen" allowFullScreen />

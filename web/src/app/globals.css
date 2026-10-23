@@ -494,6 +494,24 @@ body {
   transform: translateX(-50%);
 }
 
+/* Figma draws its own controls on the deck, so in Figma mode our bar sits above it, not on it. */
+.desk-full.desk-full-figma {
+  flex-direction: column;
+  gap: 12px;
+}
+
+.desk-full.desk-full-figma .desk-full-bar {
+  position: static;
+  order: -1;
+  transform: none;
+}
+
+.desk-full.desk-full-figma .desk-figma {
+  width: min(100vw, calc((100vh - 76px) * 16 / 9));
+  height: auto;
+  max-height: calc(100vh - 76px);
+}
+
 .desk-panel {
   margin-bottom: 14px;
   padding: 22px;
