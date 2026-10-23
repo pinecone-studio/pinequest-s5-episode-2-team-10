@@ -24,7 +24,7 @@ from pipeline import slides as slide_tools
 from pipeline.feedback import BACKENDS
 from pipeline.points import clean_points
 
-from . import config, db, errors
+from . import config, db, errors, supabase_auth
 from .passwords import hash_password, verify_password
 from .db import AnalysisReport, AppUser, AudioAsset, PitchSession, Project, Slide, Transcript, utcnow
 from .errors import ApiError, not_found
@@ -344,6 +344,33 @@ def login(body: AuthBody, database: DB):
     user = database.exec(select(AppUser).where(AppUser.email == email)).first()
     if not user or not verify_password(body.password, user.password_hash):
         raise ApiError(401, "invalid_credentials", "Email or password is wrong.")
+    token = _new_token(user, database)
+    return {"id": user.id, "email": user.email, "access_token": token}
+
+
+class GoogleBody(BaseModel):
+    access_token: str = Field(min_length=1, max_length=4096)
+
+
+@api.post("/auth/google")
+def google_login(body: GoogleBody, database: DB):
+    """Signs in with the email Google verified. An existing account with that email is reused."""
+    email = _clean_email(supabase_auth.google_email(body.access_token))
+    if email == DEMO_EMAIL:
+        raise ApiError(401, "invalid_google_token", "This isn't a verified Google account.")
+    user = database.exec(select(AppUser).where(AppUser.email == email)).first()
+    if not user:
+        user = AppUser(token_hash=_hash(secrets.token_urlsafe(32)), email=email)
+        database.add(user)
+        try:
+            database.commit()
+        except IntegrityError:
+            database.rollback()
+            user = database.exec(select(AppUser).where(AppUser.email == email)).first()
+            if not user:
+                raise ApiError(500, "internal", "Could not open the account.")
+        else:
+            database.refresh(user)
     token = _new_token(user, database)
     return {"id": user.id, "email": user.email, "access_token": token}
 

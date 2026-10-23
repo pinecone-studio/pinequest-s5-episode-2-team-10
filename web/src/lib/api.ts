@@ -93,6 +93,8 @@ const realApi = {
     send<AuthSession>("/auth/register", json("POST", { email, password }), null),
   login: (email: string, password: string) => send<AuthSession>("/auth/login", json("POST", { email, password }), null),
   demo: () => send<AuthSession>("/auth/demo", { method: "POST" }, null),
+  google: (accessToken: string) =>
+    send<AuthSession>("/auth/google", json("POST", { access_token: accessToken }), null),
   me: () => request<{ id: string; email: string }>("/auth/me"),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
 

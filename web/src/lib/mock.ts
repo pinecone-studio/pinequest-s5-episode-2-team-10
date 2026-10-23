@@ -222,6 +222,29 @@ export const mockApi = {
     return { id: user.id, email: user.email, access_token: user.token };
   },
 
+  /** Demo mode has no server to verify the Supabase token, so it trusts the email inside it. */
+  async google(accessToken: string): Promise<AuthSession> {
+    await wait();
+    let claimed = "";
+    try {
+      const payload = JSON.parse(atob(accessToken.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as { email?: string };
+      claimed = payload.email ?? "";
+    } catch {
+      throw { code: "invalid_google_token", message: "Google sign-in expired. Try again." };
+    }
+    const cleaned = cleanMockEmail(claimed);
+    const users = loadUsers();
+    let user = users.find((row) => row.email === cleaned);
+    if (!user) {
+      user = { id: crypto.randomUUID(), email: cleaned, salt: "", password_hash: "", token: crypto.randomUUID() };
+      users.push(user);
+    } else {
+      user.token = crypto.randomUUID();
+    }
+    saveUsers(users);
+    return { id: user.id, email: user.email, access_token: user.token };
+  },
+
   async login(email: string, password: string): Promise<AuthSession> {
     await wait();
     const cleaned = cleanMockEmail(email);
