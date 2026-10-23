@@ -29,6 +29,8 @@ EMBEDDING_MODEL = _env("PITCH_EMBEDDING_MODEL", "intfloat/multilingual-e5-small"
 # Feedback models.
 CLAUDE_MODEL = _env("PITCH_CLAUDE_MODEL", "claude-opus-5-5")
 OLLAMA_URL = _env("OLLAMA_URL", "http://localhost:11434")
+# Set when OLLAMA_URL is the voice server's /v1/ollama route on another machine (its VOICE_SERVER_TOKEN).
+OLLAMA_TOKEN = _env("OLLAMA_TOKEN", "")
 OLLAMA_MODEL_FT = _env("PITCH_OLLAMA_MODEL_FT", "pitchcoach-gemma4")
 OLLAMA_MODEL_BASE = _env("PITCH_OLLAMA_MODEL_BASE", "gemma4:e4b")
 OLLAMA_TIMEOUT_S = float(_env("PITCH_OLLAMA_TIMEOUT_S", "240"))

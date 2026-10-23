@@ -16,7 +16,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+import httpx
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from pipeline import asr, config as pipeline_config
 from pipeline.audio import AudioError, to_wav16k
@@ -25,6 +26,10 @@ TOKEN = os.environ.get("VOICE_SERVER_TOKEN", "").strip()
 PRELOAD = os.environ.get("VOICE_PRELOAD", "1").strip() != "0"
 MAX_BYTES = 25 * 1024 * 1024  # same limits as the API's audio upload
 MAX_SECONDS = 5 * 60 + 5
+
+# Ollama on this PC, reachable from outside only through the token-protected /v1/ollama route below.
+OLLAMA_URL = pipeline_config.OLLAMA_URL
+OLLAMA_PATHS = {"api/chat", "api/generate", "api/tags", "api/ps", "api/version"}
 
 # One GPU, one model: transcribe one file at a time.
 _gpu_lock = threading.Lock()
@@ -116,3 +121,36 @@ def transcribe(file: UploadFile):
         "model": pipeline_config.ASR_MODEL,
         "elapsed_s": round(elapsed, 2),
     }
+
+
+@app.api_route("/v1/ollama/{path:path}", methods=["GET", "POST"], dependencies=[Depends(require_token)])
+async def ollama_proxy(path: str, request: Request):
+    """Forward a request to the local Ollama, streaming the answer back.
+
+    Ollama has no login, so it is never exposed directly; a deployed web app reaches the local
+    Gemma through here with the same token as /v1/transcribe. Only the endpoints the app uses
+    are allowed. Request and response bodies are not logged.
+    """
+    if path not in OLLAMA_PATHS:
+        raise VoiceError(404, "not_found", "Not an allowed Ollama endpoint.")
+    client = httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=5.0))
+    upstream = client.build_request(
+        request.method, f"{OLLAMA_URL}/{path}", content=await request.body(),
+        headers={"content-type": request.headers.get("content-type", "application/json")},
+    )
+    try:
+        resp = await client.send(upstream, stream=True)
+    except httpx.RequestError as e:
+        await client.aclose()
+        raise VoiceError(503, "ollama_down", "Ollama isn't running on the voice server's PC.") from e
+
+    async def body():
+        try:
+            async for chunk in resp.aiter_raw():
+                yield chunk
+        finally:
+            await resp.aclose()
+            await client.aclose()
+
+    return StreamingResponse(body(), status_code=resp.status_code,
+                             media_type=resp.headers.get("content-type", "application/json"))

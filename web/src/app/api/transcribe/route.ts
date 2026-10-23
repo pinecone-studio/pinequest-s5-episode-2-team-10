@@ -2,6 +2,9 @@ import { connection, NextResponse } from "next/server";
 import { langOf, t } from "@/lib/i18n";
 import { transcribe, VoiceError, voiceHealth } from "@/lib/server/voice";
 
+// Vercel stops a function after this many seconds (60 is the most every plan allows).
+export const maxDuration = 60;
+
 const MAX_FILE = 25 * 1024 * 1024;
 
 /** Voice server status, for the test panel. */

@@ -81,7 +81,7 @@ async function convert(bytes: Uint8Array, kind: DeckKind): Promise<Buffer> {
       input,
     ];
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(soffice, args, { stdio: "ignore", windowsHide: true });
+      const child = spawn(/*turbopackIgnore: true*/ soffice, args, { stdio: "ignore", windowsHide: true });
       const timer = setTimeout(() => {
         child.kill();
         reject(new SlideError("failed", 504));

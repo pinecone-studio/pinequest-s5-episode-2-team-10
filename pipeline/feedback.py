@@ -236,7 +236,8 @@ def _ollama(model: str, data: dict) -> dict:
         ],
     }
     try:
-        r = httpx.post(f"{config.OLLAMA_URL}/api/chat", json=payload, timeout=config.OLLAMA_TIMEOUT_S)
+        headers = {"Authorization": f"Bearer {config.OLLAMA_TOKEN}"} if config.OLLAMA_TOKEN else None
+        r = httpx.post(f"{config.OLLAMA_URL}/api/chat", json=payload, headers=headers, timeout=config.OLLAMA_TIMEOUT_S)
     except httpx.HTTPError as e:
         raise FeedbackError("Could not reach Ollama. Is it running on this machine?") from e
     if r.status_code == 404:

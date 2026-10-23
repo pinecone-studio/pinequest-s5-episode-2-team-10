@@ -27,13 +27,14 @@ let fillerCache: string[] | null = null;
 export function fillerList(): string[] {
   if (fillerCache) return fillerCache;
   try {
-    fillerCache = readFileSync(path.join(process.cwd(), "..", "pipeline", "fillers_mn.txt"), "utf8")
+    fillerCache = readFileSync(path.join(/*turbopackIgnore: true*/ process.cwd(), "..", "pipeline", "fillers_mn.txt"), "utf8")
       .split(/\r?\n/)
       .map((l) => l.trim().toLowerCase())
       .filter((l) => l && !l.startsWith("#"))
       .sort((a, b) => b.length - a.length);
   } catch {
-    fillerCache = ["тэгээд тэгээд", "за тэгээд", "юу гэдэг юм", "нөгөө", "яахав", "ээм", "аан", "хмм", "ээ", "аа", "мм"];
+    // The repo's pipeline/ folder isn't deployed when the host builds web/ alone (Vercel); same list.
+    fillerCache = ["тэгээд тэгээд", "юу гэдэг юм", "за тэгээд", "тийм ээ", "нөгөө", "яахав", "ээм", "аан", "хмм", "ээ", "аа", "мм"];
   }
   return fillerCache;
 }
