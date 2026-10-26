@@ -29,10 +29,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const label = email.includes("@") ? email.slice(0, email.indexOf("@")) : email;
 
   useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
-
-  useEffect(() => {
     const query = window.matchMedia("(max-width: 800px)");
     const apply = () => setNarrow(query.matches);
     apply();
@@ -126,6 +122,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="app-nav" aria-label="SAYLO">
           <SidebarPitches home={home} openId={openFolder} onNavigate={() => setMenuOpen(false)} />
+          {account?.role === "admin" && (
+            <Link href="/admin" aria-current={pathname === "/admin" ? "page" : undefined} onClick={() => setMenuOpen(false)}>
+              <AdminIcon />
+              <span>{tr("adminPanel")}</span>
+            </Link>
+          )}
         </nav>
       </aside>
       <div className="app-main">
@@ -191,6 +193,15 @@ function CloseIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
       <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function AdminIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 17 17" aria-hidden>
+      <path d="M8.5 1.7 14 3.8v4.1c0 3.5-2.3 5.8-5.5 7.4C5.3 13.7 3 11.4 3 7.9V3.8l5.5-2.1Z" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinejoin="round" />
+      <path d="m6.2 8.3 1.5 1.5 3.1-3.2" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
