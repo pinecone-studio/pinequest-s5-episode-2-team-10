@@ -31,7 +31,6 @@ import {
 } from "@/lib/folderStore";
 import { figmaEmbedUrl } from "@/lib/figmaEmbed";
 import { openPdf, paintPage, pickSlides, readSlideText } from "@/lib/slidePdf";
-import { runBackendAnalysis } from "@/lib/backendAnalysis";
 import { streamModelReply } from "@/lib/modelStream";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { feedbackSteps, findQuote, loadTimings, playSpan, readAloud, saveTimings, speakText, type Clip } from "@/lib/coachVoice";
@@ -919,21 +918,6 @@ function FolderRoom({
         saved ? getFolderBlob(saved.storageKey) : Promise.resolve(null),
         getFolderBlob(folder.slide?.storageKey ?? slideKey(folder.id)),
       ]);
-      if (model === "backend") {
-        // The full FastAPI pipeline; it reports stages instead of streaming text.
-        const result = await runBackendAnalysis({
-          folder,
-          speech,
-          audio,
-          slide,
-          onStage: (stage) => setProbeNote(tr(stage === "connecting" ? "backendConnecting" : stage === "uploading" ? "backendUploading" : "backendAnalyzing")),
-          messages: { noAudio: tr("backendNoAudio"), slideSkipped: tr("backendSlideSkipped") },
-        });
-        setProbeNote(result.notes.length ? result.notes.join(" ") : null);
-        setProbeResult({ ...result, model, pointSlides: sent.slides, writing: false });
-        showResultOnce();
-        return;
-      }
       const slideText = pdfRef.current ? await readSlideText(pdfRef.current, 8, shownPages) : "";
       const slideImage = await new Promise<Blob | null>((resolve) => {
         const canvas = canvasRef.current;
