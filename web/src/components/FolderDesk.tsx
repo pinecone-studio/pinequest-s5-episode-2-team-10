@@ -397,6 +397,9 @@ function FolderRoom({
   onDelete: () => void;
 }) {
   const { tr, lang } = useLang();
+  /** The model's id ("ollama") as people know it ("Gemma"). */
+  const modelLabel = (id: string) =>
+    ({ ollama: "Gemma", "ollama-think": tr("modelGemmaCareful"), claude: "Claude", rules: tr("rulesName") })[id] ?? id;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const recRef = useRef<PieceRecorder | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
@@ -1369,7 +1372,7 @@ function FolderRoom({
                   <div className="desk-probe desk-probe-dialog" aria-live="polite">
                     <p>
                       {/* While the answer is coming in, say what's happening rather than the model's name. */}
-                      {probeResult.writing ? tr("writing") : probeResult.model}
+                      {probeResult.writing ? tr("writing") : modelLabel(probeResult.model)}
                       {probeResult.received && (
                         <>
                           {" · "}
