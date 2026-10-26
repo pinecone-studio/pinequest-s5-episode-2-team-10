@@ -34,6 +34,15 @@ python -m training.speed.benchmark --models gemma4:e4b gemma4:e2b pitchcoach-e2b
 
 Copy the GGUF to the GPU PC, run `ollama create pitchcoach-e2b -f Modelfile` there, and set `PITCH_OLLAMA_MODEL_BASE=pitchcoach-e2b` (web app and backend). Keep E4B as the fallback until the benchmark shows the E2B answers are close enough.
 
+## Baseline (2026-10-26, RTX 4060, BuzzASR loaded, 6 held-out pitches)
+
+| Model | Median s / answer | Tokens/s | Valid | Content score vs E4B |
+|---|---|---|---|---|
+| `gemma4:e4b` (teacher, re-run) | 24.8 | 99 | 6/6 | 3.9 points (run-to-run noise) |
+| `gemma4:e2b` (untrained) | 16.7 | 164 | 6/6 | 13.2 points |
+
+E2B is already about a third faster, but its scores drift from E4B's. The target for `pitchcoach-e2b` is a score difference close to E4B's own 3.9, at E2B speed or better: compact answers should also cut the token count. Six pitches are a small test set, so build a bigger one before deciding.
+
 ## What "good enough" means
 
 - **Speed:** median seconds per answer clearly below E4B's on the 4060, with BuzzASR loaded.
