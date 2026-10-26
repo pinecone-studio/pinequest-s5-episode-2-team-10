@@ -55,6 +55,8 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [againVisible, setAgainVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const exchanging = useRef(false);
@@ -235,29 +237,43 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
                 onChange={(e) => setIdentifier(e.target.value)}
               />
             )}
-            <input
-              type="password"
-              autoComplete={registering ? "new-password" : "current-password"}
-              required
-              minLength={8}
-              maxLength={128}
-              placeholder={tr("password")}
-              aria-label={tr("password")}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            {registering && (
+            <div className="auth-password-field">
               <input
-                type="password"
-                autoComplete="new-password"
+                type={passwordVisible ? "text" : "password"}
+                autoComplete={registering ? "new-password" : "current-password"}
                 required
                 minLength={8}
                 maxLength={128}
-                placeholder={tr("authPasswordRepeat")}
-                aria-label={tr("authPasswordRepeat")}
-                value={again}
-                onChange={(e) => setAgain(e.target.value)}
+                placeholder={tr("password")}
+                aria-label={tr("password")}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
               />
+              <PasswordVisibilityButton
+                visible={passwordVisible}
+                onToggle={() => setPasswordVisible((visible) => !visible)}
+                label={tr(passwordVisible ? "authHidePassword" : "authShowPassword")}
+              />
+            </div>
+            {registering && (
+              <div className="auth-password-field">
+                <input
+                  type={againVisible ? "text" : "password"}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  maxLength={128}
+                  placeholder={tr("authPasswordRepeat")}
+                  aria-label={tr("authPasswordRepeat")}
+                  value={again}
+                  onChange={(e) => setAgain(e.target.value)}
+                />
+                <PasswordVisibilityButton
+                  visible={againVisible}
+                  onToggle={() => setAgainVisible((visible) => !visible)}
+                  label={tr(againVisible ? "authHidePassword" : "authShowPassword")}
+                />
+              </div>
             )}
           </div>
           <button type="submit" className="auth-primary" disabled={busy}>
@@ -285,6 +301,32 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
         </form>
       </div>
     </main>
+  );
+}
+
+function PasswordVisibilityButton({
+  visible,
+  onToggle,
+  label,
+}: {
+  visible: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      className="auth-password-toggle"
+      aria-label={label}
+      aria-pressed={visible}
+      onClick={onToggle}
+    >
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" aria-hidden="true">
+        <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z" stroke="currentColor" strokeWidth="1.7" />
+        <circle cx="12" cy="12" r="2.7" stroke="currentColor" strokeWidth="1.7" />
+        {!visible && <path d="m4 4 16 16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />}
+      </svg>
+    </button>
   );
 }
 
