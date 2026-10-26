@@ -37,12 +37,12 @@ function clearOAuthParams() {
   window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
 }
 
-export default function AuthScreen() {
+export default function AuthScreen({ initialMode = "login", onBack }: { initialMode?: Mode; onBack?: () => void }) {
   const { lang, tr } = useLang();
   const emailId = useId();
   const passwordId = useId();
   const againId = useId();
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
@@ -136,6 +136,14 @@ export default function AuthScreen() {
 
   return (
     <div className="auth-screen">
+      {onBack && (
+        <button type="button" className="auth-back" onClick={onBack}>
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+            <path d="M8.5 2.5 4 7l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          {tr("back")}
+        </button>
+      )}
       <div className="auth-theme">
         <ThemeToggle />
       </div>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Cormorant_Garamond, Inter, Manrope } from "next/font/google";
 import AuthGate from "@/components/AuthGate";
 import { ThemeSync } from "@/lib/theme";
 import "./globals.css";
@@ -11,6 +11,20 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
+// Landing page only: serif headlines (with italic accent words) and body text.
+const display = Cormorant_Garamond({
+  subsets: ["latin", "cyrillic"],
+  weight: ["500"],
+  style: ["normal", "italic"],
+  variable: "--font-display",
+});
+
+const landing = Manrope({
+  subsets: ["latin", "cyrillic"],
+  weight: ["400", "500", "600"],
+  variable: "--font-landing",
+});
+
 export const metadata: Metadata = {
   title: "Saylo",
   description: "Scored, timestamped feedback on Mongolian pitches with slides.",
@@ -18,7 +32,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="mn" className={`${inter.variable} dark h-full antialiased`} suppressHydrationWarning>
+    <html lang="mn" className={`${inter.variable} ${display.variable} ${landing.variable} dark h-full antialiased`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
