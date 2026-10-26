@@ -11,9 +11,18 @@ import Modal from "./Modal";
 type Change = { role?: "member" | "admin"; is_active?: boolean };
 type PendingChange = { user: AdminUser; change: Change; title: string; description: string };
 
+const DEMO_EMAIL = "demo@pitchcoach.local";
+const DEMO_USERS: AdminUser[] = [
+  { id: "demo-admin-preview", email: DEMO_EMAIL, role: "admin", is_active: true, created_at: "2025-01-10T00:00:00Z" },
+  { id: "sample-member-01", email: "bat@example.com", role: "member", is_active: true, created_at: "2025-02-14T00:00:00Z" },
+  { id: "sample-member-02", email: "saraa@example.com", role: "member", is_active: true, created_at: "2025-03-02T00:00:00Z" },
+  { id: "sample-member-03", email: "temuulen@example.com", role: "member", is_active: false, created_at: "2025-03-18T00:00:00Z" },
+];
+
 export default function AdminUsersPanel() {
   const { lang, tr } = useLang();
   const account = useAccount();
+  const demoPreview = account?.email === DEMO_EMAIL;
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -24,6 +33,7 @@ export default function AdminUsersPanel() {
   const [saving, setSaving] = useState(false);
 
   async function loadUsers() {
+    if (demoPreview) return;
     setLoading(true);
     setLoadError(null);
     try {
@@ -36,6 +46,7 @@ export default function AdminUsersPanel() {
   }
 
   useEffect(() => {
+    if (demoPreview) return;
     if (account?.role !== "admin") return;
     let current = true;
     void api.adminUsers().then(
@@ -51,13 +62,14 @@ export default function AdminUsersPanel() {
     return () => {
       current = false;
     };
-  }, [account]);
+  }, [account, demoPreview]);
 
+  const displayUsers = demoPreview ? DEMO_USERS : users;
   const visibleUsers = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
-    if (!term) return users;
-    return users.filter((user) => `${user.email ?? ""} ${user.id}`.toLocaleLowerCase().includes(term));
-  }, [query, users]);
+    if (!term) return displayUsers;
+    return displayUsers.filter((user) => `${user.email ?? ""} ${user.id}`.toLocaleLowerCase().includes(term));
+  }, [displayUsers, query]);
 
   function askForChange(user: AdminUser, change: Change) {
     const roleChange = change.role !== undefined;
@@ -89,7 +101,7 @@ export default function AdminUsersPanel() {
     }
   }
 
-  if (!account || account.role !== "admin") {
+  if (!account || (account.role !== "admin" && !demoPreview)) {
     return (
       <main className="admin-page">
         <header className="admin-page-header">
@@ -109,16 +121,20 @@ export default function AdminUsersPanel() {
           <h1 className="ui-title">{tr("adminTitle")}</h1>
           <p className="ui-muted admin-description">{tr("adminDescription")}</p>
         </div>
-        <button type="button" className="ui-btn" onClick={() => void loadUsers()} disabled={loading}>
-          {loading ? tr("loading") : tr("adminRefresh")}
-        </button>
+        {!demoPreview && (
+          <button type="button" className="ui-btn" onClick={() => void loadUsers()} disabled={loading}>
+            {loading ? tr("loading") : tr("adminRefresh")}
+          </button>
+        )}
       </header>
+
+      {demoPreview && <p className="ui-card admin-demo-notice" role="status">{tr("adminDemoReadOnly")}</p>}
 
       <section className="ui-card admin-users-card" aria-labelledby="admin-users-heading">
         <div className="admin-users-toolbar">
           <div>
             <h2 id="admin-users-heading" className="ui-section">{tr("adminUsers")}</h2>
-            <p className="ui-help">{tr("adminUserCount", { count: users.length })}</p>
+            <p className="ui-help">{tr("adminUserCount", { count: displayUsers.length })}</p>
           </div>
           <label className="admin-search">
             <span>{tr("adminSearch")}</span>
@@ -170,7 +186,9 @@ export default function AdminUsersPanel() {
                       </td>
                       <td data-label={tr("adminCreated")}>{formatCreated(user.created_at, lang)}</td>
                       <td data-label={tr("adminActions")}>
-                        {isSelf ? (
+                        {demoPreview ? (
+                          <span className="ui-help">{tr("adminDemoSample")}</span>
+                        ) : isSelf ? (
                           <span className="ui-help">{tr("adminSelfManaged")}</span>
                         ) : (
                           <div className="admin-actions">

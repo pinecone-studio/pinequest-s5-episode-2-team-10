@@ -49,4 +49,6 @@ Admin account-ын `X-Access-Token` ашиглан FastAPI-ийн `/docs` хуу
 
 `admin` нь өндөр эрхтэй: бусдын pitch, transcript, audio, slide зэрэг хувийн өгөгдлийг харах, өөрчлөх, устгах боломжтой. Шаардлагатай, итгэлтэй хүмүүст л admin эрх өгнө. Supabase-ийн `authenticated` төлөв нь Saylo-ийн `member/admin` role-оос тусдаа.
 
+`demo@pitchcoach.local` хаягаар нэвтэрсэн үед `/admin` цэсэнд зөвхөн танилцуулгын preview харагдана. Preview нь жишээ хэрэглэгчид харуулж, бодит admin API дуудахгүй болон хэрэглэгчийн эрх өөрчлөхгүй. Бодит admin үйлдлийг зөвхөн `PITCH_ADMIN_EMAILS`-д бүртгэсэн Google хэрэглэгч хийж болно.
+
 Код татсаны дараа backend-ээ restart хийгээд `/auth/me`-ийн `role`-ийг шалгаарай. Одоо байгаа хэрэглэгчдийн өгөгдөл хэвээр үлдэнэ; schema update автоматаар, нэмэлтээр хийгдэнэ.
