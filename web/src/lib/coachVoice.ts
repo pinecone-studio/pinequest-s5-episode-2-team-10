@@ -67,9 +67,9 @@ export function stopListening() {
 
 // ---- Which voice reads -----------------------------------------------------------------------------
 
-export type TtsEngine = "voice" | "azure" | "elevenlabs";
+export type TtsEngine = "azure" | "elevenlabs";
 export type TtsChoice = TtsEngine | "auto"; // auto: the server's default
-const TTS_CHOICES: TtsChoice[] = ["auto", "voice", "azure", "elevenlabs"];
+const TTS_CHOICES: TtsChoice[] = ["auto", "azure", "elevenlabs"];
 const TTS_KEY = "pitchcoach:tts-engine";
 const ttsListeners = new Set<() => void>();
 let ttsChoice: TtsChoice | null = null;

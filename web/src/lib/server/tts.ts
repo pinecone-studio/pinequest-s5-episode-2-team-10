@@ -1,13 +1,13 @@
 // Server only: the coach voice. PITCH_TTS picks the engine:
 //   auto (default): Azure's Mongolian neural voice when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are
-//     set, otherwise MMS-TTS on the voice server (POST /v1/tts, free, offline);
-//   voice | azure | elevenlabs: that engine. ElevenLabs uses eleven_v4_turbo (Mongolian, fastest)
+//     set, otherwise ElevenLabs;
+//   azure | elevenlabs: that engine. ElevenLabs uses eleven_v4_turbo (Mongolian, fastest)
 //     unless PITCH_ELEVENLABS_MODEL picks another model.
-// Paid voices (Azure, ElevenLabs) stop for the day after PITCH_TTS_PAID_DAILY_CHARS characters
-// (default 20000; 0 = no limit), so an open demo can't run up a bill. The count is per server
-// process, so on serverless hosts it is a safety net, not an exact quota.
+// Both are billed services, so reading stops for the day after PITCH_TTS_PAID_DAILY_CHARS
+// characters (default 20000; 0 = no limit) and an open demo can't run up a bill. The count is per
+// server process, so on serverless hosts it is a safety net, not an exact quota.
 import { t, type Lang } from "@/lib/i18n";
-import { serverSetting as setting, VoiceError, voiceConfig } from "./voice";
+import { serverSetting as setting, VoiceError } from "./voice";
 
 export const MAX_SPEAK_CHARS = 600;
 const CACHE_LIMIT = 200;
@@ -54,13 +54,13 @@ function remember(key: string, speech: Speech): Speech {
 const escapeXml = (s: string) =>
   s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c]!);
 
-export type TtsEngine = "voice" | "azure" | "elevenlabs";
-export const TTS_ENGINES: TtsEngine[] = ["voice", "azure", "elevenlabs"];
+export type TtsEngine = "azure" | "elevenlabs";
+export const TTS_ENGINES: TtsEngine[] = ["azure", "elevenlabs"];
 
 export function ttsBackend(): TtsEngine {
   const chosen = setting("PITCH_TTS") as TtsEngine | "auto" | undefined;
   if (chosen && TTS_ENGINES.includes(chosen as TtsEngine)) return chosen as TtsEngine;
-  return setting("AZURE_SPEECH_KEY") && setting("AZURE_SPEECH_REGION") ? "azure" : "voice";
+  return setting("AZURE_SPEECH_KEY") && setting("AZURE_SPEECH_REGION") ? "azure" : "elevenlabs";
 }
 
 export interface TtsEngineStatus {
@@ -69,7 +69,7 @@ export interface TtsEngineStatus {
   reason: string | null; // why it can't be used here
 }
 
-/** Which voices this server is set up for (keys present). The voice server may still be offline. */
+/** Which voices this server is set up for (keys present). */
 export function ttsEngines(lang: Lang): { engines: TtsEngineStatus[]; defaultEngine: TtsEngine } {
   const missing = (names: string[]) => names.filter((n) => !setting(n));
   const status = (id: TtsEngine, need: string[]): TtsEngineStatus => {
@@ -78,9 +78,6 @@ export function ttsEngines(lang: Lang): { engines: TtsEngineStatus[]; defaultEng
   };
   return {
     engines: [
-      voiceConfig().token
-        ? { id: "voice", available: true, reason: null }
-        : { id: "voice", available: false, reason: t(lang, "voiceTokenMissing") },
       status("azure", ["AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION"]),
       status("elevenlabs", ["ELEVENLABS_API_KEY"]),
     ],
@@ -90,7 +87,7 @@ export function ttsEngines(lang: Lang): { engines: TtsEngineStatus[]; defaultEng
 
 async function elevenlabs(text: string, lang: Lang): Promise<Speech> {
   const key = setting("ELEVENLABS_API_KEY");
-  if (!key) throw new VoiceError(t(lang, "ttsFail"), 503);
+  if (!key) throw new VoiceError(t(lang, "ttsNotConfigured"), 503);
   const voice = setting("PITCH_ELEVENLABS_VOICE") || "JBFqnCBsd6RMkjVDRZzb";
   const model = setting("PITCH_ELEVENLABS_MODEL") || "eleven_v4_turbo";
   // v4 models take language_code "mn"; eleven_v3 reads Mongolian too but rejects the code.
@@ -111,7 +108,7 @@ async function elevenlabs(text: string, lang: Lang): Promise<Speech> {
 
 async function azure(text: string, lang: Lang): Promise<Speech> {
   if (!setting("AZURE_SPEECH_KEY") || !setting("AZURE_SPEECH_REGION")) {
-    throw new VoiceError(t(lang, "ttsFail"), 503);
+    throw new VoiceError(t(lang, "ttsNotConfigured"), 503);
   }
   const region = setting("AZURE_SPEECH_REGION");
   const voice = setting("PITCH_TTS_VOICE") || "mn-MN-YesuiNeural";
@@ -135,28 +132,6 @@ async function azure(text: string, lang: Lang): Promise<Speech> {
   return { audio: await res.arrayBuffer(), type: "audio/mpeg" };
 }
 
-async function voiceServer(text: string, lang: Lang): Promise<Speech> {
-  const { url, token } = voiceConfig();
-  if (!token) throw new VoiceError(t(lang, "voiceTokenMissing"), 503);
-  let res: Response;
-  try {
-    res = await fetch(`${url}/v1/tts`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-  } catch {
-    throw new VoiceError(t(lang, "voiceDown"), 502);
-  }
-  if (res.status === 401) throw new VoiceError(t(lang, "voiceTokenWrong"), 502);
-  if (res.status === 404) throw new VoiceError(t(lang, "ttsNotOnServer"), 502);
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { message?: unknown } | null;
-    throw new VoiceError(typeof body?.message === "string" ? body.message : t(lang, "ttsFail"), res.status >= 500 ? 502 : 400);
-  }
-  return { audio: await res.arrayBuffer(), type: "audio/wav" };
-}
-
 /** `text` read aloud in Mongolian, by `engine` or the configured one. */
 export async function speak(text: string, lang: Lang, engine: TtsEngine = ttsBackend()): Promise<Speech> {
   const clean = text.replace(/\s+/g, " ").trim();
@@ -165,9 +140,9 @@ export async function speak(text: string, lang: Lang, engine: TtsEngine = ttsBac
   const key = `${engine}:${clean}`;
   const hit = cache.get(key);
   if (hit) return hit;
-  if (engine !== "voice" && !spendPaidChars(clean.length, paidDailyLimit())) {
+  if (!spendPaidChars(clean.length, paidDailyLimit())) {
     throw new VoiceError(t(lang, "ttsDailyLimit"), 429);
   }
-  const run = { voice: voiceServer, azure, elevenlabs }[engine];
+  const run = { azure, elevenlabs }[engine];
   return remember(key, await run(clean, lang));
 }

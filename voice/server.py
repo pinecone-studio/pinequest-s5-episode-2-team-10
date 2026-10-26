@@ -1,4 +1,4 @@
-"""Local voice server: BuzzASR (Mongolian Whisper) on the GPU, plus the coach voice (MMS-TTS on the CPU).
+"""Local voice server: runs BuzzASR (Mongolian Whisper) on this machine's GPU.
 
 The API calls it with PITCH_ASR=remote. It can sit behind a Cloudflare tunnel, so every
 transcription request needs `Authorization: Bearer <VOICE_SERVER_TOKEN>`.
@@ -17,10 +17,9 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile
 import httpx
-from fastapi.responses import JSONResponse, Response, StreamingResponse
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse, StreamingResponse
 
-from pipeline import asr, config as pipeline_config, tts
+from pipeline import asr, config as pipeline_config
 from pipeline.audio import AudioError, to_wav16k
 
 TOKEN = os.environ.get("VOICE_SERVER_TOKEN", "").strip()
@@ -122,23 +121,6 @@ def transcribe(file: UploadFile):
         "model": pipeline_config.ASR_MODEL,
         "elapsed_s": round(elapsed, 2),
     }
-
-
-class SpeakBody(BaseModel):
-    text: str
-
-
-@app.post("/v1/tts", dependencies=[Depends(require_token)])
-def speak(body: SpeakBody):
-    """The coach voice: Mongolian text read aloud (MMS-TTS on the CPU), returned as WAV."""
-    started = time.monotonic()
-    try:
-        audio = tts.synthesize(body.text)
-    except tts.TtsError as e:
-        raise VoiceError(400, "tts_failed", str(e)) from e
-    # Log timing only; never the text.
-    print(f"[voice] spoke {len(body.text)} characters in {time.monotonic() - started:.1f}s")
-    return Response(audio, media_type="audio/wav")
 
 
 @app.api_route("/v1/ollama/{path:path}", methods=["GET", "POST"], dependencies=[Depends(require_token)])

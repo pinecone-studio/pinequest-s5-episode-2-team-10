@@ -11,7 +11,7 @@ interface EngineStatus {
   reason: string | null;
 }
 
-const NAMES: Record<TtsEngine, MessageKey> = { voice: "ttsVoiceName", azure: "ttsAzureName", elevenlabs: "ttsElevenName" };
+const NAMES: Record<TtsEngine, MessageKey> = { azure: "ttsAzureName", elevenlabs: "ttsElevenName" };
 
 /** The chosen coach voice, remembered in this browser. */
 export function useTtsChoice(): TtsChoice {

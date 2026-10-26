@@ -1,16 +1,15 @@
 """Compare Mongolian text-to-speech engines by ear: the same coaching sentences, side by side.
 
-    set -a; . web/.env.local; set +a              # ELEVENLABS_API_KEY lives there (git-ignored)
-    python -m scripts.compare_tts                 # MMS (free, local) + ElevenLabs if ELEVENLABS_API_KEY is set
+    set -a; . web/.env.local; set +a              # the keys live there (git-ignored)
+    python -m scripts.compare_tts                 # Azure (AZURE_SPEECH_KEY/REGION) + ElevenLabs (ELEVENLABS_API_KEY)
     python -m scripts.compare_tts --open          # also open the comparison page in the browser
     python -m scripts.compare_tts --reuse         # rebuild the page from saved audio (no API characters used)
 
 Writes data/tts-compare/index.html (data/ is not committed) with one row per sentence and one
-audio player per engine, plus how long each took. Numbers are spelled out in Mongolian first for
-every engine, so the comparison is about the voices, not number reading.
+audio player per engine, plus how long each took. Numbers are left as digits, as the app sends them.
 
 ElevenLabs v4 Turbo is sent language_code "mn"; eleven_v3 reads Mongolian too but rejects the code,
-so it gets none. Every ElevenLabs run uses characters from your plan.
+so it gets none. Every run uses characters from your plans (Azure's free tier covers 500k a month).
 """
 
 import argparse
@@ -22,8 +21,6 @@ import webbrowser
 from pathlib import Path
 
 import httpx
-
-from pipeline import tts
 
 SENTENCES = [
     "Илтгэлийн гол санаагаа эхний гучин секундэд хэлээрэй.",
@@ -37,8 +34,23 @@ ELEVEN_VOICE = os.environ.get("PITCH_ELEVENLABS_VOICE", "JBFqnCBsd6RMkjVDRZzb")
 OUT = Path("data/tts-compare")
 
 
-def mms(text: str) -> bytes:
-    return tts.synthesize(text)
+def azure(text: str) -> bytes:
+    voice = os.environ.get("PITCH_TTS_VOICE", "mn-MN-YesuiNeural")
+    ssml = f'<speak version="1.0" xml:lang="mn-MN"><voice name="{html.escape(voice)}">{html.escape(text)}</voice></speak>'
+    r = httpx.post(
+        f"https://{os.environ['AZURE_SPEECH_REGION']}.tts.speech.microsoft.com/cognitiveservices/v1",
+        headers={
+            "Ocp-Apim-Subscription-Key": os.environ["AZURE_SPEECH_KEY"],
+            "Content-Type": "application/ssml+xml",
+            "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+            "User-Agent": "saylo",
+        },
+        content=ssml.encode(),
+        timeout=60,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
+    return r.content
 
 
 def elevenlabs(model: str):
@@ -63,30 +75,37 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--open", action="store_true", help="open the comparison page")
     ap.add_argument("--no-elevenlabs", action="store_true", help="skip ElevenLabs (no characters used)")
+    ap.add_argument("--no-azure", action="store_true", help="skip Azure")
     ap.add_argument("--reuse", action="store_true", help="use audio already saved in data/tts-compare")
     args = ap.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
 
-    engines: list[tuple[str, str, object]] = [("mms", "MMS-TTS (free, local CPU)", mms)]
+    engines: list[tuple[str, str, object]] = []
+    if os.environ.get("AZURE_SPEECH_KEY") and os.environ.get("AZURE_SPEECH_REGION") and not args.no_azure:
+        engines.append(("azure", "Azure (mn-MN neural)", azure))
+    else:
+        print("Azure skipped (no AZURE_SPEECH_KEY/AZURE_SPEECH_REGION, or --no-azure).")
     if os.environ.get("ELEVENLABS_API_KEY") and not args.no_elevenlabs:
         engines += [(m, f"ElevenLabs {m}", elevenlabs(m)) for m in ELEVEN_MODELS]
     else:
         print("ElevenLabs skipped (no ELEVENLABS_API_KEY, or --no-elevenlabs).")
+    if not engines:
+        print("Nothing to compare: set the Azure and/or ElevenLabs keys.")
+        return 1
 
     OUT.mkdir(parents=True, exist_ok=True)
     rows, totals, chars = [], {e[0]: 0.0 for e in engines}, 0
     for i, sentence in enumerate(SENTENCES, 1):
-        spoken = tts.spell_numbers(sentence)
-        chars += len(spoken)
+        chars += len(sentence)
         cells = []
         for key, _label, run in engines:
-            name = f"{i}-{key}.{'wav' if key == 'mms' else 'mp3'}"
+            name = f"{i}-{key}.mp3"
             if args.reuse and (OUT / name).exists():
                 cells.append(f'<td><audio controls preload="none" src="{name}"></audio><small>saved earlier</small></td>')
                 continue
             started = time.monotonic()
             try:
-                audio = run(spoken)
+                audio = run(sentence)
                 took = time.monotonic() - started
                 totals[key] += took
                 (OUT / name).write_bytes(audio)
@@ -96,7 +115,7 @@ def main() -> int:
                 cells.append(f"<td class=err>{html.escape(str(e))}</td>")
                 print(f"{i}. {key:<24} failed: {e}")
         rows.append(
-            f"<tr><th>{i}. {html.escape(sentence)}<br><small>read as: {html.escape(spoken)}</small></th>{''.join(cells)}</tr>"
+            f"<tr><th>{i}. {html.escape(sentence)}</th>{''.join(cells)}</tr>"
         )
 
     head = "".join(f"<th>{html.escape(label)}<br><small>total {totals[key]:.1f} s</small></th>" for key, label, _ in engines)
@@ -107,7 +126,7 @@ table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 1px solid 
 small {{ display: block; color: #999; margin-top: 4px; font-weight: normal; }} audio {{ width: 220px; }} .err {{ color: #f88; }}
 </style>
 <h1>Mongolian text to speech: listen and compare</h1>
-<p>Same sentences, numbers spelled out in Mongolian for every engine. About {chars} characters per engine.</p>
+<p>Same sentences for every engine, numbers as digits. About {chars} characters per engine.</p>
 <table><tr><th>Sentence</th>{head}</tr>{''.join(rows)}</table>"""
     index = OUT / "index.html"
     index.write_text(page, encoding="utf-8")
