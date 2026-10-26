@@ -10,11 +10,12 @@ os.environ["PITCH_DB_URL"] = f"sqlite:///{_root / 'auth.db'}"
 
 import httpx
 import pytest
+from sqlalchemy import create_engine as create_sqlalchemy_engine, inspect, text
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
-from backend import config, supabase_auth
-from backend.db import AppUser, engine
+from backend import config, db as db_module, main as main_module, supabase_auth
+from backend.db import AppUser, AudioAsset, engine
 from backend.main import app
 
 PASSWORD = "password1"
@@ -52,6 +53,34 @@ def test_register_stores_a_hash_and_answers_me(client: TestClient):
     assert user.password_hash
     assert PASSWORD not in user.password_hash
     assert user.password_hash.startswith("pbkdf2_sha256$")
+
+
+def test_startup_adds_role_columns_to_existing_database_without_losing_users(tmp_path, monkeypatch):
+    old_engine = create_sqlalchemy_engine(f"sqlite:///{tmp_path / 'old-schema.db'}")
+    with old_engine.begin() as connection:
+        connection.execute(text(
+            "CREATE TABLE app_user (id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, created_at DATETIME NOT NULL)"
+        ))
+        connection.execute(
+            text("INSERT INTO app_user (id, token_hash, created_at) VALUES (:id, :token, CURRENT_TIMESTAMP)"),
+            {"id": "existing-user", "token": "existing-token-hash"},
+        )
+
+    monkeypatch.setattr(db_module, "engine", old_engine)
+    monkeypatch.setattr(config, "SESSIONS_DIR", tmp_path / "sessions")
+    try:
+        db_module.init()
+        columns = {column["name"] for column in inspect(old_engine).get_columns("app_user")}
+        assert {"role", "is_active", "email", "password_hash"} <= columns
+        with old_engine.connect() as connection:
+            row = connection.execute(
+                text("SELECT id, role, is_active FROM app_user WHERE id = 'existing-user'")
+            ).one()
+        assert row.id == "existing-user"
+        assert row.role == "member"
+        assert row.is_active == 1
+    finally:
+        old_engine.dispose()
 
 
 def test_duplicate_email(client: TestClient):
@@ -197,6 +226,26 @@ def test_admin_can_manage_roles_disable_accounts_and_access_other_projects(clien
     assert client.get(f"/api/v1/projects/{project['id']}", headers=member_headers).status_code == 200
     assert client.get("/api/v1/admin/users", headers=member_headers).status_code == 403
 
+    attempt = client.post(
+        f"/api/v1/projects/{project['id']}/sessions",
+        headers=member_headers,
+        json={"copy_inputs": False},
+    ).json()
+    with Session(engine) as database:
+        database.add(AudioAsset(
+            session_id=attempt["id"],
+            path=f"storage://sessions/{attempt['id']}/audio.wav",
+            original_path=f"storage://sessions/{attempt['id']}/original.wav",
+            duration_s=5,
+            format="wav",
+        ))
+        database.commit()
+    monkeypatch.setattr(main_module.db, "shared_storage_enabled", lambda: True)
+    monkeypatch.setattr(main_module.storage, "download_bytes", lambda _: b"private-audio")
+    admin_audio = client.get(f"/api/v1/sessions/{attempt['id']}/audio", headers=admin_headers)
+    assert admin_audio.status_code == 200
+    assert admin_audio.content == b"private-audio"
+
     projects = client.get("/api/v1/projects", headers=admin_headers)
     assert projects.status_code == 200
     assert any(row["id"] == project["id"] and row["owner_email"] == "member@example.com" for row in projects.json())
@@ -250,6 +299,12 @@ def test_admin_cannot_change_self_or_remove_configured_admin(client: TestClient,
         json={"role": "member"},
     )
     assert remove_configured.status_code == 409
+    disable_configured = client.patch(
+        f"/api/v1/admin/users/{admin['id']}",
+        headers=headers,
+        json={"is_active": False},
+    )
+    assert disable_configured.status_code == 409
 
     assert client.patch(f"/api/v1/admin/users/{member['id']}", headers=headers, json={}).status_code == 422
     assert (
