@@ -6,6 +6,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   folderSnapshot,
+  folderStoreIsReady,
+  folderStoreMigrationError,
+  folderStoreMigrationPending,
+  retryFolderStore,
   removeFolder,
   renameFolder,
   serverFolderSnapshot,
@@ -138,6 +142,18 @@ export default function SidebarPitches({
             );
           })}
         </ul>
+      )}
+      {open && folders.length === 0 && !folderStoreIsReady() && (
+        <p className="app-nav-loading" role="status">{tr("foldersLoading")}</p>
+      )}
+      {open && folderStoreMigrationPending() && (
+        <p className="app-nav-loading" role="status">{tr("foldersMigrating")}</p>
+      )}
+      {open && folderStoreMigrationError() && (
+        <p className="app-nav-loading" role="status">
+          {tr("foldersMigrationFailed")}{" "}
+          <button type="button" onClick={() => void retryFolderStore()}>{tr("folderSyncRetry")}</button>
+        </p>
       )}
 
       {menu &&

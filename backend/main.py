@@ -6,6 +6,7 @@ import mimetypes
 import re
 import secrets
 import shutil
+import unicodedata
 from contextlib import asynccontextmanager
 from datetime import timezone
 from pathlib import Path
@@ -161,10 +162,11 @@ def _slides_path(s: PitchSession) -> Optional[Path]:
     return config.SESSIONS_DIR / s.id / f"slides{Path(s.slides_filename).suffix.lower()}"
 
 
-def _slides_object_key(s: PitchSession) -> Optional[str]:
-    if not s.slides_filename:
+def _slides_object_key(s: PitchSession, filename: Optional[str] = None) -> Optional[str]:
+    stored_filename = filename or s.slides_filename
+    if not stored_filename:
         return None
-    suffix = Path(s.slides_filename).suffix.lower()
+    suffix = Path(stored_filename).suffix.lower()
     return f"sessions/{s.id}/slides{suffix}"
 
 
@@ -372,12 +374,12 @@ def _normalized_email(email: str) -> str:
 
 
 def _normalized_username(username: str) -> str:
-    normalized = username.strip().lower()
-    if not re.fullmatch(r"[a-z0-9._]{3,30}", normalized):
+    normalized = unicodedata.normalize("NFC", username.strip()).casefold()
+    if not 1 <= len(normalized) <= 40:
         raise ApiError(
             422,
             "invalid_username",
-            "Use 3-30 characters: lowercase Latin letters, digits, dots, or underscores.",
+            "Enter a username from 1 to 40 characters.",
         )
     return normalized
 
@@ -422,9 +424,12 @@ def register(body: RegisterBody, database: DB):
 
 @api.post("/auth/login")
 def login(body: LoginBody, database: DB):
-    identifier = body.login.strip().lower()
-    column = AppUser.email if "@" in identifier else AppUser.username
-    user = database.exec(select(AppUser).where(func.lower(column) == identifier)).first()
+    identifier = unicodedata.normalize("NFC", body.login.strip()).casefold()
+    user = None
+    if "@" in identifier:
+        user = database.exec(select(AppUser).where(func.lower(AppUser.email) == identifier)).first()
+    if user is None:
+        user = database.exec(select(AppUser).where(func.lower(AppUser.username) == identifier)).first()
     if not user or not verify_password(body.password, user.password_hash):
         raise ApiError(401, "invalid_credentials", "Email, username, or password is incorrect.")
     if not user.is_active:
@@ -628,7 +633,9 @@ def create_attempt(p: OwnedProject, database: DB, body: Optional[NewAttempt] = N
         src = _slides_path(prev)
         if db.shared_storage_enabled() and prev.slides_filename:
             source_key = _slides_object_key(prev)
-            target_key = _slides_object_key(s)
+            # The new attempt has no slides_filename yet; derive its storage key
+            # from the source filename that is about to be copied.
+            target_key = _slides_object_key(s, prev.slides_filename)
             if source_key is None or target_key is None:
                 raise ApiError(500, "invalid_file_reference", "The stored slide reference is invalid.")
             try:

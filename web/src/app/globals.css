@@ -372,6 +372,18 @@ body {
   list-style: none;
 }
 
+.app-nav-loading {
+  margin: 4px 10px 8px 38px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.folder-syncing {
+  padding: 28px 16px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
 .app-nav-toggle svg {
   flex-shrink: 0;
 }
@@ -1170,6 +1182,11 @@ body {
   font-size: 12px;
   line-height: 1.45;
   text-align: left;
+}
+
+.auth-hint-error {
+  margin-top: -4px;
+  color: #ff9b9b;
 }
 
 .auth-primary,
@@ -3743,6 +3760,29 @@ textarea.ui-input {
   background-position: center;
 }
 
+.landing-fallback.is-animated {
+  overflow: hidden;
+  background-image: none;
+}
+
+.landing-fallback.is-animated::before {
+  position: absolute;
+  inset: -30%;
+  background: url("/landing/ring-hero.jpg") 72% 50% / cover no-repeat;
+  content: "";
+  animation: landing-fallback-turn 52s linear infinite;
+}
+
+.landing-fallback.is-auth.is-animated::before {
+  background-image: url("/landing/ring-auth.jpg");
+  background-position: center;
+}
+
+@keyframes landing-fallback-turn {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .landing-grain {
   z-index: -1;
   background:
@@ -4178,6 +4218,10 @@ textarea.ui-input {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .landing-fallback.is-animated::before {
+    animation: none;
+  }
+
   .landing-reveal {
     opacity: 1;
     transform: none;

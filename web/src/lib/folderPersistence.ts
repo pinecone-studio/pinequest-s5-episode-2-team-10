@@ -115,27 +115,37 @@ export async function migrateLocalFolders(
   folders: ServerFolder[],
   getLocalBlob: (key: string) => Promise<Blob | null>,
   removeLocalData: (folders: ServerFolder[]) => Promise<void>,
+  isCurrentAccount: () => boolean = () => true,
 ): Promise<void> {
+  const ensureCurrentAccount = () => {
+    if (!isCurrentAccount()) throw new Error("Account changed during local pitch migration.");
+  };
   for (const folder of folders) {
+    ensureCurrentAccount();
     const mappingKey = `pitchcoach:backend-project:${folder.id}`;
     const mappedId = localStorage.getItem(mappingKey);
     let project: Project | null = null;
     if (mappedId) {
       try {
+        ensureCurrentAccount();
         project = await api.getProject(mappedId);
       } catch (error) {
         if (!(error instanceof ApiRequestError) || error.status !== 404) throw error;
       }
     }
     if (!project) {
+      ensureCurrentAccount();
       project = await api.createProject(details({ ...folder, audioId: null }, false));
+      ensureCurrentAccount();
       localStorage.setItem(mappingKey, project.id);
     } else {
+      ensureCurrentAccount();
       project = await api.updateProject(project.id, details({ ...folder, id: project.id, audioId: null }));
     }
 
     let currentSessionId = project.current.session_id ?? null;
     const localSlide = folder.slide ? await getLocalBlob(folder.slide.storageKey) : null;
+    ensureCurrentAccount();
     if (folder.slide && !localSlide) throw new Error(`Could not read the saved slide "${folder.slide.filename}".`);
     if (localSlide && folder.slide) {
       const slideMapKey = `pitchcoach:remote-slide:${folder.id}`;
@@ -146,6 +156,7 @@ export async function migrateLocalFolders(
       if (!remoteSlideSession) {
         for (const attempt of project.attempts.filter((item) => item.slides_filename === folder.slide?.filename)) {
           try {
+            ensureCurrentAccount();
             const remoteBlob = await api.slidesFile(attempt.id);
             if (await sameBlob(localSlide, remoteBlob)) {
               remoteSlideSession = attempt.id;
@@ -157,13 +168,16 @@ export async function migrateLocalFolders(
         }
       }
       if (!remoteSlideSession) {
+        ensureCurrentAccount();
         const attempt = await api.createAttempt(project.id, Boolean(currentSessionId));
         const upload = new File([localSlide], folder.slide.filename, { type: folder.slide.fileType });
         await api.uploadSlides(attempt.id, upload);
+        ensureCurrentAccount();
         currentSessionId = attempt.id;
         localStorage.setItem(slideMapKey, attempt.id);
         project = await api.getProject(project.id);
       } else {
+        ensureCurrentAccount();
         currentSessionId = remoteSlideSession;
         localStorage.setItem(slideMapKey, remoteSlideSession);
       }
@@ -171,6 +185,7 @@ export async function migrateLocalFolders(
 
     const uploadedAudioIds: Record<string, string> = {};
     for (const audio of folder.audios ?? []) {
+      ensureCurrentAccount();
       const audioMapKey = `pitchcoach:remote-audio:${folder.id}:${audio.id}`;
       const mappedSession = localStorage.getItem(audioMapKey);
       if (mappedSession && project.attempts.some((attempt) => attempt.id === mappedSession && attempt.has_audio)) {
@@ -178,11 +193,13 @@ export async function migrateLocalFolders(
         continue;
       }
       const blob = await getLocalBlob(audio.storageKey);
+      ensureCurrentAccount();
       if (!blob) throw new Error(`Could not read the saved recording "${audio.filename}".`);
       let matchingAudio = null;
       for (const candidate of project.attempts.filter((attempt) => attempt.has_audio && attempt.audio_filename === audio.filename)) {
         if (Object.values(uploadedAudioIds).includes(candidate.id)) continue;
         try {
+          ensureCurrentAccount();
           const remoteBlob = await api.audioBlob(candidate.id);
           if (await sameBlob(blob, remoteBlob)) {
             matchingAudio = candidate.id;
@@ -193,6 +210,7 @@ export async function migrateLocalFolders(
         }
       }
       if (matchingAudio) {
+        ensureCurrentAccount();
         localStorage.setItem(audioMapKey, matchingAudio);
         uploadedAudioIds[audio.id] = matchingAudio;
         currentSessionId = matchingAudio;
@@ -200,6 +218,7 @@ export async function migrateLocalFolders(
       }
       const attempt = await api.createAttempt(project.id, Boolean(currentSessionId));
       await api.uploadAudio(attempt.id, blob, audio.filename);
+      ensureCurrentAccount();
       localStorage.setItem(audioMapKey, attempt.id);
       uploadedAudioIds[audio.id] = attempt.id;
       currentSessionId = attempt.id;
@@ -207,6 +226,7 @@ export async function migrateLocalFolders(
     }
 
     const selectedAudio = folder.audioId ? uploadedAudioIds[folder.audioId] : null;
+    ensureCurrentAccount();
     project = await api.updateProject(project.id, {
       ...details({ ...folder, id: project.id, audioId: selectedAudio ?? null }),
       selected_audio_id: selectedAudio ?? null,
@@ -215,6 +235,8 @@ export async function migrateLocalFolders(
       throw new Error("Uploaded folder data could not be verified on the backend.");
     }
   }
+  ensureCurrentAccount();
+  ensureCurrentAccount();
   await removeLocalData(folders);
 }
 

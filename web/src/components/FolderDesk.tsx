@@ -208,7 +208,15 @@ export default function FolderDesk() {
 
   const open = folders.find((f) => f.id === openId) ?? null;
 
-  if (!ready) return <div className="desk" />;
+  if (!ready) {
+    return (
+      <main className="desk folder-board">
+        <div className="desk-col">
+          <p className="folder-syncing" role="status">{tr("foldersLoading")}</p>
+        </div>
+      </main>
+    );
+  }
 
   const syncError = folderStoreError();
   if (syncError) {
