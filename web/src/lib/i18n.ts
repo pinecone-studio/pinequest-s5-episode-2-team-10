@@ -306,6 +306,8 @@ const mn = {
   authUsernameHint: "Хүссэн нэрээ бичнэ үү (1–40 тэмдэгт).",
   authUsernameRequired: "Хэрэглэгчийн нэрээ оруулна уу.",
   authPasswordRepeat: "Нууц үгээ давтана уу",
+  authShowPassword: "Нууц үг харуулах",
+  authHidePassword: "Нууц үг нуух",
   authOr: "эсвэл",
   authUsernameTaken: "Энэ хэрэглэгчийн нэр аль хэдийн бүртгэгдсэн байна.",
   authUsernameInvalid:
@@ -709,6 +711,8 @@ const en: Record<MessageKey, string> = {
     "Choose any username from 1 to 40 characters.",
   authUsernameRequired: "Enter a username.",
   authPasswordRepeat: "Repeat your password",
+  authShowPassword: "Show password",
+  authHidePassword: "Hide password",
   authOr: "or",
   authUsernameTaken: "This username is already taken.",
   authUsernameInvalid:

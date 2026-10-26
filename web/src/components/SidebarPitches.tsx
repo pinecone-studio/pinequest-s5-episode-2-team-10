@@ -144,7 +144,11 @@ export default function SidebarPitches({
         </ul>
       )}
       {open && folders.length === 0 && !folderStoreIsReady() && (
-        <p className="app-nav-loading" role="status">{tr("foldersLoading")}</p>
+        <div className="app-nav-loading-skeleton" role="status" aria-label={tr("foldersLoading")} aria-busy="true">
+          {[68, 82, 56].map((width, index) => (
+            <span key={index} className="app-nav-skeleton-line" style={{ width: `${width}%` }} />
+          ))}
+        </div>
       )}
       {open && folderStoreMigrationPending() && (
         <p className="app-nav-loading" role="status">{tr("foldersMigrating")}</p>

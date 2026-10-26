@@ -210,9 +210,25 @@ export default function FolderDesk() {
 
   if (!ready) {
     return (
-      <main className="desk folder-board">
+      <main className="desk folder-board folder-list" aria-busy="true">
         <div className="desk-col">
-          <p className="folder-syncing" role="status">{tr("foldersLoading")}</p>
+          <div className="desk-title">
+            <div>
+              <h1>{tr("folders")}</h1>
+              <p className="desk-sub" role="status">{tr("foldersLoading")}</p>
+            </div>
+          </div>
+          <ul className="folder-grid folder-skeleton-grid" aria-hidden="true">
+            {Array.from({ length: 6 }, (_, index) => (
+              <li key={index} className="folder-skeleton-card">
+                <span className="folder-skeleton-cover" />
+                <span className="folder-skeleton-info">
+                  <span className="folder-skeleton-line is-title" />
+                  <span className="folder-skeleton-line is-meta" />
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       </main>
     );
