@@ -1,11 +1,13 @@
 // Records the microphone in sentence-sized pieces and sends each to /api/transcribe
 // (the local voice server). Replaces the browser's SpeechRecognition, which has no Mongolian.
 
+import type { WordTime } from "./coachVoice";
 import { t } from "./i18n";
 import { currentLang, langHeaders } from "./i18nClient";
 
 export interface TranscribeReply {
   text: string;
+  words: WordTime[]; // estimated start and end of each word, for playing back a quote
   durationS: number;
   elapsedS: number;
 }
@@ -40,6 +42,7 @@ export async function transcribeBlob(blob: Blob, name: string): Promise<Transcri
   }
   const body = (await res.json().catch(() => null)) as {
     text?: unknown;
+    words?: unknown;
     durationS?: unknown;
     elapsedS?: unknown;
     error?: unknown;
@@ -47,8 +50,14 @@ export async function transcribeBlob(blob: Blob, name: string): Promise<Transcri
   if (!res.ok || !body || typeof body.text !== "string") {
     throw new Error(typeof body?.error === "string" ? body.error : t(currentLang(), "sttFail"));
   }
+  const words = Array.isArray(body.words)
+    ? (body.words as Partial<WordTime>[]).filter(
+        (w): w is WordTime => typeof w?.word === "string" && typeof w.start === "number" && typeof w.end === "number",
+      )
+    : [];
   return {
     text: body.text,
+    words,
     durationS: typeof body.durationS === "number" ? body.durationS : 0,
     elapsedS: typeof body.elapsedS === "number" ? body.elapsedS : 0,
   };

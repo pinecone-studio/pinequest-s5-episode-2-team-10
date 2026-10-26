@@ -46,6 +46,11 @@ function fromEnvFiles(key: string): string {
   return "";
 }
 
+/** A server setting: the environment first, then the env files above (local development). */
+export function serverSetting(key: string): string {
+  return process.env[key]?.trim() || fromEnvFiles(key);
+}
+
 export function voiceConfig() {
   const url = (process.env.PITCH_VOICE_URL?.trim() || fromEnvFiles("PITCH_VOICE_URL") || "http://127.0.0.1:8001").replace(
     /\/+$/,

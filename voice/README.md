@@ -55,6 +55,7 @@ Then set `VOICE_TUNNEL_NAME=saylo-voice` in `.env.voice`, and `PITCH_VOICE_URL=h
 | Method and path | Does |
 | --- | --- |
 | `GET /health` | `{ok, model, model_loaded, cuda, device, busy}`. No token needed |
+| `POST /v1/tts` | JSON `{text}` (600 characters max). Header `Authorization: Bearer <token>`. Returns WAV: Mongolian speech from MMS-TTS (`facebook/mms-tts-mon`, CC BY-NC 4.0), run on the CPU so it doesn't take GPU memory. Numbers are spelled out in Mongolian first |
 | `POST /v1/transcribe` | Multipart `file` (any format ffmpeg reads, 25 MB, 5 min). Header `Authorization: Bearer <token>`. Returns `{words: [{word, start, end}], duration_s, model, elapsed_s}` |
 
 Errors are `{"code", "message"}`: 401 wrong token, 400 bad/empty/too long audio, 413 too large,
