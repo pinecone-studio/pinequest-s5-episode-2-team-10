@@ -75,6 +75,10 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
     "slide_feedback": [{ "slide": 3, "status": "missed", "comment": "…" }],
     "number_checks": [{ "slide": 4, "on_slide": "25%", "said": "гучин хувь", "inconsistent": true }],
     "recommendations": [{ "area": "structure", "problem": "…", "start_s": 84.2, "slide": 5, "why": "…", "action": "…", "example_sentence": "…", "impact": "high" }],
+    "practice_tasks": [
+      { "title": "Гол санаагаа цэгцлэх", "instruction": "Илтгэлийн гол санаагаа 30 секундэд ярьж бич.", "goal": "Гол санааг товч ойлгуулах." },
+      { "title": "Төгсгөлөө давтах", "instruction": "Илтгэлийн төгсгөлийн өгүүлбэрээ давтан хэл.", "goal": "Дүгнэлтээ тодорхой хүргэх." }
+    ],
     "filler_occurrences": [{ "sentence_id": 1, "word": "ээ" }],
     "fillers": {
       "method": "llm", "total": 12, "per_100": 2.91, "model_reported": 13, "note": null,
@@ -91,7 +95,7 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
   },
   "transcript": { "text": "…", "sentences": [{ "text": "…", "start": 0.0, "end": 2.8 }] },
   "script": "…", "slides_filename": "deck.pptx",
-  "backend": "claude", "asr_backend": "whisper", "prompt_version": "v2.2-points",
+  "backend": "claude", "asr_backend": "whisper", "prompt_version": "v2.3-practice-tasks",
   "notes": [], "created_at": "2026-10-22T03:51:46+00:00"
 }
 ```
