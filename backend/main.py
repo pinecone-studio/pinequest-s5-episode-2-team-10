@@ -400,11 +400,14 @@ def demo_login(database: DB):
     user = database.exec(select(AppUser).where(AppUser.email == email)).first()
     token = secrets.token_urlsafe(32)
     if user is None:
-        user = AppUser(email=email, password_hash=None, token_hash=_hash(token))
+        user = AppUser(email=email, role="admin", password_hash=None, token_hash=_hash(token))
         database.add(user)
     else:
-        if not user.is_active or user.role != "member":
+        if not user.is_active:
             raise ApiError(403, "demo_unavailable", "The shared demo account is unavailable.")
+        # The shared demo login intentionally enters the admin experience.
+        user.role = "admin"
+        database.add(user)
         database.add(AccessToken(token_hash=_hash(token), user_id=user.id))
     database.commit()
     database.refresh(user)
@@ -485,8 +488,6 @@ def update_user_role(user_id: str, body: AdminUserUpdate, admin: AdminUser, data
     changes = body.model_dump(exclude_unset=True)
     next_role = changes.get("role", target.role)
     next_active = changes.get("is_active", target.is_active)
-    if target.email == "demo@pitchcoach.local" and next_role == "admin":
-        raise ApiError(409, "demo_cannot_be_admin", "The shared demo account cannot be an administrator.")
     if target.email and target.email.lower() in config.ADMIN_EMAILS and (next_role != "admin" or not next_active):
         raise ApiError(409, "configured_admin", "This administrator's role and active status are assigned through PITCH_ADMIN_EMAILS.")
     if target.role == "admin" and (next_role != "admin" or not next_active):

@@ -8,7 +8,7 @@ Backend дээр `member` болон `admin` гэсэн role нэмэгдлээ.
 - [x] Хуучин хэрэглэгчийн мөр, project өгөгдлийг хадгалсан эсэхийг migration тестээр шалгах.
 - [x] Бүртгэлээр хэрэглэгч өөрөө admin эрх авах боломжгүй; зөвхөн Supabase-аар баталгаажсан Google email allowlist admin болгох.
 - [x] Admin API, cross-user project/attempt болон file access, role/status өөрчлөлтөд backend authorization хийх.
-- [x] Өөрийн эрх, allowlist admin, сүүлийн active admin болон demo account-ыг хамгаалах.
+- [x] Өөрийн эрх, allowlist admin болон сүүлийн active admin-ыг хамгаалах.
 - [x] API/DB/team setup баримт бичиг болон frontend auth/session төрлийг шинэчлэх.
 - [x] Python suite, TypeScript шалгалт, production web build ажиллуулах.
 - [ ] Нууц DB password/service-role key-г Supabase дээр rotate хийсний дараа shared DB-ийн role column болон бодит Google admin нэвтрэлтийг шинээр шалгах.
@@ -49,6 +49,6 @@ Admin account-ын `X-Access-Token` ашиглан FastAPI-ийн `/docs` хуу
 
 `admin` нь өндөр эрхтэй: бусдын pitch, transcript, audio, slide зэрэг хувийн өгөгдлийг харах, өөрчлөх, устгах боломжтой. Шаардлагатай, итгэлтэй хүмүүст л admin эрх өгнө. Supabase-ийн `authenticated` төлөв нь Saylo-ийн `member/admin` role-оос тусдаа.
 
-`demo@pitchcoach.local` хаягаар нэвтэрсэн үед `/admin` цэсэнд зөвхөн танилцуулгын preview харагдана. Preview нь жишээ хэрэглэгчид харуулж, бодит admin API дуудахгүй болон хэрэглэгчийн эрх өөрчлөхгүй. Бодит admin үйлдлийг зөвхөн `PITCH_ADMIN_EMAILS`-д бүртгэсэн Google хэрэглэгч хийж болно.
+Demo товчоор нэвтрэхэд shared `demo@pitchcoach.local` account `admin` role авна. Тус хаягаар нэвтэрсэн хүн `/admin` хуудас болон бодит admin API-д хандах боломжтой. Demo товчийг ашиглаж чадах ямар ч хүн хэрэглэгчдийн жагсаалт, эрх болон бусад хэрэглэгчийн pitch, transcript, audio, slide зэрэг хувийн өгөгдөлд хандаж, өөрчилж болохыг анхаарна уу. Local mock горимд demo preview-ийн үйлдлүүд зөвхөн жишээ өгөгдөлд нөлөөлнө.
 
 Код татсаны дараа backend-ээ restart хийгээд `/auth/me`-ийн `role`-ийг шалгаарай. Одоо байгаа хэрэглэгчдийн өгөгдөл хэвээр үлдэнэ; schema update автоматаар, нэмэлтээр хийгдэнэ.
