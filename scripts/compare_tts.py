@@ -1,7 +1,7 @@
 """Compare Mongolian text-to-speech engines by ear: the same coaching sentences, side by side.
 
     set -a; . web/.env.local; set +a              # ELEVENLABS_API_KEY lives there (git-ignored)
-    python -m scripts.compare_tts                 # MMS (free, local) + ElevenLabs v3 if ELEVENLABS_API_KEY is set
+    python -m scripts.compare_tts                 # MMS (free, local) + ElevenLabs if ELEVENLABS_API_KEY is set
     python -m scripts.compare_tts --open          # also open the comparison page in the browser
     python -m scripts.compare_tts --reuse         # rebuild the page from saved audio (no API characters used)
 
@@ -9,8 +9,8 @@ Writes data/tts-compare/index.html (data/ is not committed) with one row per sen
 audio player per engine, plus how long each took. Numbers are spelled out in Mongolian first for
 every engine, so the comparison is about the voices, not number reading.
 
-ElevenLabs has no Mongolian model: it rejects language_code "mn", so the text is sent without one
-and it reads the Cyrillic as best it can. Every ElevenLabs run uses characters from your plan.
+ElevenLabs v4 Turbo is sent language_code "mn"; eleven_v3 reads Mongolian too but rejects the code,
+so it gets none. Every ElevenLabs run uses characters from your plan.
 """
 
 import argparse
@@ -32,7 +32,7 @@ SENTENCES = [
     "Бид 2024 онд 150 оюутантай туршилт хийсэн бөгөөд үр дүн маш сайн байлаа.",
     "Төгсгөлд нь шүүгчдээс юу хүсч байгаагаа тодорхой хэлээрэй.",
 ]
-ELEVEN_MODELS = ["eleven_v3"]
+ELEVEN_MODELS = ["eleven_v4_turbo", "eleven_v3"]
 ELEVEN_VOICE = os.environ.get("PITCH_ELEVENLABS_VOICE", "JBFqnCBsd6RMkjVDRZzb")
 OUT = Path("data/tts-compare")
 
@@ -49,7 +49,7 @@ def elevenlabs(model: str):
             f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVEN_VOICE}",
             params={"output_format": "mp3_44100_64"},
             headers={"xi-api-key": key},
-            json={"text": text, "model_id": model},
+            json={"text": text, "model_id": model, **({} if model.startswith("eleven_v3") else {"language_code": "mn"})},
             timeout=120,
         )
         if r.status_code != 200:
@@ -107,7 +107,7 @@ table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 1px solid 
 small {{ display: block; color: #999; margin-top: 4px; font-weight: normal; }} audio {{ width: 220px; }} .err {{ color: #f88; }}
 </style>
 <h1>Mongolian text to speech: listen and compare</h1>
-<p>Same sentences, numbers spelled out in Mongolian for every engine. ElevenLabs has no Mongolian model, so it reads the Cyrillic without a language setting. About {chars} characters per engine.</p>
+<p>Same sentences, numbers spelled out in Mongolian for every engine. About {chars} characters per engine.</p>
 <table><tr><th>Sentence</th>{head}</tr>{''.join(rows)}</table>"""
     index = OUT / "index.html"
     index.write_text(page, encoding="utf-8")

@@ -1,8 +1,8 @@
 // Server only: the coach voice. PITCH_TTS picks the engine:
 //   auto (default): Azure's Mongolian neural voice when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are
 //     set, otherwise MMS-TTS on the voice server (POST /v1/tts, free, offline);
-//   voice | azure | elevenlabs: that engine. ElevenLabs has no Mongolian model (it rejects
-//     language_code "mn"); it reads the Cyrillic anyway, so it is here for comparison.
+//   voice | azure | elevenlabs: that engine. ElevenLabs uses eleven_v4_turbo (Mongolian, fastest)
+//     unless PITCH_ELEVENLABS_MODEL picks another model.
 import { t, type Lang } from "@/lib/i18n";
 import { serverSetting as setting, VoiceError, voiceConfig } from "./voice";
 
@@ -64,13 +64,15 @@ async function elevenlabs(text: string, lang: Lang): Promise<Speech> {
   const key = setting("ELEVENLABS_API_KEY");
   if (!key) throw new VoiceError(t(lang, "ttsFail"), 503);
   const voice = setting("PITCH_ELEVENLABS_VOICE") || "JBFqnCBsd6RMkjVDRZzb";
-  const model = setting("PITCH_ELEVENLABS_MODEL") || "eleven_v3";
+  const model = setting("PITCH_ELEVENLABS_MODEL") || "eleven_v4_turbo";
+  // v4 models take language_code "mn"; eleven_v3 reads Mongolian too but rejects the code.
+  const languageCode = model.startsWith("eleven_v3") ? undefined : "mn";
   let res: Response;
   try {
     res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voice)}?output_format=mp3_44100_64`, {
       method: "POST",
       headers: { "xi-api-key": key, "Content-Type": "application/json" },
-      body: JSON.stringify({ text, model_id: model }),
+      body: JSON.stringify({ text, model_id: model, language_code: languageCode }),
     });
   } catch {
     throw new VoiceError(t(lang, "ttsFail"), 502);
