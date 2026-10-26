@@ -129,11 +129,13 @@ def test_demo_login_opens_the_same_account(client: TestClient):
     assert second.headers["access-control-allow-origin"] == "http://10.0.0.8:3000"
     assert first.status_code == second.status_code == 200
     assert first.json()["email"] == second.json()["email"] == "demo@pitchcoach.local"
+    assert first.json()["role"] == second.json()["role"] == "admin"
     assert first.json()["id"] == second.json()["id"]
     first_headers = {"X-Access-Token": first.json()["access_token"]}
     second_headers = {"X-Access-Token": second.json()["access_token"]}
-    assert client.get("/api/v1/auth/me", headers=first_headers).status_code == 200
+    assert client.get("/api/v1/auth/me", headers=first_headers).json()["role"] == "admin"
     assert client.get("/api/v1/auth/me", headers=second_headers).status_code == 200
+    assert client.get("/api/v1/admin/users", headers=first_headers).status_code == 200
     assert client.post("/api/v1/auth/logout", headers=first_headers).status_code == 204
     assert client.get("/api/v1/auth/me", headers=first_headers).status_code == 401
     assert client.get("/api/v1/auth/me", headers=second_headers).status_code == 200
@@ -317,20 +319,17 @@ def test_admin_cannot_change_self_or_remove_configured_admin(client: TestClient,
     )
 
 
-def test_shared_demo_account_cannot_be_promoted_to_admin(client: TestClient, supabase, monkeypatch):
+def test_shared_demo_login_grants_admin_access(client: TestClient, supabase, monkeypatch):
     monkeypatch.setattr(config, "ADMIN_EMAILS", {"admin@example.com"})
     supabase.reply = httpx.Response(200, json=_supabase_user("admin@example.com"))
     admin = _google(client).json()
     demo = client.post("/api/v1/auth/demo").json()
 
-    response = client.patch(
-        f"/api/v1/admin/users/{demo['id']}",
-        headers={"X-Access-Token": admin["access_token"]},
-        json={"role": "admin"},
-    )
+    assert demo["role"] == "admin"
+    users = client.get("/api/v1/admin/users", headers={"X-Access-Token": demo["access_token"]})
+    assert users.status_code == 200
+    assert any(row["id"] == demo["id"] and row["role"] == "admin" for row in users.json())
 
-    assert response.status_code == 409
-    assert response.json()["code"] == "demo_cannot_be_admin"
     assert client.post("/api/v1/auth/demo").status_code == 200
 
 
