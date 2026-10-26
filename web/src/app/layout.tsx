@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Manrope } from "next/font/google";
 import AuthGate from "@/components/AuthGate";
-import { ThemeSync } from "@/lib/theme";
 import "./globals.css";
-import "./theme.css";
 
 const inter = Inter({
   subsets: ["latin", "cyrillic"],
@@ -11,7 +9,7 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-// Landing page only: headlines and body text.
+// The app's font: headlines and body text.
 const landing = Manrope({
   subsets: ["latin", "cyrillic"],
   weight: ["400", "500", "600", "700"],
@@ -26,16 +24,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="mn" className={`${inter.variable} ${landing.variable} dark h-full antialiased`} suppressHydrationWarning>
-      <head>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem("pitchcoach:theme")==="light"){document.documentElement.classList.remove("dark");document.documentElement.classList.add("light");document.documentElement.style.colorScheme="light"}}catch(e){}`,
-          }}
-        />
-      </head>
       {/* Browser extensions add classes to <body> before React loads (e.g. "vc-init"); ignore those. */}
-      <body className={`${inter.className} min-h-full flex flex-col`} suppressHydrationWarning>
-        <ThemeSync />
+      <body className={`${landing.className} min-h-full flex flex-col`} suppressHydrationWarning>
         <AuthGate>{children}</AuthGate>
       </body>
     </html>
