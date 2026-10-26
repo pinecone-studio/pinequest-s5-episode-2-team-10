@@ -415,6 +415,15 @@ export const mockApi = {
     return { duration_s: s.durationS, format: file.type || "unknown" };
   },
 
+  async deleteAudio(id: string) {
+    const store = load();
+    const session = getSession(store, id);
+    session.durationS = 0;
+    session.status = "created";
+    audioBlobs.delete(id);
+    save(store);
+  },
+
   async analyze(id: string, backend: FeedbackBackend = "rules") {
     await wait();
     const store = load();

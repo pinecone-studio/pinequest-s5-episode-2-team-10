@@ -57,6 +57,10 @@ class Project(SQLModel, table=True):
     audience: str = ""
     idea: str = ""  # the pitch idea in one or two sentences
     key_points: list[str] = Field(default_factory=list, sa_column=Column(JSON))  # main points to get across
+    point_slides: list[Optional[int]] = Field(default_factory=list, sa_column=Column(JSON))
+    figma_url: Optional[str] = None
+    script: str = ""
+    selected_audio_id: Optional[str] = None
     planned_s: int = 180
     pitch_type: str = "startup"
     created_at: datetime = Field(default_factory=utcnow)
@@ -78,6 +82,7 @@ class PitchSession(SQLModel, table=True):
     planned_s: int
     pitch_type: str = "startup"
     script: str = ""  # what the speaker planned to say (optional)
+    audio_filename: Optional[str] = None
     slides_filename: Optional[str] = None
     status: str = "created"  # created, uploaded, processing, completed, failed
     stage: Optional[str] = None  # transcribing, measuring, slides, feedback, scoring
@@ -166,8 +171,15 @@ ADDED_COLUMNS = {
         "role": "TEXT NOT NULL DEFAULT 'member'",
         "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
     },
-    "project": {"idea": "TEXT NOT NULL DEFAULT ''", "key_points": "JSON"},
-    "session": {"idea": "TEXT NOT NULL DEFAULT ''", "key_points": "JSON"},
+    "project": {
+        "idea": "TEXT NOT NULL DEFAULT ''",
+        "key_points": "JSON",
+        "point_slides": "JSON",
+        "figma_url": "TEXT",
+        "script": "TEXT NOT NULL DEFAULT ''",
+        "selected_audio_id": "TEXT",
+    },
+    "session": {"idea": "TEXT NOT NULL DEFAULT ''", "key_points": "JSON", "audio_filename": "TEXT"},
 }
 
 

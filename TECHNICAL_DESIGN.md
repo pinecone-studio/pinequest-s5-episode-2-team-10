@@ -26,6 +26,7 @@ Supabase Postgres + private Storage --> web app polls status and fetches files t
 
 Everything runs in one FastAPI process. Analysis takes 20 to 60 seconds, so it runs in a background worker and the browser polls `GET /sessions/{id}/status` every 2 seconds.
 For team-shared use, clients must call the same FastAPI process; the in-memory worker queue is not coordinated across multiple API instances.
+For signed-in member accounts, project/folder metadata, scripts, audio takes, and supported slide decks use the FastAPI project/session API. Existing member browser data is uploaded on first sign-in and removed from browser storage only after the upload succeeds. The shared demo account keeps its local demo data separate.
 
 ## 2. Implementation choices
 

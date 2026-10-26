@@ -45,6 +45,10 @@ export interface ProjectDetails {
   audience: string;
   idea: string;
   key_points: string[]; // up to 6 main points the speech should get across
+  point_slides?: (number | null)[];
+  figma_url?: string | null;
+  script?: string;
+  selected_audio_id?: string | null;
   planned_s: number;
   pitch_type: PitchType;
 }
@@ -71,6 +75,8 @@ export interface Attempt {
   overall: number | null;
   duration_s: number | null;
   slides_filename: string | null;
+  audio_filename?: string | null;
+  has_audio?: boolean;
   slide_count: number;
   has_script: boolean;
 }
@@ -78,7 +84,7 @@ export interface Attempt {
 export interface Project extends ProjectSummary {
   attempts: Attempt[];
   // Slides and script the next attempt reuses (from the latest attempt).
-  current: { slides_filename: string | null; slide_count: number; script: string };
+  current: { slides_filename: string | null; slide_count: number; script: string; session_id?: string | null };
 }
 
 export interface SlidesUploadResult {

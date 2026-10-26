@@ -50,6 +50,9 @@ def test_create_project_accepts_web_client_fields_and_cleans_key_points(client):
             "audience": "Classmates",
             "idea": "A tool for speaking practice",
             "key_points": ["  Problem  ", "", "  Solution  "],
+            "point_slides": [1, 2],
+            "figma_url": "https://www.figma.com/slides/example",
+            "script": "Opening practice text",
             "planned_s": 240,
             "pitch_type": "academic",
         },
@@ -59,18 +62,21 @@ def test_create_project_accepts_web_client_fields_and_cleans_key_points(client):
     project = response.json()
     assert {
         key: project[key]
-        for key in ("name", "goal", "audience", "idea", "key_points", "planned_s", "pitch_type")
+        for key in ("name", "goal", "audience", "idea", "key_points", "point_slides", "figma_url", "script", "planned_s", "pitch_type")
     } == {
         "name": "Demo pitch",
         "goal": "Practice a clear pitch",
         "audience": "Classmates",
         "idea": "A tool for speaking practice",
         "key_points": ["Problem", "Solution"],
+        "point_slides": [1, 2],
+        "figma_url": "https://www.figma.com/slides/example",
+        "script": "Opening practice text",
         "planned_s": 240,
         "pitch_type": "academic",
     }
     assert project["attempts"] == []
-    assert project["current"] == {"slides_filename": None, "slide_count": 0, "script": ""}
+    assert project["current"] == {"slides_filename": None, "slide_count": 0, "script": "Opening practice text", "session_id": None}
 
 
 def test_create_project_allows_empty_details(client):
@@ -80,6 +86,9 @@ def test_create_project_allows_empty_details(client):
     project = response.json()
     assert project["name"] == "Untitled project"
     assert project["key_points"] == []
+    assert project["point_slides"] == []
+    assert project["figma_url"] is None
+    assert project["script"] == ""
     assert project["planned_s"] == 180
     assert project["pitch_type"] == "startup"
 
@@ -92,6 +101,7 @@ def test_create_project_allows_empty_details(client):
         {"pitch_type": "other"},
         {"key_points": ["point"] * 7},
         {"key_points": ["x" * 201]},
+        {"point_slides": [1] * 7},
     ],
 )
 def test_create_project_rejects_out_of_contract_fields(client, details):
@@ -122,13 +132,22 @@ def test_patch_project_updates_only_provided_fields(client):
     response = client.patch(
         f"/api/v1/projects/{project_id}",
         headers=headers,
-        json={"name": "  Updated  ", "key_points": ["  New point  ", ""]},
+        json={
+            "name": "  Updated  ",
+            "key_points": ["  New point  ", ""],
+            "point_slides": [3],
+            "figma_url": "https://www.figma.com/slides/updated",
+            "script": "Updated script",
+        },
     )
 
     assert response.status_code == 200
     project = response.json()
     assert project["name"] == "Updated"
     assert project["key_points"] == ["New point"]
+    assert project["point_slides"] == [3]
+    assert project["figma_url"] == "https://www.figma.com/slides/updated"
+    assert project["script"] == "Updated script"
     assert project["goal"] == "Original goal"
     assert project["audience"] == "Students"
     assert project["idea"] == "Original idea"
@@ -195,6 +214,7 @@ def test_audio_upload_and_playback_use_private_storage_in_shared_mode(client, mo
         json={"copy_inputs": False},
     ).json()
     objects = {}
+    deleted = []
 
     def convert_to_wav(source, destination):
         destination.write_bytes(b"converted-audio")
@@ -206,6 +226,7 @@ def test_audio_upload_and_playback_use_private_storage_in_shared_mode(client, mo
     monkeypatch.setattr(main.db, "shared_storage_enabled", lambda: True)
     monkeypatch.setattr(main.audio_tools, "to_wav16k", convert_to_wav)
     monkeypatch.setattr(main.storage, "upload_file", upload_file)
+    monkeypatch.setattr(main.storage, "delete_objects", lambda keys: deleted.extend(keys))
     monkeypatch.setattr(
         main.storage,
         "download_bytes",
@@ -229,6 +250,19 @@ def test_audio_upload_and_playback_use_private_storage_in_shared_mode(client, mo
         asset = database.get(main.AudioAsset, attempt["id"])
     assert asset.path == f"storage://sessions/{attempt['id']}/audio.wav"
     assert asset.original_path == f"storage://sessions/{attempt['id']}/original.wav"
+
+    removed = client.delete(f"/api/v1/sessions/{attempt['id']}/audio", headers=headers)
+    assert removed.status_code == 204
+    assert set(deleted) == {
+        f"sessions/{attempt['id']}/audio.wav",
+        f"sessions/{attempt['id']}/original.wav",
+    }
+    assert client.get(f"/api/v1/sessions/{attempt['id']}/audio", headers=headers).status_code == 404
+    project_after = client.get(f"/api/v1/projects/{project['id']}", headers=headers).json()
+    saved_attempt = next(row for row in project_after["attempts"] if row["id"] == attempt["id"])
+    assert saved_attempt["has_audio"] is False
+    assert saved_attempt["audio_filename"] is None
+    assert saved_attempt["status"] == "created"
 
 
 def test_migrated_access_token_alias_authenticates_as_mapped_owner(client):

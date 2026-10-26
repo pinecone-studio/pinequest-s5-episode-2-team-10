@@ -28,9 +28,9 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 | `GET /admin/users` | List accounts (admin only) | `[{id, email, role, is_active, created_at}]`; `403 admin_required` |
 | `PATCH /admin/users/{user_id}` | Set `{role?: "member" \| "admin", is_active?: boolean}` (admin only). Disabling an account revokes its app tokens; it must sign in again after reactivation. An admin cannot change their own account, remove a configured admin, or deactivate/demote the last active admin | updated user; `404` unknown account; `409` protected admin update; `403 admin_required` |
 | `GET /projects` | A member's own projects, or all projects for admins, most recently used first | `[{id, name, goal, audience, idea, key_points, planned_s, pitch_type, created_at, updated_at, attempt_count, latest_overall, processing}]`; admin results also include `owner_id, owner_email` |
-| `POST /projects` | Create a project; every field optional (`name, goal, audience, idea` up to 500 characters, `key_points` up to 6 strings of up to 200 characters (blank ones dropped), `planned_s 30–900, pitch_type startup/academic`) | `201` project with `attempts` and `current` |
-| `GET /projects/{id}` | Project, `attempts` (newest first), and `current` = slides and script the next attempt will reuse | project; admin responses also include `owner_id, owner_email` |
-| `PATCH /projects/{id}` | Update any detail | project |
+| `POST /projects` | Create a project; every field optional (`name, goal, audience, idea`, `key_points`, `point_slides`, `figma_url`, `script`, `planned_s`, `pitch_type`) | `201` project with `attempts` and `current` |
+| `GET /projects/{id}` | Project, all `attempts` (newest first, including saved uploads not yet analyzed), and `current` = latest session inputs | project; admin responses also include `owner_id, owner_email` |
+| `PATCH /projects/{id}` | Update project details, saved script, and selected audio take | project |
 | `DELETE /projects/{id}` | Delete the project, attempts, and files | `204`; `409` while an attempt is running; `503` storage unavailable |
 | `POST /projects/{id}/sessions` | New attempt; copies slides and script from the latest attempt unless `{"copy_inputs": false}` | `201` attempt; `503` storage unavailable |
 
@@ -39,6 +39,7 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 | Method and path | Does | Errors |
 | --- | --- | --- |
 | `POST /sessions/{id}/audio` | WAV, MP3, M4A, WebM or OGG; 25 MB; 3 s to 5 min. Returns `{duration_s, format}` | `400` unreadable, `409` busy, `413` too large or long, `415` format, `503` storage unavailable |
+| `DELETE /sessions/{id}/audio` | Delete only the saved recording and its report/transcript, retaining the attempt and slides | `204`; `404` another user's attempt; `409` while running; `503` storage unavailable |
 | `POST /sessions/{id}/slides` | PDF or PPTX; 20 MB; 40 slides. Returns `{slide_count, image_only, filename}` | `400`, `409`, `413`, `415`, `503` storage unavailable |
 | `DELETE /sessions/{id}/slides` | Remove slides from this attempt | `409` busy, `503` storage unavailable |
 | `PUT /sessions/{id}/script` | `{text}` up to 20,000 characters. Returns `{words}` | `409` busy |
