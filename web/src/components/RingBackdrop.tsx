@@ -36,11 +36,11 @@ export function useReducedMotion(): boolean {
 
 /** A picture of the real 3D ring, for browsers that can't draw it. */
 export function StaticRing({ variant = "page" }: { variant?: SceneVariant }) {
-  return <div className={variant === "auth" ? "landing-fallback is-auth" : "landing-fallback"} aria-hidden />;
+  return <div className={variant === "page" ? "landing-fallback" : `landing-fallback is-${variant}`} aria-hidden />;
 }
 
 /**
- * The ribbed ring behind the landing and sign-in pages. Animated 3D where WebGL runs well, a still
+ * The ribbed ring behind the landing, sign-in, and pitch list pages. Animated 3D where WebGL runs well, a still
  * 3D frame when the visitor asks for reduced motion, and the picture whenever WebGL is missing,
  * too slow, or fails at any point.
  */

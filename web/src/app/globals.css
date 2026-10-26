@@ -99,6 +99,8 @@ body {
 }
 
 .app-shell {
+  --header-height: 64px;
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 100vh;
@@ -106,38 +108,49 @@ body {
   color: var(--text);
 }
 
-.app-top {
-  display: none;
+/* Over the 3D ring (pitch list only): the shell lets it show through, and the fallback picture needs its color. */
+.app-shell.has-scene {
+  --landing-bg: #050505;
+  isolation: isolate;
+  background: transparent;
+}
+
+/* Keeps the cards readable: darker behind the sidebar and titles, open on the right where the ring sits. */
+.app-shell .desk-veil {
+  background:
+    linear-gradient(90deg, rgba(5, 5, 5, 0.9) 0%, rgba(5, 5, 5, 0.62) 30%, rgba(5, 5, 5, 0.28) 62%, rgba(5, 5, 5, 0.12) 100%),
+    linear-gradient(180deg, rgba(5, 5, 5, 0.45) 0%, transparent 28%, transparent 70%, rgba(5, 5, 5, 0.6) 100%);
 }
 
 .app-side {
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
-  width: 248px;
+  width: 260px;
+  height: 100vh;
   flex-shrink: 0;
-  padding: 14px 12px 16px;
+  padding: 0 12px 16px;
+  overflow-y: auto;
   border-right: 1px solid var(--line);
   background: var(--sidebar);
 }
 
+.has-scene .app-side {
+  border-right-color: rgba(255, 255, 255, 0.06);
+  background: rgba(7, 7, 7, 0.62);
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+
 .app-side > .app-brand {
-  margin: 0 -12px 14px;
-  padding: 2px 20px 14px;
+  min-height: var(--header-height);
+  margin: 0 -12px 12px;
+  padding: 0 20px;
   border-bottom: 1px solid var(--line);
 }
 
-.app-side-top .app-account {
-  min-height: 52px;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--card);
-}
-
-.app-side-top .app-account:hover,
-.app-side-top .app-account[aria-expanded="true"] {
-  border-color: var(--line-strong);
-  background: var(--card);
+.has-scene .app-side > .app-brand {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 
 .app-nav-count {
@@ -165,6 +178,7 @@ body {
 
 .app-nav .app-nav-folders a[aria-current="page"]::before {
   background: var(--brand);
+  box-shadow: 0 0 8px var(--brand);
 }
 
 .app-brand {
@@ -174,11 +188,6 @@ body {
   min-height: 40px;
   padding: 4px 8px 8px;
   color: var(--text);
-}
-
-.app-brand .desk-lang {
-  margin-left: auto;
-  flex-shrink: 0;
 }
 
 .app-brand-link {
@@ -201,48 +210,90 @@ body {
   outline-offset: 2px;
 }
 
-.app-side-top {
-  position: relative;
+/* Top bar over the content: the phone menu and logo on the left, language and account on the right. */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--header-height);
+  padding: 0 28px 0 40px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(16px) saturate(1.2);
 }
 
+.has-scene .app-header {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+  background: rgba(5, 5, 5, 0.38);
+}
+
+.app-menu,
+.app-header-brand {
+  display: none;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.app-header-actions .desk-lang {
+  margin-left: 0;
+}
+
+/* The account pill: avatar, name and email, and an arrow that opens the account panel. */
 .app-account {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  min-height: 56px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
+  max-width: 280px;
+  height: 44px;
+  padding: 4px 12px 4px 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--card) 70%, transparent);
   color: var(--text);
   text-align: left;
   cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .app-account:hover,
 .app-account[aria-expanded="true"] {
-  background: var(--hover);
+  border-color: var(--line-strong);
+  background: var(--card);
+}
+
+.app-account[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
 }
 
 .app-avatar {
   display: grid;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
   place-items: center;
   border-radius: 999px;
-  background: var(--brand-soft);
-  color: var(--brand);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 38%, transparent), var(--brand-soft));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand) 45%, transparent);
+  color: #e6e3ff;
   font-size: 13px;
   font-weight: 700;
 }
 
 .app-account-copy {
   display: grid;
-  flex: 1;
   min-width: 0;
-  gap: 1px;
+  gap: 0;
+  line-height: 1.25;
 }
 
 .app-account-copy strong,
@@ -253,18 +304,19 @@ body {
 }
 
 .app-account-copy strong {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .app-account-copy span {
   color: var(--text-secondary);
-  font-size: var(--font-size-helper);
+  font-size: 11px;
 }
 
 .app-account > svg {
   flex-shrink: 0;
   color: var(--text-secondary);
+  transition: transform 0.15s ease;
 }
 
 .app-account-menu {
@@ -297,7 +349,7 @@ body {
   display: grid;
   align-content: start;
   gap: 2px;
-  margin-top: 14px;
+  margin-top: 4px;
 }
 
 .app-nav a,
@@ -534,6 +586,14 @@ body {
   flex: 1;
   flex-direction: column;
   min-width: 0;
+}
+
+.app-content {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
   padding: 36px 40px 44px;
 }
 
@@ -555,43 +615,55 @@ body {
     display: block;
   }
 
-  .app-top {
-    position: sticky;
-    top: 0;
+  .app-shell {
+    --header-height: 56px;
+  }
+
+  .app-header {
     z-index: 50;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 52px;
     padding: 0 12px;
-    border-bottom: 1px solid var(--line);
-    background: var(--sidebar);
-    font-size: var(--font-size-nav);
-    font-weight: 500;
   }
 
   .app-menu {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
+    display: inline-grid;
+    width: 40px;
     height: 40px;
-    padding: 0 10px;
+    place-items: center;
     border: 1px solid var(--line);
     border-radius: var(--radius-sm);
     background: transparent;
     color: var(--text);
-    font-size: var(--font-size-nav);
     cursor: pointer;
+  }
+
+  .app-header-brand {
+    display: inline-flex;
+    margin: 0;
+  }
+
+  .app-account {
+    padding-right: 10px;
+  }
+
+  .app-account-copy {
+    display: none;
   }
 
   .app-side {
     position: fixed;
     z-index: 40;
-    top: 52px;
+    top: var(--header-height);
     bottom: 0;
     left: 0;
+    height: auto;
+    padding-top: 12px;
+    background: var(--sidebar);
     transform: translateX(-105%);
     transition: transform 160ms ease;
+  }
+
+  .app-side > .app-brand {
+    display: none;
   }
 
   .app-side.is-open {
@@ -608,7 +680,7 @@ body {
     cursor: pointer;
   }
 
-  .app-main {
+  .app-content {
     padding: 20px 16px 32px;
   }
 }
@@ -1865,7 +1937,7 @@ body {
     grid-column: 2;
     grid-row: 1;
     position: sticky;
-    top: 14px;
+    top: calc(var(--header-height, 0px) + 14px);
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -2434,7 +2506,7 @@ textarea.ui-input {
 }
 
 .folder-board {
-  min-height: 100vh;
+  min-height: calc(100vh - var(--header-height, 0px));
   margin: -36px -40px -44px;
   padding: 36px 40px 44px;
   background:
@@ -2442,22 +2514,27 @@ textarea.ui-input {
     var(--bg);
 }
 
+.has-scene .folder-board {
+  padding-top: 48px;
+  background: transparent;
+}
+
 .folder-list h1 {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: clamp(28px, 3vw, 36px);
+  gap: 14px;
+  font-size: clamp(30px, 3.4vw, 42px);
   font-weight: 600;
-  letter-spacing: -0.035em;
-  line-height: 1.1;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
 }
 
 .folder-list-count {
-  padding: 3px 11px;
-  border: 1px solid var(--line);
+  padding: 3px 12px;
+  border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
   border-radius: 999px;
-  background: var(--hover);
-  color: var(--text-secondary);
+  background: var(--brand-soft);
+  color: #cfcbff;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0;
@@ -2465,12 +2542,14 @@ textarea.ui-input {
 }
 
 .folder-list .desk-sub {
-  margin-top: 8px;
+  max-width: 520px;
+  margin-top: 10px;
+  color: var(--text-secondary);
   font-size: 15px;
 }
 
 .folder-list .desk-title {
-  margin-bottom: 28px;
+  margin-bottom: 32px;
 }
 
 .folder-list .desk-primary {
@@ -2616,6 +2695,41 @@ textarea.ui-input {
   transform: translateY(-2px);
 }
 
+/* Over the ring: frosted cards with a thin light edge, lifting with a violet glow. */
+.has-scene .folder-card {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(16, 16, 19, 0.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 30px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(14px) saturate(1.15);
+}
+
+.has-scene .folder-card:hover {
+  border-color: color-mix(in srgb, var(--brand) 45%, rgba(255, 255, 255, 0.1));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 22px 50px rgba(0, 0, 0, 0.5),
+    0 0 0 1px color-mix(in srgb, var(--brand) 18%, transparent),
+    0 12px 40px -12px color-mix(in srgb, var(--brand) 45%, transparent);
+  transform: translateY(-3px);
+}
+
+.has-scene .folder-card-cover {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
+  background: rgba(8, 8, 10, 0.6);
+}
+
+.folder-card-cover img,
+.folder-card-cover canvas {
+  transition: transform 0.4s ease;
+}
+
+.folder-card:hover .folder-card-cover img,
+.folder-card:hover .folder-card-cover canvas {
+  transform: scale(1.03);
+}
+
 .folder-card:focus-visible {
   outline: 2px solid var(--text-primary);
   outline-offset: 2px;
@@ -2743,6 +2857,38 @@ textarea.ui-input {
 .folder-card-add:hover .folder-card-add-icon {
   border-color: var(--brand);
   color: var(--brand);
+}
+
+.has-scene .folder-card-add {
+  border: 1px dashed color-mix(in srgb, var(--brand) 32%, rgba(255, 255, 255, 0.1));
+  background: rgba(12, 12, 16, 0.42);
+}
+
+.has-scene .folder-card-add:hover {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 10%, rgba(12, 12, 16, 0.55));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 10%, transparent), 0 16px 44px -14px color-mix(in srgb, var(--brand) 55%, transparent);
+}
+
+.has-scene .folder-card-add:hover .folder-card-add-icon {
+  box-shadow: 0 0 18px color-mix(in srgb, var(--brand) 45%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .folder-card,
+  .folder-card-cover img,
+  .folder-card-cover canvas,
+  .app-account,
+  .app-account > svg {
+    transition: none;
+  }
+
+  .folder-card:hover,
+  .has-scene .folder-card:hover,
+  .folder-card:hover .folder-card-cover img,
+  .folder-card:hover .folder-card-cover canvas {
+    transform: none;
+  }
 }
 
 .folder-empty {
@@ -3136,6 +3282,35 @@ textarea.ui-input {
 
 .account-panel .desk-lang {
   margin: 0 8px;
+}
+
+.account-panel-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  margin-top: 4px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.account-panel-link svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.account-panel-link:hover,
+.account-panel-link[aria-current="page"] {
+  background: var(--hover);
+}
+
+.account-panel-link:focus-visible,
+.account-panel-logout:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -2px;
 }
 
 .account-panel-logout {
@@ -3868,6 +4043,11 @@ textarea.ui-input {
 .landing-fallback.is-auth {
   background-image: url("/landing/ring-auth.jpg");
   background-position: center;
+}
+
+.landing-fallback.is-desk {
+  background-image: url("/landing/ring-auth.jpg");
+  background-position: 85% 50%;
 }
 
 .landing-fallback.is-animated {
