@@ -8,6 +8,7 @@ export interface WordTime {
   word: string;
   start: number;
   end: number;
+  db?: number; // loudness, for the delivery checks (server/delivery.ts)
 }
 
 // ---- Word timings, kept per stored recording ---------------------------------------------------

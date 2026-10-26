@@ -7,6 +7,7 @@ export interface VoiceWord {
   word: string;
   start: number;
   end: number;
+  db?: number; // loudness of the word (dB below full scale), when the voice server measured it
 }
 
 export interface VoiceResult {
@@ -103,7 +104,8 @@ export function parseVoiceReply(raw: unknown): VoiceResult | null {
     if (!item || typeof item !== "object") return null;
     const w = item as Record<string, unknown>;
     if (typeof w.word !== "string" || typeof w.start !== "number" || typeof w.end !== "number") return null;
-    if (w.word.trim()) words.push({ word: w.word.trim(), start: w.start, end: w.end });
+    const db = typeof w.db === "number" && Number.isFinite(w.db) ? { db: w.db } : {};
+    if (w.word.trim()) words.push({ word: w.word.trim(), start: w.start, end: w.end, ...db });
   }
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
   return {

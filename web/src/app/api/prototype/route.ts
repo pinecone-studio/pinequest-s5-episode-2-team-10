@@ -11,6 +11,7 @@ import {
   type ModelReply,
   type Strength,
 } from "@/lib/server/llm";
+import { measureDelivery, parseTimedWords } from "@/lib/server/delivery";
 import { measureSpeech, numberCandidates, numberMismatches, numberValue } from "@/lib/server/measure";
 import { parsePartialJson } from "@/lib/server/partialJson";
 import {
@@ -108,6 +109,9 @@ export async function POST(request: Request) {
   const modelField = form.get("model") ?? "claude";
   if (!isProtoModel(modelField)) return jsonError(t(lang, "unknownModel"), 400);
   const model = modelField;
+  // Word timings of the recording (optional): the delivery checks need them.
+  const timedWords = parseTimedWords(form.get("words"));
+  if (!timedWords) return jsonError(t(lang, "badWords"), 400);
 
   if (!text && !slideText && !audio && !slide && !slideImage) {
     return jsonError(t(lang, "noInput"), 400);
@@ -127,7 +131,8 @@ export async function POST(request: Request) {
   const checkPoints = keyPoints.length > 0 || Boolean(idea);
   const language = t(lang, "replyLanguage");
   // Measured by code for every model, shown first and given to the model so it doesn't repeat them.
-  const measured = [...measureSpeech(text, lang), ...numberMismatches(slideText, text, lang)];
+  const delivery = measureDelivery(timedWords, lang);
+  const measured = [...measureSpeech(text, lang), ...delivery.findings, ...numberMismatches(slideText, text, lang)];
   const numbers = numberCandidates(slideText, sentences);
   const prompt = [
     "You coach a speaker on one practice pitch. Judge the SPEECH: what the speaker said and how they said it in words.",
@@ -147,6 +152,9 @@ export async function POST(request: Request) {
           ...measured.map((m) => `- ${m.title}: ${m.why}`),
           "",
         ]
+      : []),
+    ...(delivery.facts.wpm
+      ? [`Measured from the recording: usual pace ${delivery.facts.wpm} words per minute.`, ""]
       : []),
     ...(checkPoints
       ? [

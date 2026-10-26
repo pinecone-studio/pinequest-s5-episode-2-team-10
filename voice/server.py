@@ -19,7 +19,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile
 import httpx
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from pipeline import asr, config as pipeline_config
+from pipeline import asr, config as pipeline_config, loudness
 from pipeline.audio import AudioError, to_wav16k
 
 TOKEN = os.environ.get("VOICE_SERVER_TOKEN", "").strip()
@@ -112,6 +112,14 @@ def transcribe(file: UploadFile):
             except asr.AsrError as e:
                 raise VoiceError(503, "model_unavailable", str(e)) from e
         elapsed = time.monotonic() - started
+        # Loudness per word (dB), for the delivery checks. Cheap; a failure only leaves it out.
+        try:
+            samples, sr = asr._read_wav(wav)
+            for w, db in zip(words, loudness.word_levels(samples, sr, words)):
+                if db is not None:
+                    w["db"] = db
+        except Exception as e:  # noqa: BLE001
+            print(f"[voice] loudness skipped: {type(e).__name__}")
 
     # Log timing only; never the transcript or audio.
     print(f"[voice] transcribed {duration:.1f}s of audio in {elapsed:.1f}s ({len(words)} words)")
