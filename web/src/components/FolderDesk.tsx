@@ -31,7 +31,6 @@ import {
 } from "@/lib/folderStore";
 import { figmaEmbedUrl } from "@/lib/figmaEmbed";
 import { openPdf, paintPage, pickSlides, readSlideText } from "@/lib/slidePdf";
-import { runBackendAnalysis } from "@/lib/backendAnalysis";
 import { streamModelReply } from "@/lib/modelStream";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { feedbackSteps, findQuote, loadTimings, playSpan, readAloud, saveTimings, speakText, type Clip } from "@/lib/coachVoice";
@@ -405,6 +404,9 @@ function FolderRoom({
   onDelete: () => void;
 }) {
   const { tr, lang } = useLang();
+  /** The model's id ("ollama") as people know it ("Gemma"). */
+  const modelLabel = (id: string) =>
+    ({ ollama: "Gemma", "ollama-think": tr("modelGemmaCareful"), claude: "Claude", rules: tr("rulesName") })[id] ?? id;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const recRef = useRef<PieceRecorder | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
@@ -927,21 +929,6 @@ function FolderRoom({
         saved ? getFolderBlob(saved.storageKey) : Promise.resolve(null),
         getFolderBlob(folder.slide?.storageKey ?? slideKey(folder.id)),
       ]);
-      if (model === "backend") {
-        // The full FastAPI pipeline; it reports stages instead of streaming text.
-        const result = await runBackendAnalysis({
-          folder,
-          speech,
-          audio,
-          slide,
-          onStage: (stage) => setProbeNote(tr(stage === "connecting" ? "backendConnecting" : stage === "uploading" ? "backendUploading" : "backendAnalyzing")),
-          messages: { noAudio: tr("backendNoAudio"), slideSkipped: tr("backendSlideSkipped") },
-        });
-        setProbeNote(result.notes.length ? result.notes.join(" ") : null);
-        setProbeResult({ ...result, model, pointSlides: sent.slides, writing: false });
-        showResultOnce();
-        return;
-      }
       const slideText = pdfRef.current ? await readSlideText(pdfRef.current, 8, shownPages) : "";
       const slideImage = await new Promise<Blob | null>((resolve) => {
         const canvas = canvasRef.current;
@@ -1376,8 +1363,8 @@ function FolderRoom({
                 <Modal title={tr("analysisResult")} onClose={() => setResultOpen(false)} wide>
                   <div className="desk-probe desk-probe-dialog" aria-live="polite">
                     <p>
-                      {probeResult.model}
-                      {probeResult.writing && ` · ${tr("writing")}`}
+                      {/* While the answer is coming in, say what's happening rather than the model's name. */}
+                      {probeResult.writing ? tr("writing") : modelLabel(probeResult.model)}
                       {probeResult.received && (
                         <>
                           {" · "}

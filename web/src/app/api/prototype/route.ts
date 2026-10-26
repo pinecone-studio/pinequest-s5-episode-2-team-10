@@ -106,8 +106,7 @@ export async function POST(request: Request) {
   const slide = fileOf(form.get("slide"));
   const slideImage = fileOf(form.get("slideImage"));
   const modelField = form.get("model") ?? "claude";
-  // "backend" is called by the page itself through /api/v1, not through this route.
-  if (!isProtoModel(modelField) || modelField === "backend") return jsonError(t(lang, "unknownModel"), 400);
+  if (!isProtoModel(modelField)) return jsonError(t(lang, "unknownModel"), 400);
   const model = modelField;
 
   if (!text && !slideText && !audio && !slide && !slideImage) {
