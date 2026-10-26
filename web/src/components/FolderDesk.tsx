@@ -43,9 +43,9 @@ import type { Side } from "@/lib/poseCoach";
 type Live = { stream: MediaStream; ctx: AudioContext };
 
 const COACH_KEY = "pitchcoach:poseCoach";
-type CoachPrefs = { on: boolean; side: Side };
+type CoachPrefs = { side: Side };
 
-const DEFAULT_COACH: CoachPrefs = { on: true, side: "right" };
+const DEFAULT_COACH: CoachPrefs = { side: "right" };
 const coachListeners = new Set<() => void>();
 let coachPrefs: CoachPrefs | null = null; // read from storage once, then kept here
 
@@ -58,7 +58,7 @@ function coachSnapshot(): CoachPrefs {
   if (coachPrefs) return coachPrefs;
   try {
     const saved = JSON.parse(localStorage.getItem(COACH_KEY) ?? "null") as Partial<CoachPrefs> | null;
-    coachPrefs = { on: saved?.on !== false, side: saved?.side === "left" ? "left" : "right" };
+    coachPrefs = { side: saved?.side === "left" ? "left" : "right" };
   } catch {
     coachPrefs = DEFAULT_COACH;
   }
@@ -355,8 +355,9 @@ function FolderRoom({
   const [slideNote, setSlideNote] = useState<"pdfOpenFail" | "slideDrawFail" | null>(null);
   const [slideMsg, setSlideMsg] = useState<string | null>(null); // converting, or why a picked file was refused
   const [full, setFull] = useState(false);
-  // The camera coach: counts pointing at the slide and turns slides with a hand swipe while speaking.
+  // The camera coach: counts pointing at the slide and turns slides with a hand swipe.
   const coach = useSyncExternalStore(subscribeCoach, coachSnapshot, () => DEFAULT_COACH);
+  const [cameraOn, setCameraOn] = useState(false);
   const [coachState, setCoachState] = useState<CoachState | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false); // the full speech text in a dialog
   const transcriptRef = useRef<HTMLParagraphElement | null>(null);
@@ -906,6 +907,19 @@ function FolderRoom({
     const box = transcriptRef.current;
     if (box && transcriptOpen && (listening || pending > 0)) box.scrollTop = box.scrollHeight;
   }, [spoken, transcriptOpen, listening, pending]);
+  function cameraButton() {
+    return (
+      <button
+        type="button"
+        className="desk-ghost"
+        style={{ background: cameraOn ? "#2b2b2b" : "rgba(20, 20, 20, 0.72)", color: "#e6e6e6", borderColor: "#5a5a5a" }}
+        aria-pressed={cameraOn}
+        onClick={() => setCameraOn((on) => !on)}
+      >
+        {cameraOn ? tr("cameraClose") : tr("cameraOpen")}
+      </button>
+    );
+  }
   function speakButton() {
     return (
       <button
@@ -1042,7 +1056,7 @@ function FolderRoom({
               style={full && anySlide ? undefined : { position: "absolute", inset: 0 }}
               data-coach={coachState ?? undefined}
             >
-              {listening && coach.on && (
+              {cameraOn && (
                 <PoseCoach slide={coach.side} slideId={page} onSwipe={swipeSlide} onState={setCoachState} />
               )}
               {showFigma ? (
@@ -1069,8 +1083,9 @@ function FolderRoom({
                 </label>
               )}
               {!full && (
-                <div className="desk-speak" style={{ position: "absolute", zIndex: 2, left: 14, bottom: 14 }}>
+                <div className="desk-speak" style={{ position: "absolute", zIndex: 2, left: 14, bottom: 14, display: "flex", gap: 8 }}>
                   {speakButton()}
+                  {cameraButton()}
                 </div>
               )}
               {!full && anySlide && (
@@ -1094,6 +1109,7 @@ function FolderRoom({
               {full && anySlide && (
                 <div className="desk-full-bar">
                   {speakButton()}
+                  {cameraButton()}
                   {!showFigma && pageButtons()}
                   <button type="button" className="desk-ghost" aria-label={tr("close")} onClick={() => setFull(false)}>
                     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
@@ -1131,21 +1147,16 @@ function FolderRoom({
             {!full && (
               <div className="desk-coach-tools">
                 <label>
-                  <input type="checkbox" checked={coach.on} onChange={(e) => saveCoachPrefs({ on: e.target.checked })} />
-                  {tr("coachToggle")}
-                </label>
-                <label>
                   {tr("coachSide")}
                   <select
                     value={coach.side}
-                    disabled={!coach.on}
                     onChange={(e) => saveCoachPrefs({ side: e.target.value === "left" ? "left" : "right" })}
                   >
                     <option value="left">{tr("coachSideLeft")}</option>
                     <option value="right">{tr("coachSideRight")}</option>
                   </select>
                 </label>
-                {coach.on && <span className="desk-hint">{tr("coachSwipeHint")}</span>}
+                {cameraOn && <span className="desk-hint">{tr("coachSwipeHint")}</span>}
               </div>
             )}
             {showFigma && !full && (

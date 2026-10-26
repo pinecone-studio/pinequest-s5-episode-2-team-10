@@ -1,6 +1,6 @@
 "use client";
 
-// While the speaker talks, watches the camera for pointing at the slide and for swipes that change it.
+// While the camera is on, watches the speaker for pointing at the slide and for swipes that change it.
 // Everything runs in the browser: the video is never recorded or uploaded.
 
 import { useEffect, useRef, useState } from "react";
@@ -65,7 +65,7 @@ export default function PoseCoach({
 
   useEffect(() => () => onState(null), [onState]);
 
-  // Mounted only while the speaker talks, so each take starts its counts from zero.
+  // Mounted only while the camera is on, so each opening starts its counts from zero.
   useEffect(() => {
     const video = videoRef.current;
     let stopped = false;
