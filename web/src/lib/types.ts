@@ -6,6 +6,8 @@ export type AppRole = "member" | "admin";
 export interface AuthSession {
   id: string;
   email: string;
+  /** Null for Google, demo, and older accounts. */
+  username: string | null;
   role: AppRole;
   access_token: string;
 }

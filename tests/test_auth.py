@@ -32,12 +32,14 @@ def clear_admin_allowlist(monkeypatch):
     monkeypatch.setattr(config, "ADMIN_EMAILS", set())
 
 
-def _register(client: TestClient, email: str) -> dict:
-    res = client.post("/api/v1/auth/register", json={"email": email, "password": PASSWORD})
+def _register(client: TestClient, email: str, username: str | None = None) -> dict:
+    username = username or email.split("@")[0].replace("-", "_")
+    res = client.post("/api/v1/auth/register", json={"email": email, "username": username, "password": PASSWORD})
     assert res.status_code == 201, res.text
     body = res.json()
     assert body["access_token"] and body["id"]
     assert body["email"] == email.strip().lower()
+    assert body["username"] == username.strip().lower()
     assert body["role"] == "member"
     return body
 
@@ -46,7 +48,7 @@ def test_register_stores_a_hash_and_answers_me(client: TestClient):
     created = _register(client, "Ada@Example.com")
     me = client.get("/api/v1/auth/me", headers={"X-Access-Token": created["access_token"]})
     assert me.status_code == 200
-    assert me.json() == {"id": created["id"], "email": "ada@example.com", "role": "member"}
+    assert me.json() == {"id": created["id"], "email": "ada@example.com", "username": "ada", "role": "member"}
 
     with Session(engine) as db:
         user = db.exec(select(AppUser).where(AppUser.email == "ada@example.com")).one()
@@ -71,7 +73,11 @@ def test_startup_adds_role_columns_to_existing_database_without_losing_users(tmp
     try:
         db_module.init()
         columns = {column["name"] for column in inspect(old_engine).get_columns("app_user")}
-        assert {"role", "is_active", "email", "password_hash"} <= columns
+        assert {"role", "is_active", "email", "username", "password_hash"} <= columns
+        unique = [
+            idx["column_names"] for idx in inspect(old_engine).get_indexes("app_user") if idx.get("unique")
+        ]
+        assert ["username"] in unique
         with old_engine.connect() as connection:
             row = connection.execute(
                 text("SELECT id, role, is_active FROM app_user WHERE id = 'existing-user'")
@@ -85,35 +91,79 @@ def test_startup_adds_role_columns_to_existing_database_without_losing_users(tmp
 
 def test_duplicate_email(client: TestClient):
     _register(client, "twice@example.com")
-    res = client.post("/api/v1/auth/register", json={"email": "Twice@Example.com", "password": PASSWORD})
+    res = client.post(
+        "/api/v1/auth/register",
+        json={"email": "Twice@Example.com", "username": "someone_else", "password": PASSWORD},
+    )
     assert res.status_code == 409
     assert res.json()["code"] == "email_taken"
 
 
+def test_duplicate_username_ignores_case(client: TestClient):
+    _register(client, "first.saylo@example.com", "saylo.fan")
+    res = client.post(
+        "/api/v1/auth/register",
+        json={"email": "second.saylo@example.com", "username": "Saylo.Fan", "password": PASSWORD},
+    )
+    assert res.status_code == 409
+    assert res.json()["code"] == "username_taken"
+
+
+def test_login_with_username_or_email(client: TestClient):
+    created = _register(client, "both@example.com", "Both_Ways")
+    by_name = client.post("/api/v1/auth/login", json={"login": "  BOTH_ways ", "password": PASSWORD})
+    by_email = client.post("/api/v1/auth/login", json={"login": "Both@Example.com", "password": PASSWORD})
+    assert by_name.status_code == by_email.status_code == 200
+    assert by_name.json()["id"] == by_email.json()["id"] == created["id"]
+    assert by_email.json()["username"] == "both_ways"
+
+
 def test_login_wrong_and_unknown_look_the_same(client: TestClient):
     _register(client, "known@example.com")
-    wrong = client.post("/api/v1/auth/login", json={"email": "known@example.com", "password": "wrong-password"})
-    missing = client.post("/api/v1/auth/login", json={"email": "missing@example.com", "password": PASSWORD})
-    assert wrong.status_code == missing.status_code == 401
-    assert wrong.json()["code"] == missing.json()["code"] == "invalid_credentials"
+    wrong = client.post("/api/v1/auth/login", json={"login": "known@example.com", "password": "wrong-password"})
+    missing = client.post("/api/v1/auth/login", json={"login": "missing@example.com", "password": PASSWORD})
+    wrong_name = client.post("/api/v1/auth/login", json={"login": "known", "password": "wrong-password"})
+    missing_name = client.post("/api/v1/auth/login", json={"login": "nobody_here", "password": PASSWORD})
+    responses = [wrong, missing, wrong_name, missing_name]
+    assert {r.status_code for r in responses} == {401}
+    assert {r.json()["code"] for r in responses} == {"invalid_credentials"}
 
 
 def test_short_password_and_bad_email_rejected(client: TestClient):
-    short = client.post("/api/v1/auth/register", json={"email": "short@example.com", "password": "short"})
-    bad = client.post("/api/v1/auth/register", json={"email": "not-an-email", "password": PASSWORD})
+    short = client.post(
+        "/api/v1/auth/register", json={"email": "short@example.com", "username": "short", "password": "short"}
+    )
+    bad = client.post(
+        "/api/v1/auth/register", json={"email": "not-an-email", "username": "bad_email", "password": PASSWORD}
+    )
     assert short.status_code == 422
     assert bad.status_code == 422
     assert bad.json()["code"] == "invalid_email"
     self_admin = client.post(
         "/api/v1/auth/register",
-        json={"email": "self-admin@example.com", "password": PASSWORD, "role": "admin"},
+        json={"email": "self-admin@example.com", "username": "self_admin", "password": PASSWORD, "role": "admin"},
     )
     assert self_admin.status_code == 422
 
 
+@pytest.mark.parametrize("username", ["ab", "has space", "with@sign", "кирилл", "a" * 31])
+def test_bad_username_rejected(client: TestClient, username: str):
+    res = client.post(
+        "/api/v1/auth/register",
+        json={"email": "bad.name@example.com", "username": username, "password": PASSWORD},
+    )
+    assert res.status_code == 422
+    assert res.json()["code"] == "invalid_username"
+
+
+def test_username_is_required(client: TestClient):
+    res = client.post("/api/v1/auth/register", json={"email": "no.name@example.com", "password": PASSWORD})
+    assert res.status_code == 422
+
+
 def test_login_then_logout_kills_token(client: TestClient):
     _register(client, "bye@example.com")
-    logged = client.post("/api/v1/auth/login", json={"email": "bye@example.com", "password": PASSWORD})
+    logged = client.post("/api/v1/auth/login", json={"login": "bye@example.com", "password": PASSWORD})
     assert logged.status_code == 200, logged.text
     token = logged.json()["access_token"]
     headers = {"X-Access-Token": token}
@@ -139,7 +189,10 @@ def test_demo_login_opens_the_same_account(client: TestClient):
     assert client.post("/api/v1/auth/logout", headers=first_headers).status_code == 204
     assert client.get("/api/v1/auth/me", headers=first_headers).status_code == 401
     assert client.get("/api/v1/auth/me", headers=second_headers).status_code == 200
-    blocked = client.post("/api/v1/auth/register", json={"email": "demo@pitchcoach.local", "password": PASSWORD})
+    blocked = client.post(
+        "/api/v1/auth/register",
+        json={"email": "demo@pitchcoach.local", "username": "demo_user", "password": PASSWORD},
+    )
     assert blocked.status_code == 409
 
 
@@ -187,7 +240,8 @@ def test_google_creates_an_account_without_a_password(client: TestClient, supaba
     with Session(engine) as db:
         user = db.exec(select(AppUser).where(AppUser.email == "new.person@gmail.com")).one()
     assert user.password_hash is None
-    no_password = client.post("/api/v1/auth/login", json={"email": "new.person@gmail.com", "password": PASSWORD})
+    assert body["username"] is None
+    no_password = client.post("/api/v1/auth/login", json={"login": "new.person@gmail.com", "password": PASSWORD})
     assert no_password.status_code == 401
 
 

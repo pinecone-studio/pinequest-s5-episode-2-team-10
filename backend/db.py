@@ -28,6 +28,7 @@ class AppUser(SQLModel, table=True):
     id: str = Field(default_factory=new_id, primary_key=True)
     token_hash: str = Field(index=True, unique=True)
     email: Optional[str] = Field(default=None, index=True, unique=True)
+    username: Optional[str] = Field(default=None, index=True, unique=True)
     password_hash: Optional[str] = None
     role: str = "member"
     is_active: bool = True
@@ -160,6 +161,7 @@ engine = _engine()
 ADDED_COLUMNS = {
     "app_user": {
         "email": "TEXT",
+        "username": "TEXT",
         "password_hash": "TEXT",
         "role": "TEXT NOT NULL DEFAULT 'member'",
         "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
@@ -181,20 +183,20 @@ def _add_missing_columns() -> None:
                     conn.exec_driver_sql(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {ddl}')
 
 
-def _ensure_email_unique() -> None:
-    """Old databases gain `email` as a plain column. New ones already have a unique constraint."""
+def _ensure_unique(column: str) -> None:
+    """Old databases gain `column` as a plain column. New ones already have a unique constraint."""
     insp = inspect(engine)
     insp.clear_cache()
     if not insp.has_table("app_user"):
         return
     for idx in insp.get_indexes("app_user"):
-        if idx.get("unique") and "email" in (idx.get("column_names") or []):
+        if idx.get("unique") and column in (idx.get("column_names") or []):
             return
     for constraint in insp.get_unique_constraints("app_user"):
-        if "email" in (constraint.get("column_names") or []):
+        if column in (constraint.get("column_names") or []):
             return
     with engine.begin() as conn:
-        conn.exec_driver_sql('CREATE UNIQUE INDEX IF NOT EXISTS "ix_app_user_email" ON "app_user" ("email")')
+        conn.exec_driver_sql(f'CREATE UNIQUE INDEX IF NOT EXISTS "ix_app_user_{column}" ON "app_user" ("{column}")')
 
 
 def init() -> None:
@@ -206,7 +208,8 @@ def init() -> None:
         storage.validate_configuration(required=True)
     SQLModel.metadata.create_all(engine)
     _add_missing_columns()
-    _ensure_email_unique()
+    _ensure_unique("email")
+    _ensure_unique("username")
     if engine.dialect.name == "postgresql":
         # Supabase exposes the public schema through its REST API. With row-level security on
         # and no policies, the anon key can't read these tables; the server's own role owns

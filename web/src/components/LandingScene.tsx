@@ -7,6 +7,9 @@ import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 type Vec = [number, number, number];
 
+/** `page` follows the landing page scroll; `auth` is a smaller ring that turns slowly behind the sign-in form. */
+export type SceneVariant = "page" | "auth";
+
 /**
  * A black titanium ring of fins that pulse and light up like a voice. Seen from the side at the top
  * of the page, and through its middle at the bottom, where a slide appears inside it.
@@ -37,6 +40,9 @@ const SHIFTS: { at: number; x: number }[] = [
   { at: 0.6, x: 1.2 },
   { at: 0.85, x: 0 },
 ];
+
+// Sign-in screen: a fixed, tilted view from a distance so the ring frames the form.
+const AUTH_CAMERA: Vec = [0, -6.2, 13.5];
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const ramp = (from: number, to: number, x: number) => smooth(Math.min(1, Math.max(0, (x - from) / (to - from))));
@@ -151,7 +157,8 @@ function glowTexture(): THREE.CanvasTexture {
 }
 
 /** Builds the scene and returns a function that tears it down. */
-function mountScene(el: HTMLDivElement, onFail: () => void, isCancelled: () => boolean): () => void {
+function mountScene(el: HTMLDivElement, variant: SceneVariant, onFail: () => void, isCancelled: () => boolean): () => void {
+  const auth = variant === "auth";
   let renderer: THREE.WebGLRenderer;
   try {
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
@@ -168,7 +175,7 @@ function mountScene(el: HTMLDivElement, onFail: () => void, isCancelled: () => b
   el.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(BG, 5, 17);
+  scene.fog = auth ? new THREE.Fog(BG, 11, 24) : new THREE.Fog(BG, 5, 17);
   const pmrem = new THREE.PMREMGenerator(renderer);
   const room = new RoomEnvironment();
   const envMap = pmrem.fromScene(room, 0.04).texture;
@@ -181,7 +188,7 @@ function mountScene(el: HTMLDivElement, onFail: () => void, isCancelled: () => b
   // Black titanium fins. The material stays white; each fin's colour carries the titanium tone and the voice glow.
   const fin = finGeometry();
   const finMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.24, envMapIntensity: 0.9 });
-  const count = small ? 180 : 300;
+  const count = auth ? (small ? 120 : 160) : small ? 180 : 300;
   const fins = new THREE.InstancedMesh(fin, finMaterial, count);
   fins.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   const zAxis = new THREE.Vector3(0, 0, 1);
@@ -256,7 +263,7 @@ function mountScene(el: HTMLDivElement, onFail: () => void, isCancelled: () => b
   const finMatrix = new THREE.Matrix4();
   const finColor = new THREE.Color();
   const startedAt = performance.now();
-  let progress = scrollProgress();
+  let progress = auth ? 0 : scrollProgress();
   let frame = 0;
   let running = false;
   // Slow GPUs: after a short sample, render at 1x so scrolling stays smooth.
@@ -272,12 +279,17 @@ function mountScene(el: HTMLDivElement, onFail: () => void, isCancelled: () => b
     }
     if (sampled <= 50) sampled++;
     const time = (now - startedAt) / 1000;
-    progress += (scrollProgress() - progress) * 0.07;
+    if (!auth) progress += (scrollProgress() - progress) * 0.07;
     mouse.x += (mouse.tx - mouse.x) * 0.05;
     mouse.y += (mouse.ty - mouse.y) * 0.05;
 
-    cameraAt(progress, camPos, camLook, scratch);
-    if (!small) {
+    if (auth) {
+      camPos.set(...AUTH_CAMERA);
+      camLook.set(0, 0, 0);
+    } else {
+      cameraAt(progress, camPos, camLook, scratch);
+    }
+    if (!small && !auth) {
       // Slide the camera to its own left so the ring moves right on screen without changing the angle.
       scratch.subVectors(camLook, camPos).cross(camera.up).normalize().multiplyScalar(shiftAt(progress));
       camPos.sub(scratch);
@@ -286,7 +298,7 @@ function mountScene(el: HTMLDivElement, onFail: () => void, isCancelled: () => b
     camera.position.copy(camPos);
     camera.lookAt(camLook);
 
-    fins.rotation.z = time * 0.04 + progress * 1.4;
+    fins.rotation.z = time * (auth ? 0.1 : 0.04) + progress * 1.4;
     group.rotation.x = mouse.y * 0.08;
     group.rotation.y = mouse.x * 0.1;
 
@@ -303,7 +315,7 @@ function mountScene(el: HTMLDivElement, onFail: () => void, isCancelled: () => b
     fins.instanceMatrix.needsUpdate = true;
     fins.instanceColor!.needsUpdate = true;
 
-    const end = ramp(0.8, 0.98, progress);
+    const end = auth ? 0 : ramp(0.8, 0.98, progress);
     slide.visible = glowSprite.visible = end > 0.01;
     slide.scale.setScalar(0.35 + 0.65 * end);
     slide.rotation.set(mouse.y * 0.12, (1 - end) * 0.6 + mouse.x * 0.15, 0);
@@ -366,7 +378,7 @@ function mountScene(el: HTMLDivElement, onFail: () => void, isCancelled: () => b
   };
 }
 
-export default function LandingScene({ onFail }: { onFail: () => void }) {
+export default function LandingScene({ onFail, variant = "page" }: { onFail: () => void; variant?: SceneVariant }) {
   const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -375,7 +387,7 @@ export default function LandingScene({ onFail }: { onFail: () => void }) {
     let cancelled = false;
     let teardown: (() => void) | null = null;
     const build = () => {
-      if (!cancelled) teardown = mountScene(el, onFail, () => cancelled);
+      if (!cancelled) teardown = mountScene(el, variant, onFail, () => cancelled);
     };
     // Let the page text paint and hydrate first; the ring fades in once it is ready.
     const idle = window.requestIdleCallback
@@ -388,7 +400,7 @@ export default function LandingScene({ onFail }: { onFail: () => void }) {
       teardown?.();
       el.classList.remove("is-ready");
     };
-  }, [onFail]);
+  }, [onFail, variant]);
 
   return <div ref={host} className="landing-scene" aria-hidden />;
 }
