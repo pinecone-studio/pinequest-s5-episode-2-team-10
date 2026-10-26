@@ -186,22 +186,27 @@ function glowTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-/** `full` for a real GPU; `lite` for software rendering or weak GPUs: no reflections, fewer fins, 30 fps. */
+/** `full` for a real GPU; `lite` for software rendering or weak GPUs: no reflections, fewer fins, 1x pixels. */
 export type SceneQuality = "full" | "lite";
 
 // Give up waiting for shader compilation after this long and draw anyway, so the ring never stays hidden.
 const COMPILE_TIMEOUT_MS = 2500;
-// Frames slower than this on average, after every step down, switch to the animated picture.
-const TOO_SLOW_MS = 90;
-const LITE_FRAME_MS = 1000 / 30;
-// Reduced motion: the ring still turns and pulses, this much slower and softer.
-const GENTLE_SPEED = 0.33;
+// Speed is judged only after this long: the first seconds carry shader compiles, image decodes, and hydration.
+const SPEED_WARMUP_MS = 2000;
+const SPEED_SAMPLE_FRAMES = 60;
+// Gaps longer than this are a hidden tab or a breakpoint, not the GPU.
+const SPEED_IGNORE_MS = 250;
+// Median frame times that trigger each step down: 1x pixels, then fewer fins, then the picture.
+const SLOW_PIXELS_MS = 24;
+const SLOW_FINS_MS = 34;
+const TOO_SLOW_MS = 60;
+const FEWER_FINS = 0.6;
 
 type MountOptions = { quality: SceneQuality; gentle: boolean };
 
 /**
  * Builds the scene and returns a function that tears it down. Never throws. A slow device steps
- * down (fewer pixels, 30 fps, lighter pulse) before giving up; a lost GPU context calls `onLost`;
+ * down (fewer pixels, then fewer fins) before giving up; a lost GPU context calls `onLost`;
  * any other failure tears the scene down and calls `onFail`, and the page shows the picture instead.
  */
 function mountScene(
@@ -303,24 +308,28 @@ function mountScene(
       ? new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.55, roughness: 0.38 })
       : new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.24, envMapIntensity: 0.9 });
     const baseCount = fixed ? fixed.fins[small ? 0 : 1] : small ? 180 : 300;
-    const count = lite ? Math.round(baseCount * 0.6) : baseCount;
-    const fins = new THREE.InstancedMesh(fin, finMaterial, count);
+    const maxCount = lite ? Math.round(baseCount * FEWER_FINS) : baseCount;
+    const fins = new THREE.InstancedMesh(fin, finMaterial, maxCount);
     disposables.push(fin, finMaterial, fins);
     fins.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const zAxis = new THREE.Vector3(0, 0, 1);
     const ahead = new THREE.Vector3();
     const radial = new THREE.Vector3();
     const tilt = new THREE.Quaternion();
-    const rest = Array.from({ length: count }, (_, i) => {
-      const angle = (i / count) * Math.PI * 2;
-      const center = ringPoint(angle, new THREE.Vector3());
-      const tangent = ringPoint(angle + 0.001, ahead).sub(center).normalize();
-      radial.set(Math.cos(angle), Math.sin(angle), 0);
-      const facing = new THREE.Quaternion().setFromUnitVectors(zAxis, tangent);
-      tilt.setFromAxisAngle(radial, FIN_TILT);
-      fins.setColorAt(i, TITANIUM);
-      return { angle, center, rotation: tilt.clone().multiply(facing) };
-    });
+    /** Rest pose of `n` fins spread evenly round the ring; a slow device lays out fewer. */
+    const layout = (n: number) =>
+      Array.from({ length: n }, (_, i) => {
+        const angle = (i / n) * Math.PI * 2;
+        const center = ringPoint(angle, new THREE.Vector3());
+        const tangent = ringPoint(angle + 0.001, ahead).sub(center).normalize();
+        radial.set(Math.cos(angle), Math.sin(angle), 0);
+        const facing = new THREE.Quaternion().setFromUnitVectors(zAxis, tangent);
+        tilt.setFromAxisAngle(radial, FIN_TILT);
+        fins.setColorAt(i, TITANIUM);
+        return { angle, center, rotation: tilt.clone().multiply(facing) };
+      });
+    let count = maxCount;
+    let rest = layout(count);
     group.add(fins);
 
     // The slide that appears inside the ring at the bottom of the page, with a soft glow behind it.
@@ -366,14 +375,10 @@ function mountScene(
     const finColor = new THREE.Color();
     const startedAt = performance.now();
     let progress = fixed ? 0 : scrollProgress();
-    // Fin pulse is updated on every `pulseEvery`-th frame; slow devices raise it.
-    let pulseEvery = 1;
-    let drawn = 0;
-    const pulseAmount = gentle ? 0.5 : 1;
 
     /** Updates the scene for a moment `time` seconds in and renders one frame. */
     function draw(time: number) {
-      if (!fixed) progress += (scrollProgress() - progress) * (gentle ? 0.03 : 0.07);
+      if (!fixed) progress += (scrollProgress() - progress) * 0.07;
       mouse.x += (mouse.tx - mouse.x) * 0.05;
       mouse.y += (mouse.ty - mouse.y) * 0.05;
 
@@ -396,19 +401,17 @@ function mountScene(
       group.rotation.x = mouse.y * 0.08;
       group.rotation.y = mouse.x * 0.1;
 
-      if (drawn++ % pulseEvery === 0) {
-        const loudness = (1 - ramp(0.72, 0.95, progress)) * pulseAmount;
-        for (let i = 0; i < count; i++) {
-          const r = rest[i];
-          const v = voice(r.angle, time) * loudness;
-          const s = 1 + 0.24 * v;
-          finMatrix.compose(r.center, r.rotation, finScale.set(s, s, 1));
-          fins.setMatrixAt(i, finMatrix);
-          fins.setColorAt(i, finColor.copy(TITANIUM).lerp(VOICE_GLOW, v * 0.55));
-        }
-        fins.instanceMatrix.needsUpdate = true;
-        if (fins.instanceColor) fins.instanceColor.needsUpdate = true;
+      const loudness = 1 - ramp(0.72, 0.95, progress);
+      for (let i = 0; i < count; i++) {
+        const r = rest[i];
+        const v = voice(r.angle, time) * loudness;
+        const s = 1 + 0.24 * v;
+        finMatrix.compose(r.center, r.rotation, finScale.set(s, s, 1));
+        fins.setMatrixAt(i, finMatrix);
+        fins.setColorAt(i, finColor.copy(TITANIUM).lerp(VOICE_GLOW, v * 0.55));
       }
+      fins.instanceMatrix.needsUpdate = true;
+      if (fins.instanceColor) fins.instanceColor.needsUpdate = true;
 
       const end = fixed ? 0 : ramp(0.8, 0.98, progress);
       slide.visible = glowSprite.visible = end > 0.01;
@@ -431,38 +434,32 @@ function mountScene(
     }
     resize();
 
-    // Slow devices step down one notch per sample: 1x pixels, then 30 fps, then a lighter pulse.
-    // Only when all of that is still too slow does the page switch to the picture.
-    let minFrameMs = lite ? LITE_FRAME_MS : 0;
-    let lastDraw = 0;
-    let sampled = 0;
-    let sampleStart = 0;
+    // Slow devices step down in ways that keep the motion smooth: 1x pixels, then fewer fins.
+    // Only when that is still too slow does the page switch to the picture. Every frame is drawn.
+    let runningSince = 0;
+    let lastFrame = 0;
+    let intervals: number[] = [];
     let speedKnown = false;
     function checkSpeed(now: number) {
-      if (speedKnown) return;
-      sampled++;
-      if (sampled === 5) sampleStart = now;
-      if (sampled < 50) return;
-      const average = (now - sampleStart) / 45;
-      sampled = 0;
-      if (average <= Math.max(30, minFrameMs * 1.5)) {
-        speedKnown = true;
-        return;
-      }
-      if (gl.getPixelRatio() > 1) {
+      const gap = now - lastFrame;
+      lastFrame = now;
+      if (speedKnown || now - runningSince < SPEED_WARMUP_MS || gap > SPEED_IGNORE_MS) return;
+      intervals.push(gap);
+      if (intervals.length < SPEED_SAMPLE_FRAMES) return;
+      const median = intervals.sort((a, b) => a - b)[intervals.length >> 1];
+      intervals = [];
+      if (median > SLOW_PIXELS_MS && gl.getPixelRatio() > 1) {
         gl.setPixelRatio(1);
         resize();
         return;
       }
-      if (minFrameMs < LITE_FRAME_MS) {
-        minFrameMs = LITE_FRAME_MS;
+      if (median > SLOW_FINS_MS && count === maxCount) {
+        count = Math.round(maxCount * FEWER_FINS);
+        rest = layout(count);
+        fins.count = count;
         return;
       }
-      if (pulseEvery === 1) {
-        pulseEvery = 3;
-        return;
-      }
-      if (average > TOO_SLOW_MS) {
+      if (median > TOO_SLOW_MS) {
         fail();
         return;
       }
@@ -472,24 +469,21 @@ function mountScene(
     function loop() {
       if (!running || dead) return;
       const now = performance.now();
-      if (now - lastDraw >= minFrameMs - 1) {
-        lastDraw = now;
-        try {
-          const seconds = (now - startedAt) / 1000;
-          draw(gentle ? seconds * GENTLE_SPEED : seconds);
-        } catch {
-          fail();
-          return;
-        }
-        checkSpeed(now);
+      try {
+        draw((now - startedAt) / 1000);
+      } catch {
+        fail();
+        return;
       }
+      checkSpeed(now);
       if (running && !dead) frame = requestAnimationFrame(loop);
     }
 
     function start() {
       if (running || dead || document.hidden) return;
       running = true;
-      sampled = 0;
+      runningSince = lastFrame = performance.now();
+      intervals = [];
       frame = requestAnimationFrame(loop);
     }
 
@@ -506,7 +500,7 @@ function mountScene(
         fail();
       }
     });
-    // Reduced motion keeps the ring turning slowly but drops the pointer parallax.
+    // Reduced motion keeps the ring moving as usual but drops the pointer parallax.
     if (!gentle) {
       listen(window, "pointermove", (event) => {
         const e = event as PointerEvent;
@@ -553,7 +547,7 @@ export default function LandingScene({
   onFail: () => void;
   variant?: SceneVariant;
   quality?: SceneQuality;
-  /** Reduced motion: the ring turns and pulses slowly, without pointer parallax. */
+  /** Reduced motion: the ring moves as usual, without pointer parallax. */
   gentle?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);

@@ -42,7 +42,7 @@ export function StaticRing({ variant = "page" }: { variant?: SceneVariant }) {
 /**
  * The ribbed ring behind the landing, sign-in, and pitch list pages. Full 3D on a real GPU, a
  * lighter 3D scene on software rendering or weak GPUs, and the turning picture when WebGL2 is
- * missing or the scene fails at any point. Reduced motion slows it down rather than stopping it.
+ * missing or the scene fails at any point. Reduced motion only drops the pointer parallax.
  */
 export default function RingBackdrop({ variant = "page" }: { variant?: SceneVariant }) {
   const tier = useRingTier();
