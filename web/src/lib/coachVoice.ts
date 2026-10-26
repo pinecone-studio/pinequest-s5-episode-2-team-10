@@ -2,6 +2,7 @@
 // own words played back from their recording using the word timings of the transcription.
 import { t, type Lang } from "./i18n";
 import { currentLang, langHeaders } from "./i18nClient";
+import { timingsKey } from "./folderStore";
 
 export interface WordTime {
   word: string;
@@ -11,7 +12,6 @@ export interface WordTime {
 
 // ---- Word timings, kept per stored recording ---------------------------------------------------
 
-const timingsKey = (storageKey: string) => `pitchcoach:timings:${storageKey}`;
 
 export function saveTimings(storageKey: string, words: WordTime[]) {
   try {
@@ -106,6 +106,16 @@ export function subscribeTts(listener: () => void) {
 }
 
 const spoken = new Map<string, Promise<string>>(); // voice + text -> object URL of the coach voice
+const SPOKEN_LIMIT = 60; // about two full read-alouds; older audio is released
+
+function rememberSpoken(key: string, url: Promise<string>) {
+  spoken.set(key, url);
+  while (spoken.size > SPOKEN_LIMIT) {
+    const [oldest, old] = spoken.entries().next().value as [string, Promise<string>];
+    spoken.delete(oldest);
+    old.then((u) => setTimeout(() => URL.revokeObjectURL(u), 60_000)).catch(() => {}); // after any playback ends
+  }
+}
 
 /** The coach voice for `text` (fetched once; a failed fetch is forgotten so it can be retried). */
 function fetchSpeech(text: string): Promise<string> {
@@ -127,7 +137,7 @@ function fetchSpeech(text: string): Promise<string> {
       return URL.createObjectURL(await res.blob());
     })();
     url.catch(() => spoken.delete(key));
-    spoken.set(key, url);
+    rememberSpoken(key, url);
   }
   return url;
 }

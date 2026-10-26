@@ -3,11 +3,39 @@
 //     set, otherwise MMS-TTS on the voice server (POST /v1/tts, free, offline);
 //   voice | azure | elevenlabs: that engine. ElevenLabs uses eleven_v4_turbo (Mongolian, fastest)
 //     unless PITCH_ELEVENLABS_MODEL picks another model.
+// Paid voices (Azure, ElevenLabs) stop for the day after PITCH_TTS_PAID_DAILY_CHARS characters
+// (default 20000; 0 = no limit), so an open demo can't run up a bill. The count is per server
+// process, so on serverless hosts it is a safety net, not an exact quota.
 import { t, type Lang } from "@/lib/i18n";
 import { serverSetting as setting, VoiceError, voiceConfig } from "./voice";
 
 export const MAX_SPEAK_CHARS = 600;
 const CACHE_LIMIT = 200;
+const DEFAULT_PAID_DAILY_CHARS = 20_000;
+
+let paidDay = "";
+let paidUsed = 0;
+
+/**
+ * Counts `chars` against today's paid allowance; false when it would go over (nothing is counted).
+ * `limit` 0 means no limit. Exported for tests.
+ */
+export function spendPaidChars(chars: number, limit: number, now = new Date()): boolean {
+  const day = now.toISOString().slice(0, 10);
+  if (day !== paidDay) {
+    paidDay = day;
+    paidUsed = 0;
+  }
+  if (limit > 0 && paidUsed + chars > limit) return false;
+  paidUsed += chars;
+  return true;
+}
+
+function paidDailyLimit(): number {
+  const raw = setting("PITCH_TTS_PAID_DAILY_CHARS");
+  const n = raw === "" ? DEFAULT_PAID_DAILY_CHARS : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_PAID_DAILY_CHARS;
+}
 
 export interface Speech {
   audio: ArrayBuffer;
@@ -137,6 +165,9 @@ export async function speak(text: string, lang: Lang, engine: TtsEngine = ttsBac
   const key = `${engine}:${clean}`;
   const hit = cache.get(key);
   if (hit) return hit;
+  if (engine !== "voice" && !spendPaidChars(clean.length, paidDailyLimit())) {
+    throw new VoiceError(t(lang, "ttsDailyLimit"), 429);
+  }
   const run = { voice: voiceServer, azure, elevenlabs }[engine];
   return remember(key, await run(clean, lang));
 }
