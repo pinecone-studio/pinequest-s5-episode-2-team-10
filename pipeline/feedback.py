@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal, Optional
 
 import httpx
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from . import config, fillers, points
 
@@ -24,7 +24,7 @@ Backend = Literal["claude", "gemma4-ft", "gemma4-base", "rules"]
 BACKENDS: tuple[str, ...] = ("claude", "gemma4-ft", "gemma4-base", "rules")
 
 PROMPT = (Path(__file__).parent / "prompts" / "feedback_v2.md").read_text(encoding="utf-8")
-PROMPT_VERSION = "v2.2-points"  # stored with each report; bump when the prompt or schema changes
+PROMPT_VERSION = "v2.3-practice-tasks"  # stored with each report; bump when the prompt or schema changes
 MAX_RECOMMENDATIONS = 5
 SLIDE_WORDS = 60  # trim slide text so a 3-minute pitch plus 10 slides fits in 6144 tokens
 SCRIPT_WORDS = 600  # about 4 minutes of speech
@@ -77,6 +77,12 @@ class Recommendation(_Strict):
     impact: Literal["high", "medium", "low"]
 
 
+class PracticeTask(_Strict):
+    title: str = Field(min_length=2, max_length=60)
+    instruction: str = Field(min_length=4, max_length=300)
+    goal: str = Field(min_length=4, max_length=160)
+
+
 class FillerOccurrence(_Strict):
     sentence_id: int
     word: str
@@ -101,6 +107,7 @@ class Feedback(_Strict):
     slide_feedback: list[SlideFeedback]
     number_checks: list[NumberCheck]
     recommendations: list[Recommendation]
+    practice_tasks: list[PracticeTask] = Field(min_length=2, max_length=3)
     filler_occurrences: list[FillerOccurrence]
     point_checks: list[PointCheck]
     off_topic: list[OffTopic]
@@ -272,6 +279,10 @@ def _rules(data: dict) -> dict:
     if missed:
         recs.append(("slides", f"{', '.join(map(str, missed))}-р слайдын агуулгыг яриандаа хэлээгүй.", "Слайд бүрийн гол санааг нэг өгүүлбэрээр хэл.", "high"))
 
+    recommendations = [
+        {"area": area, "problem": problem, "start_s": None, "slide": None, "why": "", "action": action, "example_sentence": "", "impact": impact}
+        for area, problem, action, impact in recs
+    ]
     return {
         "summary": "Энэ зөвлөгөө зөвхөн хэмжилт дээр үндэслэсэн. Агуулгын үнэлгээ хийгдээгүй.",
         "strengths": [],
@@ -281,10 +292,8 @@ def _rules(data: dict) -> dict:
             {"slide": c["slide"], "on_slide": c["on_slide"], "said": None, "inconsistent": False}
             for c in data["number_candidates"]
         ],
-        "recommendations": [
-            {"area": area, "problem": problem, "start_s": None, "slide": None, "why": "", "action": action, "example_sentence": "", "impact": impact}
-            for area, problem, action, impact in recs
-        ],
+        "recommendations": recommendations,
+        "practice_tasks": _rules_practice_tasks(recommendations),
         # Without a model, every listed filler counts.
         "filler_occurrences": data["filler_candidates"],
         # Without a model, main points are matched by key words.
@@ -292,6 +301,61 @@ def _rules(data: dict) -> dict:
         "off_topic": [],
         "idea_comment": "",
     }
+
+
+def _rules_practice_tasks(recommendations: list[dict]) -> list[dict]:
+    """Turn measurable recommendations into short exercises; add neutral drills if needed."""
+    titles = {
+        "structure": "Бүтцийн дасгал",
+        "content": "Агуулгын дасгал",
+        "delivery": "Ярианы дасгал",
+        "slides": "Слайдын дасгал",
+        "accuracy": "Нарийвчлалын дасгал",
+        "timing": "Хугацааны дасгал",
+    }
+    goals = {
+        "structure": "Санаагаа дараалалтай, ойлгомжтой хүргэх.",
+        "content": "Гол санаагаа баримт эсвэл жишээгээр тодруулах.",
+        "delivery": "Ярианы хэмнэл, завсарлагаа тохируулах.",
+        "slides": "Слайд бүрийн гол санааг яриатай холбох.",
+        "accuracy": "Слайд дахь тоо, мэдээллийг зөв дамжуулах.",
+        "timing": "Илтгэлээ төлөвлөсөн хугацаанд багтаах.",
+    }
+    tasks = []
+    seen = set()
+    for recommendation in recommendations:
+        area = recommendation["area"]
+        title = titles.get(area, "Дадлагын дасгал")
+        if title in seen:
+            continue
+        seen.add(title)
+        tasks.append({
+            "title": title,
+            "instruction": recommendation["action"],
+            "goal": goals.get(area, "Ярианы нэг чадварыг сайжруулах."),
+        })
+        if len(tasks) == 3:
+            break
+
+    defaults = [
+        {
+            "title": "Гол санаагаа цэгцлэх",
+            "instruction": "Илтгэлийнхээ гол санааг 30 секундэд багтаан ярьж бич.",
+            "goal": "Сонсогчид илтгэлийн гол санааг товч ойлгуулах.",
+        },
+        {
+            "title": "Төгсгөлөө давтах",
+            "instruction": "Илтгэлийн төгсгөлд хэлэх гол дүгнэлтээ нэг өгүүлбэрээр давтан хэл.",
+            "goal": "Илтгэлийн гол санааг тодорхой төгсгөх.",
+        },
+    ]
+    for task in defaults:
+        if len(tasks) >= 2:
+            break
+        if task["title"] not in seen:
+            tasks.append(task)
+            seen.add(task["title"])
+    return tasks
 
 
 # ---- Checks on model output ------------------------------------------------
