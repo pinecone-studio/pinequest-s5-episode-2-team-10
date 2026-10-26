@@ -487,8 +487,8 @@ def update_user_role(user_id: str, body: AdminUserUpdate, admin: AdminUser, data
     next_active = changes.get("is_active", target.is_active)
     if target.email == "demo@pitchcoach.local" and next_role == "admin":
         raise ApiError(409, "demo_cannot_be_admin", "The shared demo account cannot be an administrator.")
-    if target.email and target.email.lower() in config.ADMIN_EMAILS and next_role != "admin":
-        raise ApiError(409, "configured_admin", "This administrator is assigned through PITCH_ADMIN_EMAILS.")
+    if target.email and target.email.lower() in config.ADMIN_EMAILS and (next_role != "admin" or not next_active):
+        raise ApiError(409, "configured_admin", "This administrator's role and active status are assigned through PITCH_ADMIN_EMAILS.")
     if target.role == "admin" and (next_role != "admin" or not next_active):
         other_admins = database.exec(
             select(func.count())

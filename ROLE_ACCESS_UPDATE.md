@@ -2,6 +2,20 @@
 
 Backend дээр `member` болон `admin` гэсэн role нэмэгдлээ.
 
+## Шалгалтын төлөвлөгөө
+
+- [x] `app_user.role` (`member` default) болон `app_user.is_active` (`true` default) багануудыг SQLite/Postgres schema startup дээр нэмэх.
+- [x] Хуучин хэрэглэгчийн мөр, project өгөгдлийг хадгалсан эсэхийг migration тестээр шалгах.
+- [x] Бүртгэлээр хэрэглэгч өөрөө admin эрх авах боломжгүй; зөвхөн Supabase-аар баталгаажсан Google email allowlist admin болгох.
+- [x] Admin API, cross-user project/attempt болон file access, role/status өөрчлөлтөд backend authorization хийх.
+- [x] Өөрийн эрх, allowlist admin, сүүлийн active admin болон demo account-ыг хамгаалах.
+- [x] API/DB/team setup баримт бичиг болон frontend auth/session төрлийг шинэчлэх.
+- [x] Python suite, TypeScript шалгалт, production web build ажиллуулах.
+- [ ] Нууц DB password/service-role key-г Supabase дээр rotate хийсний дараа shared DB-ийн role column болон бодит Google admin нэвтрэлтийг шинээр шалгах.
+- [ ] Хэрэв хэрэгтэй бол хэрэглэгч удирдах тусгай frontend admin дэлгэц нэмэх. Одоогоор FastAPI `/docs` API-г ашиглана.
+
+**Одоогийн бодит орчин:** private `backend/.env.local` файлд `PITCH_ADMIN_EMAILS` тохируулсан бөгөөд backend startup амжилттай өнгөрөхөд DB-ийн additive schema initialization хийгддэг. Хэрэглэгчийн browser дахь шинэ Google sign-in үр дүнг эндээс шалгаагүй. Бодит Supabase-г дахин шалгахын өмнө чатад ил болсон credentials-ийг rotate хийх ёстой.
+
 ## Юу өөрчлөгдөх вэ?
 
 - Шинэ болон одоо байгаа хэрэглэгчид `member` эрхтэй байна.
