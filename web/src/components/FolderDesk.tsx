@@ -36,6 +36,7 @@ import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { feedbackSteps, findQuote, loadTimings, playSpan, readAloud, saveTimings, speakText, type Clip } from "@/lib/coachVoice";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
+import type { MessageKey } from "@/lib/i18n";
 import { useAccount } from "@/lib/session";
 import Modal from "./Modal";
 import ImprovementList, { ListenButton, type Improvement, type OffTopic, type Strength } from "./ImprovementList";
@@ -1035,26 +1036,16 @@ function FolderRoom({
   }, [spoken, transcriptOpen, listening, pending]);
   function cameraButton() {
     return (
-      <button
-        type="button"
-        className="desk-ghost"
-        style={{ background: cameraOn ? "#2b2b2b" : "rgba(20, 20, 20, 0.72)", color: "#e6e6e6", borderColor: "#5a5a5a" }}
-        aria-pressed={cameraOn}
-        onClick={() => setCameraOn((on) => !on)}
-      >
+      <button type="button" className="room-glass-btn" aria-pressed={cameraOn} onClick={() => setCameraOn((on) => !on)}>
+        <CameraGlyph />
         {cameraOn ? tr("cameraClose") : tr("cameraOpen")}
       </button>
     );
   }
   function speakButton() {
     return (
-      <button
-        type="button"
-        className={listening ? "desk-ghost" : "desk-primary"}
-        style={listening ? { background: "#2b2b2b", color: "#e6e6e6", borderColor: "#5a5a5a" } : undefined}
-        onClick={toggleSpeak}
-      >
-        {listening && <span className="desk-rec" aria-hidden />}
+      <button type="button" className={listening ? "room-speak-btn is-recording" : "room-speak-btn"} onClick={toggleSpeak}>
+        {listening ? <span className="desk-rec" aria-hidden /> : <MicGlyph />}
         {listening ? tr("stop") : tr("speak")}
       </button>
     );
@@ -1062,34 +1053,45 @@ function FolderRoom({
   function pageButtons() {
     if (pageCount < 2) return null;
     return (
-      <>
-        <button type="button" className="desk-ghost" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+      <div className="room-pager" role="group" aria-label={tr("slideOf", { page, count: pageCount })}>
+        <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+          <ChevronGlyph dir="left" />
           {tr("prev")}
         </button>
         <span className="desk-count">
           {page} / {pageCount}
         </span>
-        <button
-          type="button"
-          className="desk-ghost"
-          disabled={page >= pageCount}
-          onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-        >
+        <button type="button" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>
           {tr("next")}
+          <ChevronGlyph dir="right" />
         </button>
-      </>
+      </div>
     );
   }
 
+  const speechBusy = listening || pending > 0 || fileBusy;
+  const analyzing = probing || !!probeResult?.writing;
+  const steps: { title: MessageKey; hint: MessageKey; done: boolean; active: boolean }[] = [
+    { title: "landingStep1Title", hint: "roomStep1Hint", done: anySlide, active: false },
+    { title: "landingStep2Title", hint: "roomStep2Hint", done: !!spoken && !speechBusy, active: speechBusy },
+    { title: "landingStep3Title", hint: "roomStep3Hint", done: !!probeResult && !analyzing, active: analyzing },
+  ];
+  const currentStep = steps.findIndex((step) => !step.done);
+  const speechStatus = listening
+    ? { tone: "is-live", text: tr("listening") }
+    : pending > 0 || fileBusy
+      ? { tone: "is-busy", text: tr("transcribing") }
+      : spoken
+        ? { tone: "is-saved", text: tr("speechSaved") }
+        : null;
+
   return (
-    <div className="desk folder-board">
+    <div className="desk folder-board folder-room">
       <div className="desk-col">
-        <div className="desk-title">
-          <div>
-            <button type="button" className="desk-back" onClick={onBack}>
-              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-                <path d="M8.5 2.5 4 7l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+        <header className="room-toolbar">
+          <div className="room-heading">
+            <button type="button" className="room-back" onClick={onBack}>
+              <ChevronGlyph dir="left" />
               {tr("folders")}
             </button>
             <h1>{folder.name}</h1>
@@ -1102,178 +1104,174 @@ function FolderRoom({
               {!showFigma && hiddenPages > 0 && ` · ${tr("slidesHidden", { count: hiddenPages })}`}
             </p>
           </div>
-        </div>
-        {figmaEditing && !full && (
-          <button
-            type="button"
-            aria-label={tr("close")}
-            onClick={() => (setFigmaEditing(false), setFigmaError(false))}
-            style={{ position: "fixed", inset: 0, zIndex: 4, border: 0, padding: 0, background: "transparent" }}
-          />
-        )}
-        <div className="desk-actions" style={{ justifyContent: "flex-end", position: "relative", zIndex: 5 }} hidden={full && anySlide}>
-          <div className="desk-link-bar" style={{ position: "relative", width: "max-content" }}>
-            <button
-              type="button"
-              className="desk-ghost"
-              aria-expanded={figmaEditing}
-              onClick={() => {
-                if (figmaEditing) {
-                  setFigmaEditing(false);
-                  setFigmaError(false);
-                  return;
-                }
-                setFigmaDraft(folder.figmaUrl ?? "");
-                setFigmaEditing(true);
-              }}
-            >
-              {tr("figmaAdd")}
-            </button>
-            {figmaEditing && (
-              <form
-                onSubmit={saveFigma}
-                className="desk-link-popover"
-                role="dialog"
-                aria-label={tr("figmaLinkLabel")}
-                style={{
-                  position: "absolute",
-                  top: "calc(100% + 6px)",
-                  right: 0,
-                  width: 200,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                  padding: 8,
-                  border: "1px solid #3a3a3a",
-                  borderRadius: 10,
-                  background: "#2b2b2b",
-                  color: "#e6e6e6",
-                  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
+          <div className="room-actions" hidden={full && anySlide}>
+            {figmaEditing && !full && (
+              <button
+                type="button"
+                className="room-popover-scrim"
+                aria-label={tr("close")}
+                onClick={() => (setFigmaEditing(false), setFigmaError(false))}
+              />
+            )}
+            <div className="desk-link-bar">
+              <button
+                type="button"
+                className="room-glass-btn"
+                aria-expanded={figmaEditing}
+                onClick={() => {
+                  if (figmaEditing) {
+                    setFigmaEditing(false);
+                    setFigmaError(false);
+                    return;
+                  }
+                  setFigmaDraft(folder.figmaUrl ?? "");
+                  setFigmaEditing(true);
                 }}
               >
-                <input
-                  type="url"
-                  value={figmaDraft}
-                  onChange={(e) => setFigmaDraft(e.target.value)}
-                  placeholder="https://www.figma.com/slides/…"
-                  aria-label={tr("figmaLinkLabel")}
-                  autoFocus
-                  style={{ width: "100%", height: 28, padding: "0 8px", fontSize: 12, boxSizing: "border-box" }}
-                />
-                {figmaError && <p className="desk-note">{tr("figmaBad")}</p>}
-                <div className="desk-link-actions">
-                  <button type="button" className="desk-ghost" style={{ height: 28, padding: "0 10px", fontSize: 12 }} onClick={() => (setFigmaEditing(false), setFigmaError(false))}>
-                    {tr("figmaCancel")}
-                  </button>
-                  <button type="submit" className="desk-primary" style={{ height: 28, padding: "0 10px", fontSize: 12 }}>
-                    {tr("figmaSave")}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-          <FeedbackModelSelect value={model} onChange={setModel} />
-        </div>
-
-        <div className="desk-stage">
-          <div className="desk-slide-slot" style={{ position: "relative", aspectRatio: "16 / 9" }}>
-            <div
-              className={`desk-slide-frame${full && anySlide ? (showFigma ? " desk-full desk-full-figma" : " desk-full") : ""}`}
-              style={full && anySlide ? undefined : { position: "absolute", inset: 0 }}
-              data-coach={coachState ?? undefined}
-            >
-              {cameraOn && (
-                <PoseCoach slide={coach.side} slideId={page} onSwipe={swipeSlide} onState={setCoachState} />
-              )}
-              {showFigma ? (
-                <div className="desk-slide desk-figma" style={{ height: "100%" }}>
-                  <iframe src={figmaEmbed!} title={tr("figmaLive")} allow="fullscreen" allowFullScreen />
-                </div>
-              ) : slidePdf ? (
-                <div ref={frameRef} className="desk-slide" style={{ height: "100%" }}>
-                  <canvas ref={canvasRef} width={1920} height={1080} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                </div>
-              ) : slideUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img className="desk-slide" src={slideUrl} alt={folder.slideName ?? tr("figmaSlide")} style={{ height: "100%", objectFit: "contain" }} />
-              ) : (
-                <label className="desk-slide-empty" style={{ height: "100%", minHeight: 0 }}>
-                  <span>{tr("figmaSlide")}</span>
-                  {tr("addImage")}
+                <LinkGlyph />
+                {tr("figmaAdd")}
+              </button>
+              {figmaEditing && (
+                <form onSubmit={saveFigma} className="desk-link-popover" role="dialog" aria-label={tr("figmaLinkLabel")}>
                   <input
-                    type="file"
-                    accept={SLIDE_ACCEPT}
-                    className="sr-only"
-                    onChange={(e) => chooseSlide(e.target.files?.[0])}
+                    type="url"
+                    value={figmaDraft}
+                    onChange={(e) => setFigmaDraft(e.target.value)}
+                    placeholder="https://www.figma.com/slides/…"
+                    aria-label={tr("figmaLinkLabel")}
+                    autoFocus
                   />
-                </label>
-              )}
-              {!full && (
-                <div className="desk-speak" style={{ position: "absolute", zIndex: 2, left: 14, bottom: 14, display: "flex", gap: 8 }}>
-                  {speakButton()}
-                  {cameraButton()}
-                </div>
-              )}
-              {!full && anySlide && (
-                <button
-                  type="button"
-                  className="desk-ghost desk-full-toggle"
-                  style={{
-                    position: "absolute",
-                    zIndex: 3,
-                    top: 14,
-                    right: 14,
-                    background: "rgba(20, 20, 20, 0.72)",
-                    color: "#e6e6e6",
-                    borderColor: "#3a3a3a",
-                  }}
-                  onClick={() => setFull(true)}
-                >
-                  {tr("fullscreen")}
-                </button>
-              )}
-              {full && anySlide && (
-                <div className="desk-full-bar">
-                  {speakButton()}
-                  {cameraButton()}
-                  {!showFigma && pageButtons()}
-                  <button type="button" className="desk-ghost" aria-label={tr("close")} onClick={() => setFull(false)}>
-                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-                      <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                    </svg>
-                  </button>
-                </div>
+                  {figmaError && <p className="desk-note">{tr("figmaBad")}</p>}
+                  <div className="desk-link-actions">
+                    <button type="button" className="desk-ghost" onClick={() => (setFigmaEditing(false), setFigmaError(false))}>
+                      {tr("figmaCancel")}
+                    </button>
+                    <button type="submit" className="desk-primary">
+                      {tr("figmaSave")}
+                    </button>
+                  </div>
+                </form>
               )}
             </div>
+            <FeedbackModelSelect value={model} onChange={setModel} />
+            <button
+              type="button"
+              className="room-icon-btn is-danger"
+              aria-label={tr("deleteFolder")}
+              title={tr("deleteFolder")}
+              onClick={() => setConfirmDelete(true)}
+            >
+              <TrashGlyph />
+            </button>
           </div>
-          <div className="desk-below">
-            {!full && (
-              <div className="desk-tools">
-                <div className="desk-pages">{!showFigma && pageButtons()}</div>
-                <div className="desk-figma-tools">
-                  {figmaEmbed && hasSlide && (
-                    <button type="button" className="desk-link" onClick={() => setPreferPdf((p) => !p)}>
-                      {showFigma ? tr("showPdf") : tr("showFigma")}
-                    </button>
-                  )}
-                  {folder.figmaUrl && (
-                    <button type="button" className="desk-link" onClick={removeFigma}>
-                      {tr("figmaRemove")}
-                    </button>
-                  )}
-                  {hasSlide && (
-                    <label className="desk-link">
-                      {tr("changeSlide")}
-                      <input type="file" accept={SLIDE_ACCEPT} className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
-                    </label>
-                  )}
-                </div>
+        </header>
+
+        <ol className="room-steps" aria-label={tr("pitchSteps")} hidden={full && anySlide}>
+          {steps.map((step, i) => (
+            <li
+              key={step.title}
+              className={`room-step${step.done ? " is-done" : ""}${step.active ? " is-active" : ""}`}
+              aria-current={i === currentStep ? "step" : undefined}
+            >
+              <span className="room-step-dot" aria-hidden>
+                {step.done ? <CheckGlyph /> : i + 1}
+              </span>
+              <span className="room-step-copy">
+                <strong>{tr(step.title)}</strong>
+                <span>{step.done ? tr("stepDone") : tr(step.hint)}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+
+        <div className="desk-stage">
+          <section className="room-card room-slide" aria-labelledby={`${folder.id}-slide`}>
+            <div className="room-card-head">
+              <span className="room-badge" aria-hidden>
+                1
+              </span>
+              <h2 id={`${folder.id}-slide`}>{tr("slide")}</h2>
+              <div className="room-card-tools">
+                {figmaEmbed && hasSlide && (
+                  <button type="button" className="desk-link" onClick={() => setPreferPdf((p) => !p)}>
+                    {showFigma ? tr("showPdf") : tr("showFigma")}
+                  </button>
+                )}
+                {folder.figmaUrl && (
+                  <button type="button" className="desk-link" onClick={removeFigma}>
+                    {tr("figmaRemove")}
+                  </button>
+                )}
+                {hasSlide && (
+                  <label className="desk-link">
+                    {tr("changeSlide")}
+                    <input type="file" accept={SLIDE_ACCEPT} className="sr-only" onChange={(e) => chooseSlide(e.target.files?.[0])} />
+                  </label>
+                )}
               </div>
-            )}
+            </div>
+            <div className="desk-slide-slot">
+              <div
+                className={`desk-slide-frame${full && anySlide ? (showFigma ? " desk-full desk-full-figma" : " desk-full") : ""}`}
+                data-coach={coachState ?? undefined}
+              >
+                {cameraOn && (
+                  <PoseCoach slide={coach.side} slideId={page} onSwipe={swipeSlide} onState={setCoachState} />
+                )}
+                {showFigma ? (
+                  <div className="desk-slide desk-figma">
+                    <iframe src={figmaEmbed!} title={tr("figmaLive")} allow="fullscreen" allowFullScreen />
+                  </div>
+                ) : slidePdf ? (
+                  <div ref={frameRef} className="desk-slide">
+                    <canvas ref={canvasRef} width={1920} height={1080} />
+                  </div>
+                ) : slideUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img className="desk-slide" src={slideUrl} alt={folder.slideName ?? tr("figmaSlide")} />
+                ) : (
+                  <label className="desk-slide-empty room-slide-empty">
+                    <span className="room-slide-empty-icon" aria-hidden>
+                      <PlusGlyph size={18} />
+                    </span>
+                    <strong>{tr("landingStep1Title")}</strong>
+                    <span>{tr("roomStep1Hint")}</span>
+                    <input
+                      type="file"
+                      accept={SLIDE_ACCEPT}
+                      className="sr-only"
+                      onChange={(e) => chooseSlide(e.target.files?.[0])}
+                    />
+                  </label>
+                )}
+                {!full && (
+                  <div className="desk-speak">
+                    {speakButton()}
+                    {cameraButton()}
+                  </div>
+                )}
+                {!full && anySlide && (
+                  <button type="button" className="room-glass-btn desk-full-toggle" onClick={() => setFull(true)}>
+                    <ExpandGlyph />
+                    {tr("fullscreen")}
+                  </button>
+                )}
+                {full && anySlide && (
+                  <div className="desk-full-bar">
+                    {speakButton()}
+                    {cameraButton()}
+                    {!showFigma && pageButtons()}
+                    <button type="button" className="room-glass-btn room-icon-only" aria-label={tr("close")} onClick={() => setFull(false)}>
+                      <CloseGlyph />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
             {!full && (
-              <div className="desk-coach-tools">
-                <label>
-                  {tr("coachSide")}
+              <div className="room-slide-bar">
+                <label className="room-select">
+                  <span>{tr("coachSide")}</span>
                   <select
                     value={coach.side}
                     onChange={(e) => saveCoachPrefs({ side: e.target.value === "left" ? "left" : "right" })}
@@ -1282,31 +1280,37 @@ function FolderRoom({
                     <option value="right">{tr("coachSideRight")}</option>
                   </select>
                 </label>
-                {cameraOn && <span className="desk-hint">{tr("coachSwipeHint")}</span>}
+                {!showFigma && pageButtons()}
               </div>
             )}
-            {showFigma && !full && (
-              <p className="desk-hint">
-                {tr("figmaShareHint")}
-                {!hasSlide && ` ${tr("figmaNeedsPdf")}`}
-              </p>
+            {!full && (cameraOn || showFigma || slideNote || slideMsg) && (
+              <div className="room-slide-notes">
+                {cameraOn && <p className="desk-hint">{tr("coachSwipeHint")}</p>}
+                {showFigma && (
+                  <p className="desk-hint">
+                    {tr("figmaShareHint")}
+                    {!hasSlide && ` ${tr("figmaNeedsPdf")}`}
+                  </p>
+                )}
+                {slideNote && <p className="desk-note">{tr(slideNote)}</p>}
+                {slideMsg && <p className="desk-note" aria-live="polite">{slideMsg}</p>}
+              </div>
             )}
-            {slideNote && <p className="desk-note">{tr(slideNote)}</p>}
-            {slideMsg && <p className="desk-note" aria-live="polite">{slideMsg}</p>}
-            <PitchPointsEditor
-              idea={folder.idea ?? ""}
-              points={folder.keyPoints ?? []}
-              slides={folder.pointSlides ?? []}
-              slideCount={showFigma ? 0 : pageCount}
-              currentSlide={!showFigma && pageCount > 0 ? page : null}
-              transitions={showFigma ? [] : transitions}
-              onChange={({ idea, points, slides }) => onChange({ ...folder, idea, keyPoints: points, pointSlides: slides })}
-            />
-          </div>
-          <aside className="desk-speech">
-            <h2>{tr("speechText")}</h2>
-            {spoken && !listening && pending === 0 && !fileBusy && <p className="desk-sub">{tr("speechSaved")}</p>}
-            <div className="desk-speech-body" style={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0, marginTop: 16, overflowY: "hidden" }}>
+          </section>
+
+          <aside className="desk-speech room-card room-speech" aria-labelledby={`${folder.id}-speech`}>
+            <div className="room-card-head">
+              <span className="room-badge" aria-hidden>
+                2
+              </span>
+              <h2 id={`${folder.id}-speech`}>{tr("speechText")}</h2>
+              {speechStatus && (
+                <span className={`room-status ${speechStatus.tone}`} role="status">
+                  {speechStatus.text}
+                </span>
+              )}
+            </div>
+            <div className="desk-speech-body">
               {spoken ? (
                 <>
                   <p ref={previewRef} className={previewCut ? "desk-transcript desk-transcript-preview is-cut" : "desk-transcript desk-transcript-preview"}>
@@ -1336,7 +1340,9 @@ function FolderRoom({
                 </>
               ) : (
                 <div className="desk-speech-empty">
-                  <SpeechMark />
+                  <span className="room-empty-icon">
+                    <SpeechMark />
+                  </span>
                   <p>{listening ? tr("listening") : pending > 0 || fileBusy ? tr("transcribing") : tr("noSpeechYet")}</p>
                   <span>
                     {listening ? tr("listeningLong") : pending > 0 || fileBusy ? tr("transcribing") : tr("noSpeechHint")}
@@ -1357,19 +1363,27 @@ function FolderRoom({
                 {tr("clearText")}
               </button>
             </div>
-            <div className="desk-probe">
+            <div className="room-analyze">
+              <div className="room-analyze-head">
+                <span className="room-badge" aria-hidden>
+                  3
+                </span>
+                <span>{tr("landingStep3Title")}</span>
+              </div>
               <button
                 type="button"
-                className="desk-primary desk-send"
+                className="room-analyze-btn"
                 disabled={probing || !spoken}
                 onClick={() => void sendToModel()}
               >
+                <SparkGlyph />
                 {probing ? tr("sending") : tr("sendToModel")}
               </button>
               {probeNote && <p className="desk-note">{probeNote}</p>}
               {probeResult && !resultOpen && (
-                <button type="button" className="desk-link desk-result-link" onClick={() => setResultOpen(true)}>
+                <button type="button" className="room-result-btn" onClick={() => setResultOpen(true)}>
                   {tr("showResult")}
+                  <ChevronGlyph dir="right" />
                 </button>
               )}
             </div>
@@ -1411,48 +1425,54 @@ function FolderRoom({
                 document.body,
               )}
           </aside>
-        </div>
 
-        <div>
-        <section className="folder-audios" aria-labelledby={`${folder.id}-audios`}>
-          <div className="folder-audios-bar">
-            <h2 id={`${folder.id}-audios`}>{tr("audio")}</h2>
-            <label className="ui-btn">
-              {tr("addAudio")}
-              <input
-                type="file"
-                accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg"
-                className="sr-only"
-                onChange={(e) => {
-                  void chooseAudio(e.target.files?.[0]);
-                  e.target.value = "";
-                }}
-              />
-            </label>
+          <div className="desk-below">
+            <PitchPointsEditor
+              idea={folder.idea ?? ""}
+              points={folder.keyPoints ?? []}
+              slides={folder.pointSlides ?? []}
+              slideCount={showFigma ? 0 : pageCount}
+              currentSlide={!showFigma && pageCount > 0 ? page : null}
+              transitions={showFigma ? [] : transitions}
+              onChange={({ idea, points, slides }) => onChange({ ...folder, idea, keyPoints: points, pointSlides: slides })}
+            />
+
+            <section className="folder-audios room-card" aria-labelledby={`${folder.id}-audios`}>
+              <div className="folder-audios-bar">
+                <h2 id={`${folder.id}-audios`}>{tr("audio")}</h2>
+                <label className="room-glass-btn">
+                  <PlusGlyph />
+                  {tr("addAudio")}
+                  <input
+                    type="file"
+                    accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg"
+                    className="sr-only"
+                    onChange={(e) => {
+                      void chooseAudio(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              {(folder.audios ?? []).length === 0 ? (
+                <p className="folder-audio-empty">{tr("noAudioYet")}</p>
+              ) : (
+                <ul>
+                  {(folder.audios ?? []).map((audio) => (
+                    <FolderAudioFile
+                      key={audio.id}
+                      audio={audio}
+                      selected={audio.id === folder.audioId}
+                      onSelect={() => pickSaved(audio.id)}
+                      onRemove={() => void dropAudio(audio.id)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </section>
           </div>
-          {(folder.audios ?? []).length === 0 ? (
-            <p className="folder-audio-empty">{tr("noAudioYet")}</p>
-          ) : (
-            <ul>
-              {(folder.audios ?? []).map((audio) => (
-                <FolderAudioFile
-                  key={audio.id}
-                  audio={audio}
-                  selected={audio.id === folder.audioId}
-                  onSelect={() => pickSaved(audio.id)}
-                  onRemove={() => void dropAudio(audio.id)}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
         </div>
 
-        <div className="folder-delete">
-          <button type="button" className="folder-delete-btn" onClick={() => setConfirmDelete(true)}>
-            {tr("deleteFolder")}
-          </button>
-        </div>
         {confirmDelete && (
           <Modal title={tr("deleteFolderTitle", { name: folder.name })} onClose={() => setConfirmDelete(false)}>
             <p className="folder-delete-text">{tr("deleteFolderText")}</p>
@@ -1648,6 +1668,85 @@ function CloseGlyph() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
       <path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ChevronGlyph({ dir }: { dir: "left" | "right" }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+      <path
+        d={dir === "left" ? "M8.5 2.5 4 7l4.5 4.5" : "M5.5 2.5 10 7l-4.5 4.5"}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function CheckGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+      <path d="m3 7.3 2.6 2.6L11 4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function MicGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CameraGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <rect x="1.5" y="4" width="9" height="8" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="m10.5 7 4-2.2v6.4l-4-2.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ExpandGlyph() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+      <path d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function LinkGlyph() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M6.5 9.5a3 3 0 0 0 4.2 0l2.3-2.3a3 3 0 0 0-4.2-4.2l-.9.9M9.5 6.5a3 3 0 0 0-4.2 0L3 8.8A3 3 0 0 0 7.2 13l.9-.9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function TrashGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <path d="M2.5 4h11M6.5 4V2.5h3V4M4 4l.7 9.5h6.6L12 4M6.8 6.5v4.5M9.2 6.5v4.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SparkGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <path d="M8 1.5 9.4 6.6 14.5 8l-5.1 1.4L8 14.5 6.6 9.4 1.5 8l5.1-1.4L8 1.5Z" fill="currentColor" />
     </svg>
   );
 }
