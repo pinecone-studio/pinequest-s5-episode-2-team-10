@@ -4055,22 +4055,57 @@ textarea.ui-input {
   background-image: none;
 }
 
-.landing-fallback.is-animated::before {
+/* The picture turns around the ring's own center, and a violet glow breathes on it like the voice pulse.
+   Only transform and opacity animate, so even weak devices composite it smoothly. */
+.landing-fallback.is-animated::before,
+.landing-fallback.is-animated::after {
   position: absolute;
-  inset: -30%;
-  background: url("/landing/ring-hero.jpg") 72% 50% / cover no-repeat;
   content: "";
+  will-change: transform, opacity;
+}
+
+.landing-fallback.is-animated::before {
+  --ring-x: 72%;
+  inset: -30%;
+  background: url("/landing/ring-hero.jpg") var(--ring-x) 50% / cover no-repeat;
+  transform-origin: var(--ring-x) 50%;
   animation: landing-fallback-turn 52s linear infinite;
 }
 
+.landing-fallback.is-animated::after {
+  --ring-x: 72%;
+  inset: 0;
+  background: radial-gradient(circle at var(--ring-x) 50%, rgba(143, 136, 255, 0.22), transparent 34%);
+  mix-blend-mode: screen;
+  animation: landing-fallback-breathe 4.8s ease-in-out infinite;
+}
+
 .landing-fallback.is-auth.is-animated::before {
+  --ring-x: 50%;
   background-image: url("/landing/ring-auth.jpg");
-  background-position: center;
+}
+
+.landing-fallback.is-auth.is-animated::after {
+  --ring-x: 50%;
+}
+
+.landing-fallback.is-desk.is-animated::before {
+  --ring-x: 85%;
+  background-image: url("/landing/ring-auth.jpg");
+}
+
+.landing-fallback.is-desk.is-animated::after {
+  --ring-x: 85%;
 }
 
 @keyframes landing-fallback-turn {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@keyframes landing-fallback-breathe {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
 
 .landing-grain {
@@ -4508,8 +4543,13 @@ textarea.ui-input {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Reduced motion: still alive, but very slow and soft. */
   .landing-fallback.is-animated::before {
-    animation: none;
+    animation-duration: 140s;
+  }
+
+  .landing-fallback.is-animated::after {
+    animation-duration: 12s;
   }
 
   .landing-reveal {
