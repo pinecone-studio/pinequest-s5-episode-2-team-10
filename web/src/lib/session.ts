@@ -1,7 +1,6 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { setFolderUser } from "./folderStore";
 import type { AppRole } from "./types";
 
 const TOKEN_KEY = "pitchcoach:user-token";
@@ -44,7 +43,6 @@ export function readToken(): string | null {
 
 function publish(next: Account | null) {
   account = next;
-  setFolderUser(next?.id ?? null);
   listeners.forEach((listener) => listener());
 }
 

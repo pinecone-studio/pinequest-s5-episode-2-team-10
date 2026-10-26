@@ -51,4 +51,6 @@ Admin account-ын `X-Access-Token` ашиглан FastAPI-ийн `/docs` хуу
 
 Demo товчоор нэвтрэхэд shared `demo@pitchcoach.local` account `admin` role авна. Тус хаягаар нэвтэрсэн хүн `/admin` хуудас болон бодит admin API-д хандах боломжтой. Demo товчийг ашиглаж чадах ямар ч хүн хэрэглэгчдийн жагсаалт, эрх болон бусад хэрэглэгчийн pitch, transcript, audio, slide зэрэг хувийн өгөгдөлд хандаж, өөрчилж болохыг анхаарна уу. Local mock горимд demo preview-ийн үйлдлүүд зөвхөн жишээ өгөгдөлд нөлөөлнө.
 
+Member account-ын folder, script, audio болон дэмжигдсэн slide файлууд shared FastAPI/Postgres/Storage руу хадгалагдана. Өмнөх browser өгөгдлийг зөвхөн тухайн member account-д нэвтэрсэн browser-оос нэг удаа upload хийнэ. Shared demo account-ын local data-г migrate хийхгүй.
+
 Код татсаны дараа backend-ээ restart хийгээд `/auth/me`-ийн `role`-ийг шалгаарай. Одоо байгаа хэрэглэгчдийн өгөгдөл хэвээр үлдэнэ; schema update автоматаар, нэмэлтээр хийгдэнэ.

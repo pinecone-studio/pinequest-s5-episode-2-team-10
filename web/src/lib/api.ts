@@ -118,13 +118,14 @@ const realApi = {
   updateProject: (id: string, patch: Partial<ProjectDetails>) => request<Project>(`/projects/${id}`, json("PATCH", patch)),
   deleteProject: (id: string) => request<void>(`/projects/${id}`, { method: "DELETE" }),
 
-  createAttempt: (projectId: string) => request<Attempt>(`/projects/${projectId}/sessions`, json("POST", { copy_inputs: true })),
+  createAttempt: (projectId: string, copyInputs = true) => request<Attempt>(`/projects/${projectId}/sessions`, json("POST", { copy_inputs: copyInputs })),
   deleteAttempt: (id: string) => request<void>(`/sessions/${id}`, { method: "DELETE" }),
 
   uploadSlides: (id: string, file: File) => upload<SlidesUploadResult>(id, "slides", file, file.name),
   removeSlides: (id: string) => request<void>(`/sessions/${id}/slides`, { method: "DELETE" }),
   setScript: (id: string, text: string) => request<{ words: number }>(`/sessions/${id}/script`, json("PUT", { text })),
   uploadAudio: (id: string, file: Blob, filename: string) => upload<AudioUploadResult>(id, "audio", file, filename),
+  deleteAudio: (id: string) => request<void>(`/sessions/${id}/audio`, { method: "DELETE" }),
 
   // Without a model, the backend uses its default (PITCH_DEFAULT_BACKEND).
   analyze: (id: string, feedback_backend?: FeedbackBackend) =>

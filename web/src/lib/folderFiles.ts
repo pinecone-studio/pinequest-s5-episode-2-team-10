@@ -1,5 +1,5 @@
-// One folder holds one slide and every audio take for that slide.
-// The bytes stay in IndexedDB. These records are only the names, keys, and dates.
+// One folder holds one slide and every audio take for that slide. These records
+// keep names, keys, and dates; signed-in member files live in backend storage.
 
 export const AUDIO_MAX_BYTES = 25 * 1024 * 1024;
 const AUDIO_EXTENSIONS = new Set([".wav", ".mp3", ".m4a", ".webm", ".ogg"]);

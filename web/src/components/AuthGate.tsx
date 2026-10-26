@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useState, useSyncExternalStore } from "react";
 import { setFolderUser } from "@/lib/folderStore";
 import { useAccount } from "@/lib/session";
 import AppShell from "./AppShell";
@@ -30,7 +30,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const hydrated = useHydrated();
   const [authMode, setAuthMode] = useState<AuthMode>(initialAuthMode);
   const signedIn = hydrated && account !== null;
-  setFolderUser(account && hydrated ? account.id : null);
+  useEffect(() => {
+    setFolderUser(account && hydrated ? account.id : null, account?.email === "demo@pitchcoach.local");
+  }, [account, hydrated]);
   const signedOut = authMode ? (
     <AuthScreen key={authMode} initialMode={authMode} onBack={() => setAuthMode(null)} />
   ) : (

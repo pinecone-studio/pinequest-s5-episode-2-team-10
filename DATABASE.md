@@ -28,6 +28,10 @@ A folder for one pitch.
 - `name`, `goal`, `audience`
 - `idea`: the pitch idea in one or two sentences (default empty)
 - `key_points`: JSON array of up to 6 main points the speech should get across (default empty)
+- `point_slides`: JSON array mapping main points to slide numbers
+- `figma_url`: optional Figma Slides/prototype URL
+- `script`: current saved practice script
+- `selected_audio_id`: the selected recording session, if one exists
 - `planned_s`: planned length in seconds (30–900)
 - `pitch_type`: `startup` or `academic`
 - `created_at`, `updated_at` (updated on every new attempt or analysis)
@@ -38,6 +42,7 @@ One attempt inside a project. Project details are copied in when it is analyzed,
 - `project_id` → `project.id` (indexed)
 - `title`, `goal`, `audience`, `idea`, `key_points`, `planned_s`, `pitch_type`: copied from the project
 - `script`: planned script (optional)
+- `audio_filename`: original recording filename
 - `slides_filename`: original name of the uploaded deck
 - `status`: `created`, `uploaded`, `processing`, `completed`, `failed`
 - `stage`: `transcribing`, `measuring`, `slides`, `feedback`, `scoring` while processing
@@ -72,7 +77,11 @@ One attempt inside a project. Project details are copied in when it is analyzed,
 
 ### Added columns
 
+<<<<<<< Updated upstream
 `project.idea`, `project.key_points`, `session.idea`, `session.key_points`, `app_user.email`, `app_user.username`, `app_user.password_hash`, `app_user.role`, and `app_user.is_active` were added after the first release. `backend/db.py` adds them on startup when they are missing (`ADDED_COLUMNS`), on SQLite and Postgres alike, so existing databases keep their data. Existing users receive the safe defaults `member` and active. Unique indexes are added on `app_user.email` and `app_user.username` when the table does not already have them. Add later columns there too. Older rows keep a null email until someone registers.
+=======
+`project.idea`, `project.key_points`, `project.point_slides`, `project.figma_url`, `project.script`, `project.selected_audio_id`, `session.idea`, `session.key_points`, `session.audio_filename`, `app_user.email`, `app_user.password_hash`, `app_user.role`, and `app_user.is_active` are added when missing by `backend/db.py` (`ADDED_COLUMNS`), on SQLite and Postgres alike. Existing databases keep their data; no table recreation is needed. Existing users receive the safe defaults `member` and active. A unique index is added on `app_user.email` when the table does not already have one. Add later columns there too. Older rows keep a null email until someone registers.
+>>>>>>> Stashed changes
 
 ## Relationships
 
@@ -87,7 +96,7 @@ One attempt inside a project. Project details are copied in when it is analyzed,
 3. Put the Database URI in `PITCH_DB_URL` and set `SUPABASE_URL`, `SUPABASE_STORAGE_BUCKET`, and the server-only `SUPABASE_SERVICE_ROLE_KEY` in each API machine's private environment. Never put the service-role key in the web app, Git, or a shared `.env.example` value.
 4. Start the API. It creates missing tables and turns on **row-level security** on each one, so Supabase's public REST API cannot read them. The API connects through the database URI. Existing Postgres tables are not dropped by startup.
 
-The web app never talks to Supabase directly; all access goes through FastAPI, which checks ownership on every query. For the MVP, teammates should point their web clients at the **same FastAPI URL** as well as the same database and bucket. The analysis queue is in-process; do not run multiple API/worker instances against the shared database until the queue is moved to a shared job system.
+The web app never talks to Supabase directly; all access goes through FastAPI, which checks ownership on every query. Signed-in member folders, scripts, and uploaded audio/slides are stored through the project/session API. A one-time browser migration uploads existing member data before removing its local copies; shared demo account data is excluded. For the MVP, teammates should point their web clients at the **same FastAPI URL** as well as the same database and bucket. The analysis queue is in-process; do not run multiple API/worker instances against the shared database until the queue is moved to a shared job system.
 
 ## Account roles
 

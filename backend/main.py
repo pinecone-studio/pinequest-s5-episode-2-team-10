@@ -186,6 +186,8 @@ def _attempt(database: Session, s: PitchSession) -> dict:
         "backend": s.feedback_backend,
         "overall": report.overall if report else None,
         "duration_s": audio.duration_s if audio else None,
+        "audio_filename": s.audio_filename,
+        "has_audio": audio is not None,
         "slides_filename": s.slides_filename,
         "slide_count": slide_count,
         "has_script": bool(s.script.strip()),
@@ -210,6 +212,10 @@ def _project(database: Session, p: Project, with_attempts: bool, include_owner: 
         "audience": p.audience,
         "idea": p.idea,
         "key_points": p.key_points or [],
+        "point_slides": p.point_slides or [],
+        "figma_url": p.figma_url,
+        "script": p.script,
+        "selected_audio_id": p.selected_audio_id,
         "planned_s": p.planned_s,
         "pitch_type": p.pitch_type,
         "created_at": _iso(p.created_at),
@@ -219,13 +225,14 @@ def _project(database: Session, p: Project, with_attempts: bool, include_owner: 
         "processing": any(s.status == "processing" for s in sessions),
     }
     if with_attempts:
-        out["attempts"] = [_attempt(database, s) for s in analyzed]
+        out["attempts"] = [_attempt(database, s) for s in sessions]
         # Inputs the next attempt will reuse (slides and script from the most recent attempt).
         latest = sessions[0] if sessions else None
         out["current"] = {
             "slides_filename": latest.slides_filename if latest else None,
             "slide_count": _attempt(database, latest)["slide_count"] if latest else 0,
-            "script": latest.script if latest else "",
+            "script": p.script or (latest.script if latest else ""),
+            "session_id": latest.id if latest else None,
         }
     if include_owner:
         owner = database.get(AppUser, p.user_id)
@@ -265,6 +272,9 @@ class ProjectBody(BaseModel):
     audience: str = Field(default="", max_length=500)
     idea: str = Field(default="", max_length=500)
     key_points: KeyPoints = []
+    point_slides: list[Optional[int]] = Field(default_factory=list, max_length=6)
+    figma_url: Optional[str] = Field(default=None, max_length=2048)
+    script: str = Field(default="", max_length=20000)
     planned_s: int = Field(default=180, ge=30, le=900)
     pitch_type: PitchType = "startup"
 
@@ -275,6 +285,10 @@ class ProjectPatch(BaseModel):
     audience: Optional[str] = Field(default=None, max_length=500)
     idea: Optional[str] = Field(default=None, max_length=500)
     key_points: Optional[KeyPoints] = None
+    point_slides: Optional[list[Optional[int]]] = Field(default=None, max_length=6)
+    figma_url: Optional[str] = Field(default=None, max_length=2048)
+    script: Optional[str] = Field(default=None, max_length=20000)
+    selected_audio_id: Optional[str] = None
     planned_s: Optional[int] = Field(default=None, ge=30, le=900)
     pitch_type: Optional[PitchType] = None
 
@@ -561,7 +575,18 @@ def get_project(p: OwnedProject, user: User, database: DB):
 
 @api.patch("/projects/{project_id}")
 def update_project(body: ProjectPatch, p: OwnedProject, user: User, database: DB):
-    for k, v in body.model_dump(exclude_none=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    if "selected_audio_id" in changes:
+        audio_id = changes.pop("selected_audio_id")
+        if audio_id is not None:
+            audio_session = database.get(PitchSession, audio_id)
+            audio_asset = database.get(AudioAsset, audio_id)
+            if not audio_session or audio_session.project_id != p.id or not audio_asset:
+                raise ApiError(404, "not_found", "Audio take not found.")
+        p.selected_audio_id = audio_id
+    for k, v in changes.items():
+        if v is None:
+            continue
         setattr(p, k, v.strip() if isinstance(v, str) else v)
     if not p.name:
         p.name = "Untitled project"
@@ -593,12 +618,13 @@ def create_attempt(p: OwnedProject, database: DB, body: Optional[NewAttempt] = N
         planned_s=p.planned_s, pitch_type=p.pitch_type,
     )
     previous = _sessions(database, p.id)
+    s.script = p.script or (previous[0].script if previous else "")
     database.add(s)
     database.flush()
 
     if (body is None or body.copy_inputs) and previous:
         prev = previous[0]
-        s.script = prev.script
+        s.script = p.script or prev.script
         src = _slides_path(prev)
         if db.shared_storage_enabled() and prev.slides_filename:
             source_key = _slides_object_key(prev)
@@ -637,6 +663,7 @@ def create_attempt(p: OwnedProject, database: DB, body: Optional[NewAttempt] = N
 def upload_audio(s: Owned, database: DB, file: UploadFile):
     _not_running(s)
     suffix = _suffix(file, config.AUDIO_FORMATS, "Audio must be WAV, MP3, M4A, WebM or OGG.")
+    s.audio_filename = Path(file.filename or f"audio{suffix}").name
     folder = db.session_dir(s.id)
     original = folder / f"upload{suffix}"
     wav = folder / "audio.wav"
@@ -701,6 +728,41 @@ def upload_audio(s: Owned, database: DB, file: UploadFile):
             except storage.StorageError as exc:
                 log.warning("Could not remove replaced audio objects for session %s: %s", s.id, exc)
     return {"duration_s": asset.duration_s, "format": asset.format}
+
+
+@api.delete("/sessions/{session_id}/audio", status_code=204)
+def delete_audio(s: Owned, database: DB):
+    _not_running(s)
+    asset = database.get(AudioAsset, s.id)
+    if asset is None:
+        return Response(status_code=204)
+
+    local_paths: list[Path] = []
+    object_keys: list[str] = []
+    for value in (asset.path, asset.original_path):
+        key = storage.key_from_uri(value)
+        if key:
+            object_keys.append(key)
+        else:
+            local_paths.append(Path(value))
+    try:
+        storage.delete_objects(object_keys)
+    except storage.StorageError as exc:
+        raise _storage_failure(exc) from exc
+
+    database.delete(asset)
+    db.clear_results(database, s.id)
+    s.audio_filename = None
+    s.status, s.stage, s.error = "created", None, None
+    project = database.get(Project, s.project_id)
+    if project and project.selected_audio_id == s.id:
+        project.selected_audio_id = None
+        database.add(project)
+    database.add(s)
+    database.commit()
+    for path in local_paths:
+        path.unlink(missing_ok=True)
+    return Response(status_code=204)
 
 
 @api.post("/sessions/{session_id}/slides")

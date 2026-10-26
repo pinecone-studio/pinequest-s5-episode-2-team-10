@@ -5,23 +5,27 @@ import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import {
-  attachAudio,
-  attachSlide,
   audioFileError,
+  createFolderRecord,
   deleteFolderBlob,
   detachAudio,
+  folderStoreError,
   folderSnapshot,
   getFolderBlob,
   loadSpeech,
-  putFolderBlob,
   removeFolder,
+  retryFolderStore,
+  saveFolderAudio,
   saveFolders,
+  saveFolderSlide,
   serverFolderSnapshot,
   subscribeFolders,
   saveSpeech,
   selectAudio,
   selectedAudio,
+  setFolderUser,
   slideKey,
+  waitForFolderStore,
   type FolderAudio,
   type FolderMeta,
 } from "@/lib/folderStore";
@@ -34,6 +38,7 @@ import { feedbackSteps, findQuote, loadTimings, playSpan, readAloud, saveTimings
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import { useTheme } from "@/lib/theme";
+import { useAccount } from "@/lib/session";
 import Modal from "./Modal";
 import ImprovementList, { ListenButton, type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, pointsToSend, type MainPointsResult } from "./PitchPoints";
@@ -114,6 +119,7 @@ function isCancel(err: unknown) {
 
 export default function FolderDesk() {
   const { tr } = useLang();
+  const account = useAccount();
   const [ready, setReady] = useState(false);
   // The saved list, shared with the sidebar (which can rename and delete folders too).
   const folders = useSyncExternalStore(subscribeFolders, folderSnapshot, serverFolderSnapshot);
@@ -143,8 +149,13 @@ export default function FolderDesk() {
   }
 
   useEffect(() => {
-    setReady(true);
-  }, []);
+    let cancelled = false;
+    setFolderUser(account?.id ?? null, account?.email === "demo@pitchcoach.local");
+    void waitForFolderStore().finally(() => {
+      if (!cancelled) setReady(true);
+    });
+    return () => { cancelled = true; };
+  }, [account?.id, account?.email]);
 
   function persist(next: FolderMeta[]) {
     saveFolders(next);
@@ -154,16 +165,22 @@ export default function FolderDesk() {
     e.preventDefault();
     const name = draft.trim();
     if (!name || !hasSource) return;
-    let folder: FolderMeta = {
-      id: crypto.randomUUID(),
+    setCreating(true);
+    setNewSlideError(null);
+    let folder: FolderMeta;
+    try {
+      folder = await createFolderRecord({
       name,
       slideName: null,
       audioName: null,
       figmaUrl: source === "figma" ? figmaLink : null,
-    };
+      });
+    } catch (err) {
+      setNewSlideError(err instanceof Error ? err.message : tr("authFailed"));
+      setCreating(false);
+      return;
+    }
     if (source === "file" && slideFile) {
-      setCreating(true);
-      setNewSlideError(null);
       let slide: File;
       try {
         slide = await prepareSlide(slideFile); // PowerPoint decks become PDF here
@@ -172,9 +189,13 @@ export default function FolderDesk() {
         setCreating(false);
         return;
       }
-      setCreating(false);
-      folder = attachSlide(folder, { name: slide.name, type: slide.type }, new Date().toISOString());
-      await putFolderBlob(slideKey(folder.id), slide);
+      try {
+        folder = await saveFolderSlide(folder, slide);
+      } catch (err) {
+        setNewSlideError(err instanceof Error ? err.message : tr("slideWrongType"));
+        setCreating(false);
+        return;
+      }
     }
     persist([folder, ...folders]);
     setDraft("");
@@ -182,11 +203,29 @@ export default function FolderDesk() {
     setNewFigma("");
     setNaming(false);
     setOpenId(folder.id);
+    setCreating(false);
   }
 
   const open = folders.find((f) => f.id === openId) ?? null;
 
   if (!ready) return <div className="desk" />;
+
+  const syncError = folderStoreError();
+  if (syncError) {
+    return (
+      <main className="desk folder-board">
+        <div className="desk-col">
+          <div className="ui-card admin-error" role="alert">
+            <span>{syncError}</span>
+            <button type="button" className="ui-btn" onClick={() => {
+              setReady(false);
+              void retryFolderStore().finally(() => setReady(true));
+            }}>{tr("folderSyncRetry")}</button>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   if (!open) {
     return (
@@ -443,7 +482,7 @@ function FolderRoom({
     aliveRef.current = true;
 
     (async () => {
-      const slide = await getFolderBlob(slideKey(folder.id));
+      const slide = await getFolderBlob(folder.slide?.storageKey ?? slideKey(folder.id));
       if (cancelled) return;
       if (slide) await loadSlide(slide);
       else {
@@ -478,10 +517,10 @@ function FolderRoom({
   }, [folder.id]);
 
   useEffect(() => {
-    const saved = loadSpeech(folder.id);
+    const saved = folder.script ?? loadSpeech(folder.id);
     textRef.current = saved ? `${saved} ` : "";
     setFinalText(textRef.current);
-  }, [folder.id]);
+  }, [folder.id, folder.script]);
 
   useEffect(() => {
     if (!slidePdf || showFigma) return;
@@ -702,10 +741,14 @@ function FolderRoom({
       return;
     }
     setSlideMsg(null);
-    const next = attachSlide(folder, { name: file.name, type: file.type }, new Date().toISOString());
-    await putFolderBlob(next.slide?.storageKey ?? slideKey(folder.id), file);
-    onChange(next);
-    await loadSlide(file);
+    try {
+      const next = await saveFolderSlide(folder, file);
+      if (!aliveRef.current) return;
+      onChange(next);
+      await loadSlide(file);
+    } catch (err) {
+      setSlideMsg(err instanceof Error ? err.message : tr("slideWrongType"));
+    }
   }
 
   function readDuration(file: Blob): Promise<number | null> {
@@ -735,6 +778,7 @@ function FolderRoom({
       setSttNote(tr(problem === "size" ? "audioTooBig" : "audioWrongType"));
       return null;
     }
+<<<<<<< Updated upstream
     const next = attachAudio(
       folder,
       { name, type, durationS: await readDuration(file) },
@@ -748,6 +792,18 @@ function FolderRoom({
     onChange(next);
     setSttNote(null);
     return record.storageKey;
+=======
+    try {
+      const next = await saveFolderAudio(folder, file, name, type, await readDuration(file));
+      if (!aliveRef.current) return false;
+      onChange(next);
+      setSttNote(null);
+      return true;
+    } catch (err) {
+      if (aliveRef.current) setSttNote(err instanceof Error ? err.message : tr("sttFail"));
+      return false;
+    }
+>>>>>>> Stashed changes
   }
 
   async function chooseAudio(file: File | undefined) {
@@ -833,7 +889,7 @@ function FolderRoom({
       const saved = selectedAudio(folder);
       const [audio, slide] = await Promise.all([
         saved ? getFolderBlob(saved.storageKey) : Promise.resolve(null),
-        getFolderBlob(slideKey(folder.id)),
+        getFolderBlob(folder.slide?.storageKey ?? slideKey(folder.id)),
       ]);
       if (model === "backend") {
         // The full FastAPI pipeline; it reports stages instead of streaming text.
@@ -1410,11 +1466,11 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
     let cancelled = false;
     let url: string | null = null;
     let doc: PDFDocumentProxy | null = null;
-    setImageUrl(null);
-    setPdf(false);
     void (async () => {
-      const blob = await getFolderBlob(slideKey(folder.id));
+      const blob = await getFolderBlob(folder.slide?.storageKey ?? slideKey(folder.id));
       if (cancelled) return;
+      setImageUrl(null);
+      setPdf(false);
       if (!blob) {
         // No slide file: show the Figma deck's cover image, when its link is shared publicly.
         if (!folder.figmaUrl) return;
@@ -1560,15 +1616,6 @@ function FolderGlyph() {
         strokeWidth="1.2"
         strokeLinejoin="round"
       />
-    </svg>
-  );
-}
-
-function FolderMark() {
-  return (
-    <svg width="28" height="18" viewBox="0 0 28 18" aria-hidden className="shrink-0" style={{ color: "var(--muted)" }}>
-      <rect x="0.75" y="0.75" width="26.5" height="16.5" rx="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M6 9h2l1.2-3 2 6 2-4 1.2 1.5H22" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   );
 }

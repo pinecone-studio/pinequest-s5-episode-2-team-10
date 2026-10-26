@@ -4,7 +4,7 @@
 
 import { api, ApiRequestError } from "./api";
 import type { FolderMeta } from "./folderStore";
-import type { MainPoints, Report } from "./types";
+import type { MainPoints, ProjectDetails, Report } from "./types";
 
 const POLL_MS = 2000;
 const MAX_WAIT_MS = 5 * 60 * 1000; // the backend queues one analysis at a time on the GPU
@@ -50,6 +50,23 @@ async function waitForReport(sessionId: string): Promise<Report> {
 
 /** The backend project for this folder: reused while it exists, created otherwise. */
 async function projectFor(folder: FolderMeta): Promise<string> {
+  const selectedAudio = folder.audios?.find((take) => take.id === folder.audioId) ?? null;
+  const details: Partial<ProjectDetails> = {
+    name: folder.name || "Saylo",
+    idea: folder.idea ?? "",
+    key_points: (folder.keyPoints ?? []).map((p) => p.trim()).filter(Boolean).slice(0, 6),
+    point_slides: folder.pointSlides ?? [],
+    figma_url: folder.figmaUrl ?? null,
+    script: folder.script ?? "",
+  };
+  if (selectedAudio?.storageKey.startsWith("api-audio:")) details.selected_audio_id = selectedAudio.id;
+  try {
+    await api.updateProject(folder.id, details);
+    return folder.id;
+  } catch (err) {
+    if (!(err instanceof ApiRequestError) || err.status !== 404) throw err;
+  }
+
   const key = `pitchcoach:backend-project:${folder.id}`;
   let id: string | null = null;
   try {
@@ -57,11 +74,6 @@ async function projectFor(folder: FolderMeta): Promise<string> {
   } catch {
     /* storage blocked */
   }
-  const details = {
-    name: folder.name || "Saylo",
-    idea: folder.idea ?? "",
-    key_points: (folder.keyPoints ?? []).map((p) => p.trim()).filter(Boolean).slice(0, 6),
-  };
   if (id) {
     try {
       await api.updateProject(id, details);
@@ -70,7 +82,9 @@ async function projectFor(folder: FolderMeta): Promise<string> {
       if (!(err instanceof ApiRequestError) || err.status !== 404) throw err;
     }
   }
-  const project = await api.createProject(details);
+  const newProjectDetails = { ...details };
+  delete newProjectDetails.selected_audio_id;
+  const project = await api.createProject(newProjectDetails);
   try {
     localStorage.setItem(key, project.id);
   } catch {
@@ -92,25 +106,30 @@ export async function runBackendAnalysis(args: {
 
   onStage("connecting");
   const projectId = await projectFor(folder);
-  const attempt = await api.createAttempt(projectId);
-
-  onStage("uploading");
+  const selected = folder.audios?.find((take) => take.id === folder.audioId) ?? null;
+  const savedAttemptId = selected?.storageKey.startsWith("api-audio:") ? selected.id : null;
+  let attemptId = savedAttemptId;
   const audioFile = audioName(audio, folder.audioName);
-  await api.uploadAudio(attempt.id, audio, audioFile);
+  if (!attemptId) {
+    onStage("uploading");
+    const attempt = await api.createAttempt(projectId);
+    attemptId = attempt.id;
+    await api.uploadAudio(attemptId, audio, audioFile);
+  }
   const notes: string[] = [];
   // Folder slides are PDFs (PowerPoint is converted on upload) or images; the backend takes PDF/PPTX.
   const isPdf = slide && (slide.type === "application/pdf" || /\.pdf$/i.test(folder.slideName ?? ""));
   if (slide && isPdf) {
     const name = /\.pdf$/i.test(folder.slideName ?? "") ? folder.slideName! : "slides.pdf";
-    await api.uploadSlides(attempt.id, new File([slide], name, { type: "application/pdf" }));
+    await api.uploadSlides(attemptId, new File([slide], name, { type: "application/pdf" }));
   } else if (slide) {
     notes.push(messages.slideSkipped);
   }
-  if (speech) await api.setScript(attempt.id, speech);
+  if (speech) await api.setScript(attemptId, speech);
 
   onStage("analyzing");
-  await api.analyze(attempt.id);
-  const report = await waitForReport(attempt.id);
+  await api.analyze(attemptId);
+  const report = await waitForReport(attemptId);
   const fb = report.feedback;
   const mp = fb.main_points;
 
