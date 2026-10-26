@@ -37,7 +37,6 @@ import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { feedbackSteps, findQuote, loadTimings, playSpan, readAloud, saveTimings, speakText, type Clip } from "@/lib/coachVoice";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
-import { useTheme } from "@/lib/theme";
 import { useAccount } from "@/lib/session";
 import Modal from "./Modal";
 import ImprovementList, { ListenButton, type Improvement, type OffTopic, type Strength } from "./ImprovementList";
@@ -131,6 +130,8 @@ export default function FolderDesk() {
     router.push(id ? `${pathname}?folder=${encodeURIComponent(id)}` : pathname);
   }
   const [naming, setNaming] = useState(false);
+  // The pitch whose delete confirmation is open, from the × on its card.
+  const [deleting, setDeleting] = useState<FolderMeta | null>(null);
   const [draft, setDraft] = useState("");
   const [slideFile, setSlideFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
@@ -229,18 +230,16 @@ export default function FolderDesk() {
 
   if (!open) {
     return (
-      <div className="desk folder-board">
+      <div className="desk folder-board folder-list">
         <div className="desk-col">
           <div className="desk-title">
             <div>
-              <h1>{tr("folders")}</h1>
-              <p className="desk-sub">
-                {folders.length === 0 ? tr("foldersNone") : tr("foldersCount", { n: folders.length })}
-              </p>
+              <h1>
+                {tr("folders")}
+                {folders.length > 0 && <span className="folder-list-count">{folders.length}</span>}
+              </h1>
+              <p className="desk-sub">{tr("foldersLead")}</p>
             </div>
-            <button type="button" className="desk-primary" onClick={() => setNaming(true)}>
-              {tr("addFolder")}
-            </button>
           </div>
 
           {naming && (
@@ -313,13 +312,57 @@ export default function FolderDesk() {
           )}
 
           {folders.length === 0 ? (
-            <p className="desk-empty">{tr("foldersEmpty")}</p>
+            <div className="folder-empty">
+              <span className="folder-ring" aria-hidden />
+              <h2>{tr("foldersNone")}</h2>
+              <p>{tr("foldersEmpty")}</p>
+              <button type="button" className="desk-primary" onClick={() => setNaming(true)}>
+                <PlusGlyph />
+                {tr("addFolder")}
+              </button>
+            </div>
           ) : (
             <ul className="folder-grid">
+              <li>
+                <button type="button" className="folder-card folder-card-add" onClick={() => setNaming(true)}>
+                  <span className="folder-card-add-icon">
+                    <PlusGlyph size={18} />
+                  </span>
+                  {tr("addFolder")}
+                </button>
+              </li>
               {folders.map((folder) => (
-                <FolderCard key={folder.id} folder={folder} onOpen={() => setOpenId(folder.id)} />
+                <FolderCard
+                  key={folder.id}
+                  folder={folder}
+                  onOpen={() => setOpenId(folder.id)}
+                  onDelete={() => setDeleting(folder)}
+                />
               ))}
             </ul>
+          )}
+
+          {deleting && (
+            <Modal title={tr("deleteFolderTitle", { name: deleting.name })} onClose={() => setDeleting(null)}>
+              <p className="folder-delete-text">{tr("deleteFolderText")}</p>
+              <div className="app-modal-actions folder-delete-actions">
+                <button type="button" className="ui-btn" onClick={() => setDeleting(null)}>
+                  {tr("cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="folder-delete-btn is-confirm"
+                  autoFocus
+                  onClick={() => {
+                    const folder = deleting;
+                    setDeleting(null);
+                    void removeFolder(folder);
+                  }}
+                >
+                  {tr("deleteFolder")}
+                </button>
+              </div>
+            </Modal>
           )}
         </div>
       </div>
@@ -355,7 +398,6 @@ function FolderRoom({
 }) {
   const { tr, lang } = useLang();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const theme = useTheme();
   const recRef = useRef<PieceRecorder | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
   const takeBaseRef = useRef("");
@@ -385,7 +427,7 @@ function FolderRoom({
   const [figmaDraft, setFigmaDraft] = useState("");
   const [figmaError, setFigmaError] = useState(false);
   const [preferPdf, setPreferPdf] = useState(false);
-  const figmaEmbed = folder.figmaUrl ? figmaEmbedUrl(folder.figmaUrl, theme) : null;
+  const figmaEmbed = folder.figmaUrl ? figmaEmbedUrl(folder.figmaUrl) : null;
   const showFigma = !!figmaEmbed && !(preferPdf && hasSlide);
   const anySlide = hasSlide || !!figmaEmbed;
   const [pdfEpoch, setPdfEpoch] = useState(0);
@@ -1440,11 +1482,12 @@ async function figmaThumbnail(link: string): Promise<string | null> {
   }
 }
 
-function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void }) {
+function FolderCard({ folder, onOpen, onDelete }: { folder: FolderMeta; onOpen: () => void; onDelete: () => void }) {
   const { tr } = useLang();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pdf, setPdf] = useState(false);
+  const [empty, setEmpty] = useState(false);
   const title = folder.name; // the pitch's own name, which the sidebar can rename
   const updated = latestUpdated(folder);
 
@@ -1457,11 +1500,13 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
       if (cancelled) return;
       setImageUrl(null);
       setPdf(false);
+      setEmpty(false);
       if (!blob) {
         // No slide file: show the Figma deck's cover image, when its link is shared publicly.
-        if (!folder.figmaUrl) return;
-        const thumbnail = await figmaThumbnail(folder.figmaUrl);
-        if (!cancelled && thumbnail) setImageUrl(thumbnail);
+        const thumbnail = folder.figmaUrl ? await figmaThumbnail(folder.figmaUrl) : null;
+        if (cancelled) return;
+        if (thumbnail) setImageUrl(thumbnail);
+        else setEmpty(true);
         return;
       }
       if (!isPdf(blob)) {
@@ -1475,7 +1520,8 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
         setPdf(true);
         await paintPage(doc, 1, canvasRef.current, 480);
       } catch {
-        /* the card still opens the folder */
+        // The card still opens the folder; it just shows no cover.
+        if (!cancelled) setEmpty(true);
       }
     })();
     return () => {
@@ -1487,49 +1533,36 @@ function FolderCard({ folder, onOpen }: { folder: FolderMeta; onOpen: () => void
 
   return (
     <li>
-      <button
-        type="button"
-        className="folder-card"
-        onClick={onOpen}
-        style={{
-          position: "relative",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "flex-end",
-          minHeight: 248,
-          aspectRatio: "16 / 10",
-          overflow: "hidden",
-        }}
-      >
-        <span className="folder-card-preview" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
-          {imageUrl ? (
-            <img src={imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }} />
-          ) : (
-            <canvas ref={canvasRef} hidden={!pdf} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }} />
+      <button type="button" className="folder-card" onClick={onOpen}>
+        <span className="folder-card-cover">
+          {imageUrl ? <img src={imageUrl} alt="" /> : <canvas ref={canvasRef} hidden={!pdf} />}
+          {empty && (
+            <span className="folder-card-placeholder">
+              <span className="folder-ring" aria-hidden />
+              <span>{tr("noSlide")}</span>
+            </span>
           )}
         </span>
-        <span
-          className="folder-card-body"
-          style={{
-            position: "relative",
-            zIndex: 1,
-            flex: "0 0 auto",
-            gap: 4,
-            padding: "12px 14px",
-            background: "color-mix(in srgb, var(--card) 55%, transparent)",
-            backdropFilter: "blur(18px)",
-            WebkitBackdropFilter: "blur(18px)",
-          }}
-        >
-          <span className="folder-card-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, minWidth: 0 }}>
-            <strong style={{ minWidth: 0, fontSize: 16, lineHeight: 1.3 }}>{title}</strong>
-            <span className="folder-card-meta" style={{ flexShrink: 0, marginLeft: "auto", fontSize: 15, color: "color-mix(in srgb, var(--text-primary) 82%, transparent)" }}>
-              <FolderGlyph />
-              <span>{tr("audioCount", { n: folder.audios?.length ?? 0 })}</span>
+        <span className="folder-card-info">
+          <span className="folder-card-text">
+            <strong>{title}</strong>
+            <span className="folder-card-meta">
+              {tr("audioCount", { n: folder.audios?.length ?? 0 })}
+              {updated && ` · ${updated}`}
             </span>
           </span>
-          <time dateTime={updated ?? undefined} style={{ marginTop: 0, fontSize: 14, color: "color-mix(in srgb, var(--text-primary) 72%, transparent)" }}>{updated ?? "\u00a0"}</time>
+          <ArrowGlyph />
         </span>
+      </button>
+      {/* A sibling of the card, not inside it: a button can't contain another button. */}
+      <button
+        type="button"
+        className="folder-card-delete"
+        aria-label={tr("deleteFolderTitle", { name: title })}
+        title={tr("deleteFolder")}
+        onClick={onDelete}
+      >
+        <CloseGlyph />
       </button>
     </li>
   );
@@ -1592,16 +1625,26 @@ function SpeechMark() {
   );
 }
 
-function FolderGlyph() {
+function ArrowGlyph() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-      <path
-        d="M2 3.5h4l1.2 1.5H14v7.2a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
+    <svg className="folder-card-arrow" width="18" height="18" viewBox="0 0 18 18" aria-hidden>
+      <path d="M4 9h10M10 5l4 4-4 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CloseGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+      <path d="M3 3l6 6M9 3l-6 6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function PlusGlyph({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden>
+      <path d="M7 2v10M2 7h10" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }

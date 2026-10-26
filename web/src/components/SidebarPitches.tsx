@@ -104,6 +104,7 @@ export default function SidebarPitches({
       >
         <PitchIcon />
         <span className="app-nav-label">{tr("folders")}</span>
+        {folders.length > 0 && <span className="app-nav-count">{folders.length}</span>}
         <span className={open ? "app-nav-chevron is-open" : "app-nav-chevron"}>
           <ChevronIcon />
         </span>

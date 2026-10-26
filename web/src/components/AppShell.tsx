@@ -9,7 +9,6 @@ import { clearSession, useAccount } from "@/lib/session";
 import LangToggle from "./LangToggle";
 import SayloMark from "./SayloMark";
 import SidebarPitches from "./SidebarPitches";
-import ThemeToggle from "./ThemeToggle";
 
 /** Shared signed-in frame: one sidebar, one content area. */
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -87,7 +86,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <span className="desk-brand">SAYLO</span>
           </Link>
         </span>
-        <ThemeToggle />
       </header>
       {menuOpen && (
         <button type="button" className="app-backdrop" aria-label={tr("close")} onClick={() => setMenuOpen(false)} />
@@ -131,9 +129,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
       <div className="app-main">
-        <div className="app-corner">
-          <ThemeToggle />
-        </div>
         {children}
       </div>
       {accountOpen && panelBox && (
