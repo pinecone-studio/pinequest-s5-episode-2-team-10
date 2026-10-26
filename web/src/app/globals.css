@@ -1056,14 +1056,6 @@ body {
   display: block;
 }
 
-.auth-screen .landing-fallback-ring {
-  right: auto;
-  left: 50%;
-  width: min(118vw, 760px);
-  transform: translate(-50%, -50%) rotateX(58deg);
-  opacity: 0.5;
-}
-
 /* Darkens the ring's middle so the form reads clearly; keeps the grain from .landing-grain::after. */
 .auth-veil {
   background:
@@ -3599,22 +3591,14 @@ textarea.ui-input {
   opacity: 1;
 }
 
+/* A picture of the real 3D ring, taken from the scene, for browsers that can't draw it. */
 .landing-fallback {
-  overflow: hidden;
-  background: radial-gradient(ellipse 45% 50% at 72% 50%, rgba(255, 255, 255, 0.08), transparent 70%), var(--landing-bg);
+  background: url("/landing/ring-hero.jpg") 72% 50% / cover no-repeat var(--landing-bg);
 }
 
-.landing-fallback-ring {
-  position: absolute;
-  top: 50%;
-  right: -12vw;
-  width: min(86vw, 980px);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  transform: translateY(-50%) rotate(-18deg);
-  background: repeating-conic-gradient(rgba(255, 255, 255, 0.34) 0deg 0.7deg, rgba(255, 255, 255, 0.02) 0.7deg 2.6deg);
-  mask: radial-gradient(circle, transparent 0 37%, #000 39% 63%, transparent 65%);
-  opacity: 0.75;
+.landing-fallback.is-auth {
+  background-image: url("/landing/ring-auth.jpg");
+  background-position: center;
 }
 
 .landing-grain {
@@ -4035,12 +4019,6 @@ textarea.ui-input {
 
   .landing-grain {
     background: linear-gradient(0deg, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.3) 60%, rgba(0, 0, 0, 0.5) 100%);
-  }
-
-  .landing-fallback-ring {
-    top: 28%;
-    right: -40vw;
-    width: 130vw;
   }
 
   .landing-cards {

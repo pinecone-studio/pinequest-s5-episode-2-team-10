@@ -1,12 +1,10 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, type ReactNode } from "react";
 import type { MessageKey } from "@/lib/i18n";
 import { useLang } from "@/lib/i18nClient";
+import RingBackdrop from "./RingBackdrop";
 import SayloMark from "./SayloMark";
-
-const LandingScene = dynamic(() => import("./LandingScene"), { ssr: false, loading: () => null });
 
 type Mode = "login" | "register";
 
@@ -29,20 +27,6 @@ const STEPS: [MessageKey, MessageKey][] = [
   ["landingStep3Title", "landingStep3Body"],
 ];
 
-const REDUCED = "(prefers-reduced-motion: reduce)";
-
-export function useReducedMotion(): boolean {
-  return useSyncExternalStore(
-    (onChange) => {
-      const query = window.matchMedia(REDUCED);
-      query.addEventListener("change", onChange);
-      return () => query.removeEventListener("change", onChange);
-    },
-    () => window.matchMedia(REDUCED).matches,
-    () => false,
-  );
-}
-
 /** Renders `*word*` in a message as italics. */
 function Emphasis({ text }: { text: string }) {
   return (
@@ -52,22 +36,10 @@ function Emphasis({ text }: { text: string }) {
   );
 }
 
-/** Static stand-in for the 3D ring when motion is reduced or WebGL is missing. */
-export function StaticRing() {
-  return (
-    <div className="landing-fallback" aria-hidden>
-      <span className="landing-fallback-ring" />
-    </div>
-  );
-}
-
 /** First screen for signed-out visitors: a ribbed sound ring in 3D behind four short sections. */
 export default function Landing({ onStart }: { onStart: (mode: Mode) => void }) {
   const { tr } = useLang();
   const root = useRef<HTMLElement>(null);
-  const reduced = useReducedMotion();
-  const [sceneFailed, setSceneFailed] = useState(false);
-  const onSceneFail = useCallback(() => setSceneFailed(true), []);
 
   useEffect(() => {
     const items = root.current?.querySelectorAll<HTMLElement>(".landing-reveal");
@@ -88,7 +60,7 @@ export default function Landing({ onStart }: { onStart: (mode: Mode) => void }) 
 
   return (
     <main className="landing" ref={root}>
-      {reduced || sceneFailed ? <StaticRing /> : <LandingScene onFail={onSceneFail} />}
+      <RingBackdrop />
       <div className="landing-grain" aria-hidden />
 
       <header className="landing-bar">

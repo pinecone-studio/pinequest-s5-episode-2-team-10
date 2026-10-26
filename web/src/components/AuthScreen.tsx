@@ -1,17 +1,14 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api, ApiRequestError } from "@/lib/api";
 import { t, type MessageKey } from "@/lib/i18n";
 import { useLang } from "@/lib/i18nClient";
 import { clearSession, saveSession, useAccount } from "@/lib/session";
 import { googleEnabled, supabase } from "@/lib/supabase";
 import LangToggle from "./LangToggle";
-import { StaticRing, useReducedMotion } from "./Landing";
+import RingBackdrop from "./RingBackdrop";
 import SayloMark from "./SayloMark";
-
-const LandingScene = dynamic(() => import("./LandingScene"), { ssr: false, loading: () => null });
 
 type Mode = "login" | "register";
 
@@ -46,9 +43,6 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
   const { lang, tr } = useLang();
   const titleId = useId();
   const hintId = useId();
-  const reduced = useReducedMotion();
-  const [sceneFailed, setSceneFailed] = useState(false);
-  const onSceneFail = useCallback(() => setSceneFailed(true), []);
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
@@ -145,7 +139,7 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
 
   return (
     <main className="landing auth-screen">
-      {reduced || sceneFailed ? <StaticRing /> : <LandingScene variant="auth" onFail={onSceneFail} />}
+      <RingBackdrop variant="auth" />
       <div className="landing-grain auth-veil" aria-hidden />
       {onBack && (
         <button type="button" className="auth-back" onClick={onBack}>
