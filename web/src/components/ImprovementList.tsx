@@ -25,7 +25,7 @@ export interface OffTopic {
 }
 
 /** A small "▶ listen" button; while its sound plays it becomes "■ stop". */
-export function ListenButton({ label, play }: { label: string; play: () => Promise<void> }) {
+export function ListenButton({ label, play, primary = false }: { label: string; play: () => Promise<void>; primary?: boolean }) {
   const { tr } = useLang();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +58,7 @@ export function ListenButton({ label, play }: { label: string; play: () => Promi
 
   return (
     <span className="desk-listen-wrap">
-      <button type="button" className="desk-listen" aria-pressed={busy} onClick={click}>
+      <button type="button" className={primary ? "desk-listen desk-listen-all" : "desk-listen"} aria-pressed={busy} onClick={click}>
         {busy ? `■ ${tr("stopListening")}` : `▶ ${label}`}
       </button>
       {error && <span className="desk-listen-error">{error}</span>}
@@ -76,6 +76,7 @@ export default function ImprovementList({
   offTopic = [],
   speak,
   hearOwn,
+  reading = null,
 }: {
   strengths: Strength[];
   improvements: Improvement[];
@@ -84,6 +85,8 @@ export default function ImprovementList({
   speak?: (text: string) => Promise<void>;
   /** Plays a quote from the speaker's own recording, or null when its timing isn't known. */
   hearOwn?: (quote: string) => (() => Promise<void>) | null;
+  /** The item being read aloud ("s0" strength, "i2" improvement), highlighted. */
+  reading?: string | null;
 }) {
   const { tr } = useLang();
   const id = useId();
@@ -105,7 +108,7 @@ export default function ImprovementList({
           <h3>{tr("strengths")}</h3>
           <ul className="desk-strengths">
             {strengths.map((s, i) => (
-              <li key={i}>
+              <li key={i} className={reading === `s${i}` ? "desk-reading" : undefined}>
                 {s.text}
                 {s.quote && <q>{s.quote}</q>}
                 {s.quote && hearOwn?.(s.quote) && (
@@ -127,7 +130,7 @@ export default function ImprovementList({
               const shown = open.has(i);
               const detailsId = `${id}-more-${i}`;
               return (
-                <li key={i}>
+                <li key={i} className={reading === `i${i}` ? "desk-reading" : undefined}>
                   <strong>
                     {item.title}
                     {item.source === "measured" && <span className="desk-tag">{tr("measuredTag")}</span>}

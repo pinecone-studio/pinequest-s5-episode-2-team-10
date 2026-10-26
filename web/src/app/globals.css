@@ -2672,6 +2672,22 @@ textarea.ui-input {
   color: var(--text-primary);
 }
 
+.desk-listen-all {
+  margin: 4px 0 10px;
+  padding: 6px 14px;
+  font-size: 13px;
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+/* The result item the coach voice is reading right now. */
+.desk-reading {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 12%, transparent);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
 .desk-listen-error {
   color: var(--negative);
   font-size: 12px;

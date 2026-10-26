@@ -30,7 +30,7 @@ import { openPdf, paintPage, pickSlides, readSlideText } from "@/lib/slidePdf";
 import { runBackendAnalysis } from "@/lib/backendAnalysis";
 import { streamModelReply } from "@/lib/modelStream";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
-import { findQuote, loadTimings, playSpan, saveTimings, speakText } from "@/lib/coachVoice";
+import { feedbackSteps, findQuote, loadTimings, playSpan, readAloud, saveTimings, speakText, type Clip } from "@/lib/coachVoice";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import { useTheme } from "@/lib/theme";
@@ -278,7 +278,7 @@ function FolderRoom({
   /** Deletes the whole folder (after the user confirms). */
   onDelete: () => void;
 }) {
-  const { tr } = useLang();
+  const { tr, lang } = useLang();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const theme = useTheme();
   const recRef = useRef<PieceRecorder | null>(null);
@@ -315,6 +315,7 @@ function FolderRoom({
   const anySlide = hasSlide || !!figmaEmbed;
   const [pdfEpoch, setPdfEpoch] = useState(0);
   const [listening, setListening] = useState(false);
+  const [reading, setReading] = useState<string | null>(null); // the result item being read aloud
   const [finalText, setFinalText] = useState("");
   const textRef = useRef("");
   const [sttNote, setSttNote] = useState<string | null>(null);
@@ -749,14 +750,30 @@ function FolderRoom({
     setResultOpen(true);
   }
 
-  function hearOwn(quote: string): (() => Promise<void>) | null {
+  /** Where the speaker said `quote` in the selected recording, or null when its timing isn't known. */
+  function ownClip(quote: string): (() => Promise<Clip | null>) | null {
     const saved = selectedAudio(folder);
     const span = saved ? findQuote(quote, loadTimings(saved.storageKey)) : null;
     if (!saved || !span) return null;
     return async () => {
-      const blob = await getFolderBlob(saved.storageKey);
-      if (blob) await playSpan(blob, span.start, span.end);
+      const recording = await getFolderBlob(saved.storageKey);
+      return recording ? { recording, ...span } : null;
     };
+  }
+
+  function hearOwn(quote: string): (() => Promise<void>) | null {
+    const clip = ownClip(quote);
+    if (!clip) return null;
+    return async () => {
+      const c = await clip();
+      if (c) await playSpan(c.recording, c.start, c.end);
+    };
+  }
+
+  /** The coach voice reads the whole analysis, with the speaker's own words where they fit. */
+  function readResult(): Promise<void> {
+    if (!probeResult) return Promise.resolve();
+    return readAloud(feedbackSteps(probeResult, lang, ownClip), setReading);
   }
 
   async function sendToModel() {
@@ -1199,9 +1216,9 @@ function FolderRoom({
                         </>
                       )}
                     </p>
-                    <h3>{probeResult.summary}</h3>
-                    {probeResult.summary && !probeResult.writing && (
-                      <ListenButton label={tr("listenSummary")} play={() => speakText(probeResult.summary)} />
+                    <h3 className={reading === "summary" ? "desk-reading" : undefined}>{probeResult.summary}</h3>
+                    {!probeResult.writing && (probeResult.summary || probeResult.improvements.length > 0) && (
+                      <ListenButton label={tr("listenAll")} play={readResult} primary />
                     )}
                     <ImprovementList
                       strengths={probeResult.strengths}
@@ -1209,6 +1226,7 @@ function FolderRoom({
                       offTopic={probeResult.offTopic}
                       speak={probeResult.writing ? undefined : speakText}
                       hearOwn={hearOwn}
+                      reading={reading}
                     />
                     {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} slides={probeResult.pointSlides} />}
                   </div>
