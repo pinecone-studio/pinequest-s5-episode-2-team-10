@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/format";
 import { useLang } from "@/lib/i18nClient";
@@ -10,6 +11,8 @@ import Modal from "./Modal";
 
 type Change = { role?: "member" | "admin"; is_active?: boolean };
 type PendingChange = { user: AdminUser; change: Change; title: string; description: string };
+type AdminTab = "overview" | "users" | "pitches";
+type PitchFilter = "all" | "processing" | "reviewed" | "new";
 
 const DEMO_EMAIL = "demo@pitchcoach.local";
 const DEMO_USERS: AdminUser[] = [
@@ -21,6 +24,7 @@ const DEMO_USERS: AdminUser[] = [
 
 export default function AdminUsersPanel() {
   const { lang, tr } = useLang();
+  const router = useRouter();
   const account = useAccount();
   const demoPreview = account?.email === DEMO_EMAIL && account.role !== "admin";
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -28,6 +32,9 @@ export default function AdminUsersPanel() {
   const [lastRefreshAt, setLastRefreshAt] = useState(0);
   const [demoUsers, setDemoUsers] = useState(DEMO_USERS);
   const [query, setQuery] = useState("");
+  const [pitchQuery, setPitchQuery] = useState("");
+  const [pitchFilter, setPitchFilter] = useState<PitchFilter>("all");
+  const [activeTab, setActiveTab] = useState<AdminTab>(demoPreview ? "users" : "overview");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -119,6 +126,19 @@ export default function AdminUsersPanel() {
       maxAttempts: Math.max(1, ...mostActive.map((user) => user.attempts)),
     };
   }, [displayUsers, lastRefreshAt, projects, tr]);
+  const visibleProjects = useMemo(() => {
+    const term = pitchQuery.trim().toLocaleLowerCase();
+    return [...projects]
+      .filter((project) => {
+        const statusMatches = pitchFilter === "all"
+          || (pitchFilter === "processing" && project.processing)
+          || (pitchFilter === "reviewed" && project.latest_overall !== null)
+          || (pitchFilter === "new" && project.attempt_count === 0 && !project.processing);
+        const searchMatches = !term || `${project.name} ${project.owner_email ?? ""}`.toLocaleLowerCase().includes(term);
+        return statusMatches && searchMatches;
+      })
+      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
+  }, [pitchFilter, pitchQuery, projects]);
 
   function askForChange(user: AdminUser, change: Change) {
     const roleChange = change.role !== undefined;
@@ -185,7 +205,33 @@ export default function AdminUsersPanel() {
 
       {demoPreview && <p className="ui-card admin-demo-notice" role="status">{tr("adminDemoNotice")}</p>}
 
-      {!demoPreview && !loadError && (
+      <nav className="admin-menu" aria-label={tr("adminMenuLabel")}>
+        {(["overview", "users", "pitches"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            className={`admin-menu-item ${activeTab === tab ? "is-selected" : ""}`}
+            aria-current={activeTab === tab ? "page" : undefined}
+            onClick={() => setActiveTab(tab)}
+          >
+            <span className="admin-menu-icon" aria-hidden="true">{tab === "overview" ? "◫" : tab === "users" ? "◎" : "▤"}</span>
+            <span>{tr(tab === "overview" ? "adminMenuOverview" : tab === "users" ? "adminMenuUsers" : "adminMenuPitches")}</span>
+            {tab === "users" && <span className="admin-menu-count">{displayUsers.length}</span>}
+            {tab === "pitches" && <span className="admin-menu-count">{projects.length}</span>}
+          </button>
+        ))}
+      </nav>
+
+      {loadError && (
+        <div className="admin-error" role="alert">
+          <span>{loadError}</span>
+          <button type="button" className="ui-btn" onClick={() => void loadUsers()}>{tr("retry")}</button>
+        </div>
+      )}
+      {notice && <p className="admin-notice" role="status">{notice}</p>}
+      {isLoading && <p className="admin-message" role="status">{tr("loading")}</p>}
+
+      {activeTab === "overview" && !isLoading && !loadError && !demoPreview && (
         <section className="admin-overview" aria-labelledby="admin-overview-heading">
           <div className="admin-overview-heading">
             <div>
@@ -245,7 +291,7 @@ export default function AdminUsersPanel() {
         </section>
       )}
 
-      <section className="ui-card admin-users-card" aria-labelledby="admin-users-heading">
+      {activeTab === "users" && !isLoading && !loadError && <section className="ui-card admin-users-card" aria-labelledby="admin-users-heading">
         <div className="admin-users-toolbar">
           <div>
             <h2 id="admin-users-heading" className="ui-section">{tr("adminUsers")}</h2>
@@ -257,18 +303,9 @@ export default function AdminUsersPanel() {
           </label>
         </div>
 
-        {notice && <p className="admin-notice" role="status">{notice}</p>}
-        {loadError && (
-          <div className="admin-error" role="alert">
-            <span>{loadError}</span>
-            <button type="button" className="ui-btn" onClick={() => void loadUsers()}>{tr("retry")}</button>
-          </div>
-        )}
-        {isLoading ? (
-          <p className="admin-message" role="status">{tr("loading")}</p>
-        ) : !loadError && visibleUsers.length === 0 ? (
+        {visibleUsers.length === 0 ? (
           <p className="admin-message">{query ? tr("adminNoMatches") : tr("adminNoUsers")}</p>
-        ) : !loadError ? (
+        ) : (
           <div className="admin-table-scroll">
             <table className="admin-users-table">
               <thead>
@@ -345,8 +382,54 @@ export default function AdminUsersPanel() {
               </tbody>
             </table>
           </div>
-        ) : null}
+        )}
       </section>
+      }
+
+      {activeTab === "pitches" && !isLoading && !loadError && <section className="ui-card admin-pitches-card" aria-labelledby="admin-pitches-heading">
+        <div className="admin-pitches-toolbar">
+          <div>
+            <p className="admin-eyebrow">{tr("adminPitchEyebrow")}</p>
+            <h2 id="admin-pitches-heading" className="ui-section">{tr("adminPitchTitle")}</h2>
+            <p className="ui-help">{tr("adminPitchDescription", { count: visibleProjects.length })}</p>
+          </div>
+          <label className="admin-search">
+            <span>{tr("adminPitchSearch")}</span>
+            <input value={pitchQuery} onChange={(event) => setPitchQuery(event.target.value)} type="search" />
+          </label>
+        </div>
+        <div className="admin-pitch-filters" role="group" aria-label={tr("adminPitchFilters")}>
+          {(["all", "processing", "reviewed", "new"] as const).map((filter) => (
+            <button key={filter} type="button" className={`admin-pitch-filter ${pitchFilter === filter ? "is-selected" : ""}`} aria-pressed={pitchFilter === filter} onClick={() => setPitchFilter(filter)}>
+              {tr(({ all: "adminPitchFilterAll", processing: "adminPitchFilterProcessing", reviewed: "adminPitchFilterReviewed", new: "adminPitchFilterNew" } as const)[filter])}
+              <span>{filter === "all" ? projects.length : filter === "processing" ? projects.filter((project) => project.processing).length : filter === "reviewed" ? projects.filter((project) => project.latest_overall !== null).length : projects.filter((project) => project.attempt_count === 0 && !project.processing).length}</span>
+            </button>
+          ))}
+        </div>
+        {visibleProjects.length ? (
+          <div className="admin-table-scroll">
+            <table className="admin-users-table admin-pitches-table">
+              <thead><tr>
+                <th scope="col">{tr("adminPitchName")}</th><th scope="col">{tr("adminPitchOwner")}</th><th scope="col">{tr("adminPitchStatus")}</th><th scope="col">{tr("adminPitchAttempts")}</th><th scope="col">{tr("adminPitchScore")}</th><th scope="col">{tr("adminPitchUpdated")}</th><th scope="col">{tr("adminActions")}</th>
+              </tr></thead>
+              <tbody>{visibleProjects.map((project) => {
+                const statusKey = project.processing ? "adminPitchProcessing" : project.attempt_count === 0 ? "adminPitchNewStatus" : project.latest_overall !== null ? "adminPitchReviewed" : "adminPitchAttempted";
+                return <tr key={project.id}>
+                  <td data-label={tr("adminPitchName")}><strong>{project.name || tr("adminNoEmail")}</strong></td>
+                  <td data-label={tr("adminPitchOwner")}>{project.owner_email || tr("adminNoEmail")}</td>
+                  <td data-label={tr("adminPitchStatus")}><span className={`admin-badge ${project.processing ? "is-admin" : project.latest_overall !== null ? "is-active" : ""}`}>{tr(statusKey)}</span></td>
+                  <td data-label={tr("adminPitchAttempts")}>{project.attempt_count}</td>
+                  <td data-label={tr("adminPitchScore")}><span className={`admin-score ${project.latest_overall !== null ? "has-score" : ""}`}>{project.latest_overall ?? "—"}</span></td>
+                  <td data-label={tr("adminPitchUpdated")}>{formatCreated(project.updated_at, lang)}</td>
+                  <td data-label={tr("adminActions")}><button type="button" className="ui-btn admin-open-pitch" onClick={() => router.push(`/?folder=${encodeURIComponent(project.id)}`)}>{tr("adminPitchOpen")}</button></td>
+                </tr>;
+              })}</tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="admin-message">{pitchQuery ? tr("adminPitchNoMatches") : tr("adminPitchEmpty")}</p>
+        )}
+      </section>}
 
       {pending && (
         <Modal title={pending.title} onClose={() => { if (!saving) setPending(null); }}>
