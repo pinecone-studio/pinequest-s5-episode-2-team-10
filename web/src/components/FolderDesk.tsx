@@ -778,32 +778,18 @@ function FolderRoom({
       setSttNote(tr(problem === "size" ? "audioTooBig" : "audioWrongType"));
       return null;
     }
-<<<<<<< Updated upstream
-    const next = attachAudio(
-      folder,
-      { name, type, durationS: await readDuration(file) },
-      crypto.randomUUID(),
-      new Date().toISOString(),
-    );
-    const record = selectedAudio(next);
-    if (!record) return null;
-    await putFolderBlob(record.storageKey, file);
-    if (!aliveRef.current) return null;
-    onChange(next);
-    setSttNote(null);
-    return record.storageKey;
-=======
     try {
       const next = await saveFolderAudio(folder, file, name, type, await readDuration(file));
-      if (!aliveRef.current) return false;
+      if (!aliveRef.current) return null;
+      const record = selectedAudio(next);
+      if (!record) return null;
       onChange(next);
       setSttNote(null);
-      return true;
+      return record.storageKey;
     } catch (err) {
       if (aliveRef.current) setSttNote(err instanceof Error ? err.message : tr("sttFail"));
-      return false;
+      return null;
     }
->>>>>>> Stashed changes
   }
 
   async function chooseAudio(file: File | undefined) {
