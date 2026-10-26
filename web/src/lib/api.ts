@@ -1,5 +1,6 @@
 import type {
   ApiError,
+  AdminUser,
   Attempt,
   AudioUploadResult,
   AuthSession,
@@ -106,6 +107,9 @@ const realApi = {
     send<AuthSession>("/auth/google", json("POST", { access_token: accessToken }), null),
   me: () => request<{ id: string; email: string; role: "member" | "admin" }>("/auth/me"),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
+  adminUsers: () => request<AdminUser[]>("/admin/users"),
+  updateAdminUser: (id: string, changes: { role?: "member" | "admin"; is_active?: boolean }) =>
+    request<AdminUser>(`/admin/users/${encodeURIComponent(id)}`, json("PATCH", changes)),
 
   listProjects: () => request<ProjectSummary[]>("/projects"),
   createProject: (details: Partial<ProjectDetails> = {}) => request<Project>("/projects", json("POST", details)),

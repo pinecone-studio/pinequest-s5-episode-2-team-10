@@ -4,6 +4,7 @@
 
 import type {
   Attempt,
+  AdminUser,
   AuthSession,
   FeedbackBackend,
   Project,
@@ -268,6 +269,14 @@ export const mockApi = {
     const user = users.find((row) => row.token === currentMockUser().token);
     if (user) user.token = crypto.randomUUID();
     saveUsers(users);
+  },
+
+  async adminUsers(): Promise<AdminUser[]> {
+    throw { code: "admin_required", message: "Admin controls need the live backend." };
+  },
+
+  async updateAdminUser(): Promise<AdminUser> {
+    throw { code: "admin_required", message: "Admin controls need the live backend." };
   },
 
   async listProjects() {
