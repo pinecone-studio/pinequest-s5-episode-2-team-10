@@ -113,7 +113,10 @@ def _data():
 def _model_output(occurrences):
     return {
         "summary": "s", "strengths": [], "content_scores": [], "slide_feedback": [],
-        "number_checks": [], "recommendations": [], "filler_occurrences": occurrences,
+        "number_checks": [], "recommendations": [], "practice_tasks": [
+            {"title": "Дасгал нэг", "instruction": "Нэг удаа давтан хэл.", "goal": "Яриаг цэгцлэх."},
+            {"title": "Дасгал хоёр", "instruction": "Дахин нэг удаа ярь.", "goal": "Яриаг тодруулах."},
+        ], "filler_occurrences": occurrences,
         "point_checks": [], "off_topic": [], "idea_comment": "",
     }
 

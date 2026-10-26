@@ -108,7 +108,10 @@ def test_input_carries_pitch_but_not_in_session_info():
 def test_model_output_goes_through_verification(monkeypatch):
     out = {
         "summary": "s", "strengths": [], "content_scores": [], "slide_feedback": [], "number_checks": [],
-        "recommendations": [], "filler_occurrences": [],
+        "recommendations": [], "practice_tasks": [
+            {"title": "Дасгал нэг", "instruction": "Нэг удаа давтан хэл.", "goal": "Яриаг цэгцлэх."},
+            {"title": "Дасгал хоёр", "instruction": "Дахин нэг удаа ярь.", "goal": "Яриаг тодруулах."},
+        ], "filler_occurrences": [],
         "point_checks": [
             {"point": 0, "status": "covered", "evidence": "дадлага хийх боломж бага", "note": ""},
             {"point": 1, "status": "covered", "evidence": "AI invented this", "note": ""},

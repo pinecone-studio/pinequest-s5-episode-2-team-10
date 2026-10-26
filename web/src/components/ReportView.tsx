@@ -1,4 +1,5 @@
 import { formatTime } from "@/lib/format";
+import { useLang } from "@/lib/i18nClient";
 import { modelName, sendsDataToCloud } from "@/lib/models";
 import type { MainPoints, Recommendation, Report, SlideFeedback } from "@/lib/types";
 
@@ -19,6 +20,7 @@ const CRITERIA: Record<string, string> = {
 };
 
 export default function ReportView({ report }: { report: Report }) {
+  const { tr } = useLang();
   const used = CATEGORIES.filter((c) => report[c.key] !== null).length;
   const cloud = sendsDataToCloud(report.backend);
   const { feedback, metrics } = report;
@@ -70,6 +72,21 @@ export default function ReportView({ report }: { report: Report }) {
 
       {feedback.main_points && feedback.main_points.points.length > 0 && (
         <MainPointsSection data={feedback.main_points} />
+      )}
+
+      {!!feedback.practice_tasks?.length && (
+        <section>
+          <h2 className="ui-section mb-3">{tr("practiceTasks")}</h2>
+          <ol className="grid gap-3 sm:grid-cols-2">
+            {feedback.practice_tasks.map((task, i) => (
+              <li key={`${task.title}-${i}`} className="ui-card p-4">
+                <h3 className="text-sm font-semibold">{task.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed">{task.instruction}</p>
+                <p className="ui-help mt-2">{tr("practiceGoal")}: {task.goal}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
       )}
 
       <section>
