@@ -122,7 +122,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="app-nav" aria-label="SAYLO">
           <SidebarPitches home={home} openId={openFolder} onNavigate={() => setMenuOpen(false)} />
-          {account?.role === "admin" && (
+          {(account?.role === "admin" || account?.email === "demo@pitchcoach.local") && (
             <Link href="/admin" aria-current={pathname === "/admin" ? "page" : undefined} onClick={() => setMenuOpen(false)}>
               <AdminIcon />
               <span>{tr("adminPanel")}</span>
