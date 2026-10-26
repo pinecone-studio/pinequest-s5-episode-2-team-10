@@ -37,8 +37,43 @@ import Modal from "./Modal";
 import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, pointsToSend, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
+import PoseCoach, { type CoachState } from "./PoseCoach";
+import type { Side } from "@/lib/poseCoach";
 
 type Live = { stream: MediaStream; ctx: AudioContext };
+
+const COACH_KEY = "pitchcoach:poseCoach";
+type CoachPrefs = { side: Side };
+
+const DEFAULT_COACH: CoachPrefs = { side: "right" };
+const coachListeners = new Set<() => void>();
+let coachPrefs: CoachPrefs | null = null; // read from storage once, then kept here
+
+function subscribeCoach(listener: () => void) {
+  coachListeners.add(listener);
+  return () => coachListeners.delete(listener);
+}
+
+function coachSnapshot(): CoachPrefs {
+  if (coachPrefs) return coachPrefs;
+  try {
+    const saved = JSON.parse(localStorage.getItem(COACH_KEY) ?? "null") as Partial<CoachPrefs> | null;
+    coachPrefs = { side: saved?.side === "left" ? "left" : "right" };
+  } catch {
+    coachPrefs = DEFAULT_COACH;
+  }
+  return coachPrefs;
+}
+
+function saveCoachPrefs(next: Partial<CoachPrefs>) {
+  coachPrefs = { ...coachSnapshot(), ...next };
+  try {
+    localStorage.setItem(COACH_KEY, JSON.stringify(coachPrefs));
+  } catch {
+    /* private mode: the choice lasts until reload */
+  }
+  coachListeners.forEach((listener) => listener());
+}
 
 function closeLive(live: Live | null) {
   live?.stream.getTracks().forEach((track) => track.stop());
@@ -320,6 +355,10 @@ function FolderRoom({
   const [slideNote, setSlideNote] = useState<"pdfOpenFail" | "slideDrawFail" | null>(null);
   const [slideMsg, setSlideMsg] = useState<string | null>(null); // converting, or why a picked file was refused
   const [full, setFull] = useState(false);
+  // The camera coach: counts pointing at the slide and turns slides with a hand swipe.
+  const coach = useSyncExternalStore(subscribeCoach, coachSnapshot, () => DEFAULT_COACH);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [coachState, setCoachState] = useState<CoachState | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false); // the full speech text in a dialog
   const transcriptRef = useRef<HTMLParagraphElement | null>(null);
   const previewRef = useRef<HTMLParagraphElement | null>(null);
@@ -481,6 +520,11 @@ function FolderRoom({
       window.clearTimeout(timer);
     };
   }, [page, pdfEpoch, slidePdf, full, shownPages, showFigma]);
+
+  function swipeSlide(swipe: "next" | "prev") {
+    if (showFigma || pageCount < 2) return; // a Figma deck turns its own pages
+    setPage((current) => (swipe === "next" ? Math.min(pageCount, current + 1) : Math.max(1, current - 1)));
+  }
 
   useEffect(() => {
     if (!full) return;
@@ -863,6 +907,19 @@ function FolderRoom({
     const box = transcriptRef.current;
     if (box && transcriptOpen && (listening || pending > 0)) box.scrollTop = box.scrollHeight;
   }, [spoken, transcriptOpen, listening, pending]);
+  function cameraButton() {
+    return (
+      <button
+        type="button"
+        className="desk-ghost"
+        style={{ background: cameraOn ? "#2b2b2b" : "rgba(20, 20, 20, 0.72)", color: "#e6e6e6", borderColor: "#5a5a5a" }}
+        aria-pressed={cameraOn}
+        onClick={() => setCameraOn((on) => !on)}
+      >
+        {cameraOn ? tr("cameraClose") : tr("cameraOpen")}
+      </button>
+    );
+  }
   function speakButton() {
     return (
       <button
@@ -997,7 +1054,11 @@ function FolderRoom({
             <div
               className={`desk-slide-frame${full && anySlide ? (showFigma ? " desk-full desk-full-figma" : " desk-full") : ""}`}
               style={full && anySlide ? undefined : { position: "absolute", inset: 0 }}
+              data-coach={coachState ?? undefined}
             >
+              {cameraOn && (
+                <PoseCoach slide={coach.side} slideId={page} onSwipe={swipeSlide} onState={setCoachState} />
+              )}
               {showFigma ? (
                 <div className="desk-slide desk-figma" style={{ height: "100%" }}>
                   <iframe src={figmaEmbed!} title={tr("figmaLive")} allow="fullscreen" allowFullScreen />
@@ -1022,8 +1083,9 @@ function FolderRoom({
                 </label>
               )}
               {!full && (
-                <div className="desk-speak" style={{ position: "absolute", zIndex: 2, left: 14, bottom: 14 }}>
+                <div className="desk-speak" style={{ position: "absolute", zIndex: 2, left: 14, bottom: 14, display: "flex", gap: 8 }}>
                   {speakButton()}
+                  {cameraButton()}
                 </div>
               )}
               {!full && anySlide && (
@@ -1047,6 +1109,7 @@ function FolderRoom({
               {full && anySlide && (
                 <div className="desk-full-bar">
                   {speakButton()}
+                  {cameraButton()}
                   {!showFigma && pageButtons()}
                   <button type="button" className="desk-ghost" aria-label={tr("close")} onClick={() => setFull(false)}>
                     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
@@ -1079,6 +1142,21 @@ function FolderRoom({
                     </label>
                   )}
                 </div>
+              </div>
+            )}
+            {!full && (
+              <div className="desk-coach-tools">
+                <label>
+                  {tr("coachSide")}
+                  <select
+                    value={coach.side}
+                    onChange={(e) => saveCoachPrefs({ side: e.target.value === "left" ? "left" : "right" })}
+                  >
+                    <option value="left">{tr("coachSideLeft")}</option>
+                    <option value="right">{tr("coachSideRight")}</option>
+                  </select>
+                </label>
+                {cameraOn && <span className="desk-hint">{tr("coachSwipeHint")}</span>}
               </div>
             )}
             {showFigma && !full && (
