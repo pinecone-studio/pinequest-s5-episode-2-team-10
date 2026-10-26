@@ -1368,8 +1368,8 @@ function FolderRoom({
                 <Modal title={tr("analysisResult")} onClose={() => setResultOpen(false)} wide>
                   <div className="desk-probe desk-probe-dialog" aria-live="polite">
                     <p>
-                      {probeResult.model}
-                      {probeResult.writing && ` · ${tr("writing")}`}
+                      {/* While the answer is coming in, say what's happening rather than the model's name. */}
+                      {probeResult.writing ? tr("writing") : probeResult.model}
                       {probeResult.received && (
                         <>
                           {" · "}
