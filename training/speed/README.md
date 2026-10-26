@@ -1,6 +1,8 @@
 # A faster feedback model: Gemma 4 E2B trained to answer like E4B
 
-**Why:** on the 8 GB RTX 4060, BuzzASR (~3 GB) and Gemma 4 E4B (~6.6 GB plus working memory) don't fit together, so part of Gemma runs on the CPU and answers take 10–25 s or more. Gemma 4 E2B is about half the size, so it fits on the GPU next to BuzzASR and generates faster. On its own E2B is weaker, so it's fine-tuned on E4B's checked answers to the app's own prompt (distillation). The answers are stored as compact JSON, so the model also learns to write fewer tokens.
+**Why:** with the backend's prompt (`pipeline/feedback.py`), a full E4B answer takes 22–34 s on the RTX 4060. The cause is answer length, not memory. Measured on 2026-10-26 with BuzzASR loaded, `ollama ps` showed E4B 100% on the GPU at about 98 tokens/s. A Mongolian answer is about 4,500 characters of JSON, or about 2,000–2,900 tokens. Gemma 4 E2B is about half the size, so it generates tokens faster. On its own E2B is weaker, so it's fine-tuned on E4B's checked answers to the app's own prompt (distillation). The answers are stored as compact JSON, so the model also learns to write fewer tokens.
+
+**Kaggle:** see [KAGGLE.md](KAGGLE.md) for making the data on the GPU PC, training on a free Kaggle T4, and bringing the model back.
 
 Nothing here has been run on a GPU yet: expect to adjust settings on the first run, and trust only the numbers from `benchmark.py`.
 
