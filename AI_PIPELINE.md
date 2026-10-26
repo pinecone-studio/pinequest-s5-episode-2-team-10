@@ -45,9 +45,10 @@ The schema is defined in code: `Feedback` in `pipeline/feedback.py`. The full re
 
 Not built yet from the PRD's suggested contract:
 - an improved transcript that preserves the speaker's meaning
-- practice tasks (title, instruction, goal)
 - separate clarity, conciseness, and repetition categories (repetition is measured in `wording.repeats` but not scored)
 - a limited-result state for transcripts that are too short or unreliable (today only very short audio is rejected)
+
+Feedback now includes two or three `practice_tasks` (`title`, `instruction`, `goal`). LLM tasks are requested in the versioned prompt and validated by Pydantic; the rules backend turns measured recommendations into exercises and adds neutral practice drills when fewer than two recommendations are available.
 
 ## Trying the analysis without the rest of the app
 

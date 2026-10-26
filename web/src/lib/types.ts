@@ -141,6 +141,12 @@ export interface Recommendation {
   impact: "high" | "medium" | "low";
 }
 
+export interface PracticeTask {
+  title: string;
+  instruction: string;
+  goal: string;
+}
+
 export interface Feedback {
   summary: string;
   strengths: string[];
@@ -148,6 +154,8 @@ export interface Feedback {
   slide_feedback: SlideFeedback[];
   number_checks: NumberCheck[];
   recommendations: Recommendation[];
+  // Absent on reports created before practice tasks were added.
+  practice_tasks?: PracticeTask[];
   // Missing on reports made before main points existed.
   main_points?: MainPoints;
 }
