@@ -15,12 +15,17 @@ type Mode = "login" | "register";
 function authMessage(err: unknown, tr: (key: MessageKey) => string): string {
   const code = err instanceof ApiRequestError ? err.code : err && typeof err === "object" && "code" in err ? String(err.code) : "";
   const status = err instanceof ApiRequestError ? err.status : 0;
+  const message = err instanceof ApiRequestError ? err.message : "";
   if (code === "email_taken") return tr("authEmailTaken");
   if (code === "username_taken") return tr("authUsernameTaken");
   if (code === "invalid_username") return tr("authUsernameInvalid");
+  if (code === "invalid_email" || /^Invalid email:/i.test(message)) return tr("authEmailInvalid");
+  if (/^Invalid username:/i.test(message)) return tr("authUsernameInvalid");
+  if (/^Invalid password:.*at least 8/i.test(message)) return tr("authPasswordShort");
+  if (/^Invalid password:.*at most 128/i.test(message)) return tr("authPasswordLong");
   if (code === "invalid_credentials" || status === 401) return tr("authBadLogin");
   if (code === "network" || code === "timeout") return tr("serverUnreachable");
-  if (code === "invalid_email" || code === "invalid_request" || status === 422) return tr("authInvalid");
+  if (code === "invalid_request" || status === 422) return message || tr("authInvalid");
   return tr("authFailed");
 }
 
@@ -46,6 +51,7 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
+  const [usernameError, setUsernameError] = useState(false);
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
@@ -106,6 +112,7 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
   function switchMode(next: Mode) {
     setMode(next);
     setError(null);
+    setUsernameError(false);
     setAgain("");
   }
 
@@ -123,13 +130,20 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (registering && !username.trim()) {
+      setUsernameError(true);
+      return;
+    }
+    setUsernameError(false);
     if (registering && password !== again) {
       setError(tr("authMismatch"));
       return;
     }
     setBusy(true);
     try {
-      const session = registering ? await api.register(email, username, password) : await api.login(identifier, password);
+      const session = registering
+        ? await api.register(email.trim().toLowerCase(), username.trim().toLowerCase(), password)
+        : await api.login(identifier.trim(), password);
       saveSession(session);
     } catch (err) {
       setError(authMessage(err, tr));
@@ -183,19 +197,28 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
                   autoComplete="username"
                   autoCapitalize="none"
                   spellCheck={false}
-                  required
-                  pattern="[A-Za-z0-9._]{3,30}"
-                  maxLength={30}
+                  minLength={1}
+                  maxLength={40}
+                  aria-required="true"
+                  aria-invalid={usernameError}
                   placeholder={tr("username")}
                   aria-label={tr("username")}
-                  aria-describedby={hintId}
+                  aria-describedby={usernameError ? `${hintId} ${hintId}-error` : hintId}
                   title={tr("authUsernameHint")}
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => {
+                    setUsername(e.target.value);
+                    if (e.target.value.trim()) setUsernameError(false);
+                  }}
                 />
                 <p className="auth-hint" id={hintId}>
                   {tr("authUsernameHint")}
                 </p>
+                {usernameError && (
+                  <p className="auth-hint auth-hint-error" id={`${hintId}-error`} role="alert">
+                    {tr("authUsernameRequired")}
+                  </p>
+                )}
               </>
             ) : (
               <input

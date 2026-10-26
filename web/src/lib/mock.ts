@@ -171,9 +171,9 @@ function cleanMockEmail(email: string): string {
 }
 
 function cleanMockUsername(username: string): string {
-  const value = username.trim().toLowerCase();
-  if (!/^[a-z0-9._]{3,30}$/.test(value)) {
-    throw { code: "invalid_username", message: "Use 3-30 characters: lowercase Latin letters, digits, dots, or underscores." };
+  const value = username.trim().normalize("NFC").toLocaleLowerCase();
+  if (value.length < 1 || value.length > 40) {
+    throw { code: "invalid_username", message: "Enter a username from 1 to 40 characters." };
   }
   return value;
 }
@@ -266,7 +266,8 @@ export const mockApi = {
     await wait();
     const cleaned = login.trim().toLowerCase();
     const users = loadUsers();
-    const user = users.find((row) => (cleaned.includes("@") ? row.email === cleaned : row.username === cleaned));
+    const user = users.find((row) => row.email === cleaned)
+      ?? users.find((row) => row.username === cleaned);
     const hash = user ? await mockDigest(password, user.salt) : "";
     if (!user || hash !== user.password_hash) throw { code: "invalid_credentials", message: "Email, username, or password is wrong." };
     user.token = crypto.randomUUID();

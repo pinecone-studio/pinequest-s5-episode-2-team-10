@@ -7,6 +7,7 @@ import { errorMessage } from "@/lib/format";
 import { useLang } from "@/lib/i18nClient";
 import { useAccount } from "@/lib/session";
 import type { AdminUser, ProjectSummary } from "@/lib/types";
+import { DEMO_FOLDERS } from "@/lib/demoPitches";
 import Modal from "./Modal";
 
 type Change = { role?: "member" | "admin"; is_active?: boolean };
@@ -21,6 +22,32 @@ const DEMO_USERS: AdminUser[] = [
   { id: "sample-member-02", email: "saraa@example.com", role: "member", is_active: true, created_at: "2025-03-02T00:00:00Z" },
   { id: "sample-member-03", email: "temuulen@example.com", role: "member", is_active: false, created_at: "2025-03-18T00:00:00Z" },
 ];
+const DEMO_ADMIN_PROJECTS: ProjectSummary[] = DEMO_FOLDERS.map((folder, index) => {
+  const owner = DEMO_USERS[1 + (index % (DEMO_USERS.length - 1))];
+  const updated = new Date(Date.now() - index * 24 * 60 * 60 * 1000).toISOString();
+  const attempts = [3, 2, 1, 0, 2][index] ?? 0;
+  return {
+    id: folder.id,
+    name: folder.name,
+    goal: "",
+    audience: "",
+    idea: folder.idea ?? "",
+    key_points: folder.keyPoints ?? [],
+    point_slides: folder.pointSlides,
+    figma_url: null,
+    script: "",
+    selected_audio_id: null,
+    planned_s: 180,
+    pitch_type: "startup",
+    owner_id: owner.id,
+    owner_email: owner.email,
+    created_at: updated,
+    updated_at: updated,
+    attempt_count: attempts,
+    latest_overall: attempts ? [78, 64, 85, null, 72][index] ?? null : null,
+    processing: false,
+  };
+});
 
 export default function AdminUsersPanel() {
   const { lang, tr } = useLang();
@@ -34,7 +61,7 @@ export default function AdminUsersPanel() {
   const [query, setQuery] = useState("");
   const [pitchQuery, setPitchQuery] = useState("");
   const [pitchFilter, setPitchFilter] = useState<PitchFilter>("all");
-  const [activeTab, setActiveTab] = useState<AdminTab>(demoPreview ? "users" : "overview");
+  const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -81,6 +108,7 @@ export default function AdminUsersPanel() {
   }, [account, demoPreview]);
 
   const displayUsers = demoPreview ? demoUsers : users;
+  const displayProjects = demoPreview ? DEMO_ADMIN_PROJECTS : projects;
   const isLoading = !demoPreview && loading;
   const visibleUsers = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
@@ -89,10 +117,10 @@ export default function AdminUsersPanel() {
   }, [displayUsers, query]);
   const adminOverview = useMemo(() => {
     const weekAgo = lastRefreshAt - 7 * 24 * 60 * 60 * 1000;
-    const recentlyUpdated = projects.filter((project) => new Date(project.updated_at).getTime() >= weekAgo).length;
+    const recentlyUpdated = displayProjects.filter((project) => new Date(project.updated_at).getTime() >= weekAgo).length;
     const members = displayUsers.filter((user) => user.role === "member");
     const activityByUser = new Map<string, { email: string; projects: number; attempts: number }>();
-    for (const project of projects) {
+    for (const project of displayProjects) {
       const id = project.owner_id;
       if (!id) continue;
       const owner = displayUsers.find((user) => user.id === id);
@@ -119,16 +147,16 @@ export default function AdminUsersPanel() {
       activeUsers: displayUsers.filter((user) => user.is_active).length,
       memberCount: members.length,
       adminCount: displayUsers.filter((user) => user.role === "admin").length,
-      projectCount: projects.length,
-      attemptCount: projects.reduce((total, project) => total + project.attempt_count, 0),
+      projectCount: displayProjects.length,
+      attemptCount: displayProjects.reduce((total, project) => total + project.attempt_count, 0),
       recentlyUpdated,
       mostActive,
       maxAttempts: Math.max(1, ...mostActive.map((user) => user.attempts)),
     };
-  }, [displayUsers, lastRefreshAt, projects, tr]);
+  }, [displayProjects, displayUsers, lastRefreshAt, tr]);
   const visibleProjects = useMemo(() => {
     const term = pitchQuery.trim().toLocaleLowerCase();
-    return [...projects]
+    return [...displayProjects]
       .filter((project) => {
         const statusMatches = pitchFilter === "all"
           || (pitchFilter === "processing" && project.processing)
@@ -138,7 +166,7 @@ export default function AdminUsersPanel() {
         return statusMatches && searchMatches;
       })
       .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
-  }, [pitchFilter, pitchQuery, projects]);
+  }, [displayProjects, pitchFilter, pitchQuery]);
 
   function askForChange(user: AdminUser, change: Change) {
     const roleChange = change.role !== undefined;
@@ -217,7 +245,7 @@ export default function AdminUsersPanel() {
             <span className="admin-menu-icon" aria-hidden="true">{tab === "overview" ? "◫" : tab === "users" ? "◎" : "▤"}</span>
             <span>{tr(tab === "overview" ? "adminMenuOverview" : tab === "users" ? "adminMenuUsers" : "adminMenuPitches")}</span>
             {tab === "users" && <span className="admin-menu-count">{displayUsers.length}</span>}
-            {tab === "pitches" && <span className="admin-menu-count">{projects.length}</span>}
+            {tab === "pitches" && <span className="admin-menu-count">{displayProjects.length}</span>}
           </button>
         ))}
       </nav>
@@ -231,7 +259,7 @@ export default function AdminUsersPanel() {
       {notice && <p className="admin-notice" role="status">{notice}</p>}
       {isLoading && <p className="admin-message" role="status">{tr("loading")}</p>}
 
-      {activeTab === "overview" && !isLoading && !loadError && !demoPreview && (
+      {activeTab === "overview" && !isLoading && !loadError && (
         <section className="admin-overview" aria-labelledby="admin-overview-heading">
           <div className="admin-overview-heading">
             <div>
@@ -402,7 +430,7 @@ export default function AdminUsersPanel() {
           {(["all", "processing", "reviewed", "new"] as const).map((filter) => (
             <button key={filter} type="button" className={`admin-pitch-filter ${pitchFilter === filter ? "is-selected" : ""}`} aria-pressed={pitchFilter === filter} onClick={() => setPitchFilter(filter)}>
               {tr(({ all: "adminPitchFilterAll", processing: "adminPitchFilterProcessing", reviewed: "adminPitchFilterReviewed", new: "adminPitchFilterNew" } as const)[filter])}
-              <span>{filter === "all" ? projects.length : filter === "processing" ? projects.filter((project) => project.processing).length : filter === "reviewed" ? projects.filter((project) => project.latest_overall !== null).length : projects.filter((project) => project.attempt_count === 0 && !project.processing).length}</span>
+              <span>{filter === "all" ? displayProjects.length : filter === "processing" ? displayProjects.filter((project) => project.processing).length : filter === "reviewed" ? displayProjects.filter((project) => project.latest_overall !== null).length : displayProjects.filter((project) => project.attempt_count === 0 && !project.processing).length}</span>
             </button>
           ))}
         </div>

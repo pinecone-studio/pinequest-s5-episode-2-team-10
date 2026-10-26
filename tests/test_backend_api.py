@@ -333,3 +333,49 @@ def test_slides_upload_download_and_delete_use_private_storage(client, monkeypat
     removed = client.delete(f"/api/v1/sessions/{attempt['id']}/slides", headers=headers)
     assert removed.status_code == 204
     assert key not in objects
+
+
+def test_new_attempt_copies_shared_slides_to_its_own_storage_key(client, monkeypatch):
+    headers = _headers(client)
+    project = client.post("/api/v1/projects", headers=headers, json={"name": "Slides"}).json()
+    first = client.post(
+        f"/api/v1/projects/{project['id']}/sessions",
+        headers=headers,
+        json={"copy_inputs": False},
+    ).json()
+    objects = {}
+
+    def upload_file(key, path, content_type, *, upsert=True):
+        objects[key] = path.read_bytes()
+
+    monkeypatch.setattr(main.db, "shared_storage_enabled", lambda: True)
+    monkeypatch.setattr(main.storage, "upload_file", upload_file)
+    monkeypatch.setattr(main.storage, "download_bytes", lambda key: objects[key])
+    monkeypatch.setattr(
+        main.slide_tools,
+        "extract",
+        lambda _path: [{
+            "number": 1,
+            "text": "Slide content",
+            "notes": "",
+            "image_only": False,
+            "numbers": [],
+            "key_terms": ["Slide"],
+        }],
+    )
+
+    uploaded = client.post(
+        f"/api/v1/sessions/{first['id']}/slides",
+        headers=headers,
+        files={"file": ("deck.pdf", b"pdf-content", "application/pdf")},
+    )
+    assert uploaded.status_code == 200
+
+    copied = client.post(
+        f"/api/v1/projects/{project['id']}/sessions",
+        headers=headers,
+        json={"copy_inputs": True},
+    )
+
+    assert copied.status_code == 201
+    assert objects[f"sessions/{copied.json()['id']}/slides.pdf"] == b"pdf-content"

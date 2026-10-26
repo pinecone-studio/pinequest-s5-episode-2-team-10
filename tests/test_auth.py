@@ -146,7 +146,7 @@ def test_short_password_and_bad_email_rejected(client: TestClient):
     assert self_admin.status_code == 422
 
 
-@pytest.mark.parametrize("username", ["ab", "has space", "with@sign", "кирилл", "a" * 31])
+@pytest.mark.parametrize("username", ["   ", "a" * 41])
 def test_bad_username_rejected(client: TestClient, username: str):
     res = client.post(
         "/api/v1/auth/register",
@@ -154,6 +154,27 @@ def test_bad_username_rejected(client: TestClient, username: str):
     )
     assert res.status_code == 422
     assert res.json()["code"] == "invalid_username"
+
+
+def test_registration_accepts_mongolian_full_name_and_login(client: TestClient):
+    created = _register(client, "mongolian-name@example.com", "  Мөнх-Оргил Бат  ")
+    assert created["username"] == "мөнх-оргил бат"
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"login": "МӨНХ-ОРГИЛ БАТ", "password": PASSWORD},
+    )
+    assert login.status_code == 200
+    assert login.json()["id"] == created["id"]
+
+
+def test_registration_accepts_arbitrary_username_characters(client: TestClient):
+    created = _register(client, "symbols@example.com", " @?# 🚀 ")
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"login": "@?# 🚀", "password": PASSWORD},
+    )
+    assert login.status_code == 200
+    assert login.json()["id"] == created["id"]
 
 
 def test_username_is_required(client: TestClient):

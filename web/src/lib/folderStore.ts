@@ -56,6 +56,8 @@ let localDemoAccount = false;
 let remoteMode = false;
 let storeReady = false;
 let storeError: string | null = null;
+let migrationPending = false;
+let migrationError: string | null = null;
 let hydration: Promise<void> = Promise.resolve();
 
 /** Which account's folder list to read. Set before the desk loads. */
@@ -67,6 +69,8 @@ export function setFolderUser(id: string | null, isDemoAccount = false) {
   snapshot = null;
   storeReady = false;
   storeError = null;
+  migrationPending = false;
+  migrationError = null;
   if (remoteMode) {
     snapshot = [];
     hydration = hydrateRemoteFolders(id!);
@@ -87,32 +91,85 @@ export function folderStoreError(): string | null {
   return storeError;
 }
 
+export function folderStoreMigrationPending(): boolean {
+  return migrationPending;
+}
+
+export function folderStoreMigrationError(): string | null {
+  return migrationError;
+}
+
 export function retryFolderStore() {
   if (remoteMode && userId) hydration = hydrateRemoteFolders(userId);
   return hydration;
 }
 
 async function hydrateRemoteFolders(accountId: string) {
+  const isCurrentAccount = () => remoteMode && userId === accountId;
   try {
-    const migratedKey = `pitchcoach:remote-migrated:${accountId}`;
-    if (localStorage.getItem(migratedKey) !== "1") {
-      const localFolders = loadFolders().map((folder) => ({
-        ...normalizeFolder(folder),
-        script: readLocalSpeech(folder.id),
-        currentSessionId: null,
-      })) as ServerFolder[];
-      if (localFolders.length) {
-        await migrateLocalFolders(localFolders, readLocalFolderBlob, removeMigratedLocalData);
-      }
-      localStorage.setItem(migratedKey, "1");
-    }
     snapshot = await listServerFolders();
+    if (!isCurrentAccount()) return;
     storeReady = true;
     storeError = null;
+    notify();
   } catch (error) {
+    if (!isCurrentAccount()) return;
     snapshot = [];
     storeReady = false;
     storeError = error instanceof Error ? error.message : "Could not sync folders with the backend.";
+    notify();
+    return;
+  }
+
+  const migratedKey = `pitchcoach:remote-migrated:${accountId}`;
+  try {
+    if (localStorage.getItem(migratedKey) === "1") return;
+    const savedAccountFolders = localStorage.getItem(`${LEGACY_KEY}:${accountId}`);
+    const legacyFolders = localStorage.getItem(LEGACY_KEY);
+    if (savedAccountFolders === null && legacyFolders === null) {
+      // A fresh browser has only generated sample folders. Don't upload those on sign-in.
+      localStorage.setItem(migratedKey, "1");
+      return;
+    }
+    const localFolders = loadFolders().map((folder) => ({
+      ...normalizeFolder(folder),
+      script: readLocalSpeech(folder.id),
+      currentSessionId: null,
+    })) as ServerFolder[];
+    if (!localFolders.length) {
+      localStorage.setItem(migratedKey, "1");
+      return;
+    }
+
+    migrationPending = true;
+    migrationError = null;
+    notify();
+    void migrateLocalFolders(
+      localFolders,
+      readLocalFolderBlob,
+      (folders) => removeMigratedLocalData(folders, isCurrentAccount),
+      isCurrentAccount,
+    )
+      .then(async () => {
+        if (!isCurrentAccount()) return;
+        localStorage.setItem(migratedKey, "1");
+        snapshot = await listServerFolders();
+        if (!isCurrentAccount()) return;
+        storeError = null;
+      })
+      .catch((error: unknown) => {
+        if (!isCurrentAccount()) return;
+        migrationError = error instanceof Error ? error.message : "Could not migrate saved pitches to the backend.";
+      })
+      .finally(() => {
+        if (!isCurrentAccount()) return;
+        migrationPending = false;
+        notify();
+      });
+  } catch (error) {
+    if (isCurrentAccount()) {
+      storeError = error instanceof Error ? error.message : "Could not migrate saved pitches to the backend.";
+    }
   }
   notify();
 }
@@ -338,22 +395,34 @@ async function removeLocalBlob(key: string) {
   db.close();
 }
 
-async function removeMigratedLocalData(folders: ServerFolder[]) {
+async function removeMigratedLocalData(
+  folders: ServerFolder[],
+  isCurrentAccount: () => boolean,
+) {
+  const ensureCurrentAccount = () => {
+    if (!isCurrentAccount()) throw new Error("Account changed during local pitch migration.");
+  };
+  ensureCurrentAccount();
   const key = listKey();
   if (key) localStorage.removeItem(key);
-  localStorage.removeItem(LEGACY_KEY);
   for (const folder of folders) {
+    ensureCurrentAccount();
     localStorage.removeItem(speechKey(folder.id));
     localStorage.removeItem(`pitchcoach:backend-project:${folder.id}`);
     localStorage.removeItem(`pitchcoach:remote-slide:${folder.id}`);
     for (const audio of folder.audios ?? []) {
       localStorage.removeItem(`pitchcoach:remote-audio:${folder.id}:${audio.id}`);
       await removeLocalBlob(audio.storageKey);
+      ensureCurrentAccount();
     }
     if (folder.slide) await removeLocalBlob(folder.slide.storageKey);
+    ensureCurrentAccount();
     await removeLocalBlob(slideKey(folder.id));
+    ensureCurrentAccount();
     await removeLocalBlob(audioKey(folder.id));
   }
+  ensureCurrentAccount();
+  localStorage.removeItem(LEGACY_KEY);
 }
 
 export async function putFolderBlob(key: string, blob: Blob) {

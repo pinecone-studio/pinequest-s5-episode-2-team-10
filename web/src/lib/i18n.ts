@@ -8,6 +8,9 @@ export const LANG_HEADER = "x-pitch-lang";
 const mn = {
   // Folder list
   folders: "Илтгэлүүд",
+  foldersLoading: "ачаалж байна…",
+  foldersMigrating: "Өмнөх илтгэлүүдийг хадгалж байна…",
+  foldersMigrationFailed: "Өмнөх илтгэлүүдийг хадгалж чадсангүй.",
   foldersNone: "Одоогоор илтгэл алга",
   foldersLead: "Илтгэл бүр өөрийн слайд, бичлэг, зөвлөгөөг нэг дор хадгална.",
   folderSyncRetry: "Дахин оролдох",
@@ -18,7 +21,8 @@ const mn = {
   change: "Солих",
   upload: "Оруулах",
   createOpen: "Үүсгээд орох",
-  foldersEmpty: "Эхний илтгэлээ үүсгээд слайдаа оруулаарай. Дараа нь бичлэг хийж, зөвлөгөө авна.",
+  foldersEmpty:
+    "Эхний илтгэлээ үүсгээд слайдаа оруулаарай. Дараа нь бичлэг хийж, зөвлөгөө авна.",
   noSlide: "Слайд оруулаагүй",
   audioCount: "{n} аудио",
   noAudioYet: "Энэ слайд дээр аудио алга.",
@@ -28,7 +32,8 @@ const mn = {
   slideDrawFail: "Слайдыг зурж чадсангүй.",
   sttFail: "Яриаг текст болгож чадсангүй.",
   recordingName: "Бичлэг",
-  browserNoRecord: "Энэ хөтөч дуу бичихгүй. Chrome, Edge эсвэл Firefox дээр нээнэ үү.",
+  browserNoRecord:
+    "Энэ хөтөч дуу бичихгүй. Chrome, Edge эсвэл Firefox дээр нээнэ үү.",
   micBlocked: "Микрофон хаагдсан. Зөвшөөрсний дараа Ярих дээр дахин дар.",
   recordStartFail: "Бичлэг эхлүүлж чадсангүй.",
   noSpeechInAudio: "Аудиод яриа олдсонгүй.",
@@ -55,8 +60,10 @@ const mn = {
   ttsFail: "Дуу гаргаж чадсангүй.",
   ttsEmpty: "Унших текст алга.",
   ttsTooLong: "Текст хэт урт байна.",
-  ttsNotConfigured: "Дуу хоолой тохируулаагүй байна (AZURE_SPEECH_KEY эсвэл ELEVENLABS_API_KEY).",
-  ttsDailyLimit: "Дуу хоолойн өнөөдрийн хязгаар дууслаа. Маргааш дахин оролдоорой.",
+  ttsNotConfigured:
+    "Дуу хоолой тохируулаагүй байна (AZURE_SPEECH_KEY эсвэл ELEVENLABS_API_KEY).",
+  ttsDailyLimit:
+    "Дуу хоолойн өнөөдрийн хязгаар дууслаа. Маргааш дахин оролдоорой.",
   figmaAdd: "Слайдын холбоос",
   figmaChange: "Слайдын холбоос",
   figmaRemove: "Figma холбоос устгах",
@@ -67,15 +74,18 @@ const mn = {
   renamePitch: "Нэр солих",
   pitchActions: "“{name}”: үйлдлүүд",
   deleteFolderTitle: "“{name}” илтгэлийг устгах уу?",
-  deleteFolderText: "Энэ илтгэлийн слайд, бичлэг, ярианы текст энэ хөтчөөс устна. Буцаах боломжгүй.",
+  deleteFolderText:
+    "Энэ илтгэлийн слайд, бичлэг, ярианы текст энэ хөтчөөс устна. Буцаах боломжгүй.",
   figmaLinkLabel: "Слайдын холбоос",
   sourceFile: "Файл",
   sourceLink: "Холбоос",
   slideTransition: "шилжилт",
   figmaBad: "Figma Slides, дизайн эсвэл прототипийн холбоос оруулна уу.",
   figmaLive: "Figma танилцуулга · анимацтай",
-  figmaShareHint: "Figma дээр “Anyone with the link can view” гэж хуваалцсан байх хэрэгтэй, эс бөгөөс нэвтрэхийг шаардана.",
-  figmaNeedsPdf: "Шинжилгээ слайдын текстийг PDF-ээс уншдаг тул PDF-ээ бас оруулна уу.",
+  figmaShareHint:
+    "Figma дээр “Anyone with the link can view” гэж хуваалцсан байх хэрэгтэй, эс бөгөөс нэвтрэхийг шаардана.",
+  figmaNeedsPdf:
+    "Шинжилгээ слайдын текстийг PDF-ээс уншдаг тул PDF-ээ бас оруулна уу.",
   showPdf: "PDF харах",
   showFigma: "Figma харах (анимацтай)",
   slidesHidden: "анимацийн алхам, хоосон {count} хуудсыг нуусан",
@@ -131,8 +141,10 @@ const mn = {
   audioTooBig: "Аудио 25 MB-аас том байна.",
   audioWrongType: "WAV, MP3, M4A, WebM эсвэл OGG оруулна уу.",
   removeAudio: "Хасах",
-  voiceDown: "Дуу хоолойн сервер ажиллахгүй байна. scripts\\voice.ps1-ийг асаана уу.",
-  voiceTokenMissing: "PITCH_VOICE_TOKEN алга (.env.voice эсвэл web/.env.local).",
+  voiceDown:
+    "Дуу хоолойн сервер ажиллахгүй байна. scripts\\voice.ps1-ийг асаана уу.",
+  voiceTokenMissing:
+    "PITCH_VOICE_TOKEN алга (.env.voice эсвэл web/.env.local).",
   voiceTokenWrong: "Дуу хоолойн серверийн токен таарсангүй.",
   voiceError: "Дуу хоолойн сервер алдаа өглөө ({status}).",
   voiceBadReply: "Дуу хоолойн серверийн хариу буруу хэлбэртэй байна.",
@@ -145,7 +157,8 @@ const mn = {
   llmBadShape: "LLM-ийн хариу хэлбэр таарсангүй.",
   ollamaDown: "Ollama ажиллахгүй байна.",
   ollamaNotPulled: "Ollama-д {m} татаагүй байна (ollama pull {m}).",
-  ollamaUnreachable: "Ollama рүү хүрч чадсангүй. Ollama асаалттай эсэхийг шалгана уу.",
+  ollamaUnreachable:
+    "Ollama рүү хүрч чадсангүй. Ollama асаалттай эсэхийг шалгана уу.",
   ollamaError: "Ollama алдаа ({status}).",
   ollamaBadShape: "Ollama-гийн хариу хэлбэр таарсангүй.",
   badPoints: "Гол санаа 6-аас олон эсвэл буруу хэлбэртэй байна.",
@@ -167,11 +180,14 @@ const mn = {
   strengths: "Сайн тал",
   practiceTasks: "Дадлагын даалгавар",
   practiceGoal: "Зорилго",
-  slideWrongType: "PDF, PowerPoint (.pptx, .ppt), OpenDocument (.odp) эсвэл зураг (PNG, JPG, WebP, GIF) оруулна уу.",
+  slideWrongType:
+    "PDF, PowerPoint (.pptx, .ppt), OpenDocument (.odp) эсвэл зураг (PNG, JPG, WebP, GIF) оруулна уу.",
   convertingSlide: "Слайдыг PDF болгож байна…",
-  deckNoOffice: "PowerPoint файлыг хөрвүүлэх LibreOffice сервер дээр алга. PDF болгож хадгалаад оруулна уу.",
+  deckNoOffice:
+    "PowerPoint файлыг хөрвүүлэх LibreOffice сервер дээр алга. PDF болгож хадгалаад оруулна уу.",
   deckTooBig: "Слайдын файл 50 MB-аас том байна.",
-  deckConvertFailed: "Слайдыг PDF болгож чадсангүй. PowerPoint дээр PDF болгож хадгалаад оруулна уу.",
+  deckConvertFailed:
+    "Слайдыг PDF болгож чадсангүй. PowerPoint дээр PDF болгож хадгалаад оруулна уу.",
   writing: "бичиж байна…",
   analysisResult: "Шинжилгээний үр дүн",
   showResult: "Үр дүнг харах",
@@ -190,18 +206,23 @@ const mn = {
   rulesRepeatsAction: "Үгээ нэг удаа хэл; бодох хэрэгтэй бол завсарла.",
   rulesSlideAction: "Слайд бүрийн гол санааг өөрийн үгээр нэг өгүүлбэрээр хэл.",
   rulesShortTitle: "Яриа богино байна",
-  rulesShortWhy: "Нийт {n} үг. Асуудал, шийдэл, хүсэлтээ бүрэн хэлэхэд хүрэлцэхгүй байж магадгүй.",
-  rulesShortAction: "Асуудал, шийдэл, яагаад та, юу хүсэж байгаагаа тус бүр нэг хоёр өгүүлбэрээр хэл.",
+  rulesShortWhy:
+    "Нийт {n} үг. Асуудал, шийдэл, хүсэлтээ бүрэн хэлэхэд хүрэлцэхгүй байж магадгүй.",
+  rulesShortAction:
+    "Асуудал, шийдэл, яагаад та, юу хүсэж байгаагаа тус бүр нэг хоёр өгүүлбэрээр хэл.",
   measuredTag: "хэмжсэн",
   longTitle: "Хэт урт өгүүлбэр",
-  longWhy: "{n} өгүүлбэр {limit}-аас олон үгтэй. Сонсогч урт өгүүлбэрийг дагахад хэцүү.",
-  longAction: "Нэг өгүүлбэрт нэг санаа. Урт өгүүлбэрийг хоёр гурав болгож хуваа.",
+  longWhy:
+    "{n} өгүүлбэр {limit}-аас олон үгтэй. Сонсогч урт өгүүлбэрийг дагахад хэцүү.",
+  longAction:
+    "Нэг өгүүлбэрт нэг санаа. Урт өгүүлбэрийг хоёр гурав болгож хуваа.",
   runOnTitle: "«Тэгээд»-ээр холбосон урт өгүүлбэр",
   runOnWhy: "Нэг өгүүлбэрт «тэгээд» {n} удаа орсон.",
   runOnAction: "«Тэгээд»-ийн оронд өгүүлбэрээ дуусгаж, богино завсарла.",
   numberTitle: "Тоо слайдтай таарахгүй байна",
   numberWhy: "Слайд дээр {slide} гэж байгаа ч ярианд өөр утга хэлсэн.",
-  numberAction: "Слайд дээрх тоог яг тэр хэвээр нь хэл, эсвэл слайдаа засаарай.",
+  numberAction:
+    "Слайд дээрх тоог яг тэр хэвээр нь хэл, эсвэл слайдаа засаарай.",
   numberWhyPair: "Слайд дээр {slide} гэж байгаа ч та {said} гэж хэлсэн.",
   ollamaCarefulName: "Gemma · Ollama ({m}) · нягт, удаан",
   backendName: "Бүрэн шинжилгээ (backend)",
@@ -211,8 +232,10 @@ const mn = {
   backendConnecting: "Backend-тэй холбогдож байна…",
   backendUploading: "Дуу, слайдыг илгээж байна…",
   backendAnalyzing: "Шинжилж байна… (хэдэн минут болж магадгүй)",
-  backendNoAudio: "Дууны файл алга. Эхлээд яриагаа бичүүлэх эсвэл аудио оруулна уу.",
-  backendSlideSkipped: "Backend зөвхөн PDF/PPTX слайд авдаг тул зургийг илгээгээгүй.",
+  backendNoAudio:
+    "Дууны файл алга. Эхлээд яриагаа бичүүлэх эсвэл аудио оруулна уу.",
+  backendSlideSkipped:
+    "Backend зөвхөн PDF/PPTX слайд авдаг тул зургийг илгээгээгүй.",
   rulesName: "Энгийн шалгалт (LLM-гүй)",
   rulesNoText: "Ярианы текст алга тул шалгах зүйл алга.",
   rulesFillers: "Дүүргэгч үг",
@@ -221,13 +244,15 @@ const mn = {
   rulesRepeats: "Давталт",
   rulesSlide: "Слайдтай давхцал",
   rulesSlideDetail: "Слайдын {total} түлхүүр үгээс {covered} нь ярианд орсон.",
-  rulesSummary: "Нийт {n} үг. LLM-гүй энгийн шалгалт: гол санаа, дүүргэгч үг, давталт, слайдтай давхцал, урт.",
+  rulesSummary:
+    "Нийт {n} үг. LLM-гүй энгийн шалгалт: гол санаа, дүүргэгч үг, давталт, слайдтай давхцал, урт.",
   replyLanguage: "Mongolian",
   signIn: "Нэвтрэх",
   signInDemo: "Демогоор нэвтрэх",
   landingEyebrow: "Илтгэлийн AI дасгалжуулагч",
   landingTitle: "Сайн санаа *тод* сонсогдох ёстой",
-  landingSub: "Слайдаа оруулаад илтгэлээ бичүүл. Saylo таны яриаг шинжилж, юуг засахыг тодорхой хэлнэ.",
+  landingSub:
+    "Слайдаа оруулаад илтгэлээ бичүүл. Saylo таны яриаг шинжилж, юуг засахыг тодорхой хэлнэ.",
   landingStart: "Эхлэх",
   landingSignIn: "Нэвтрэх",
   landingScroll: "Доош гүйлгэ",
@@ -252,7 +277,8 @@ const mn = {
   landingFooter: "Сайн санааг тод сонсогдуулна.",
   back: "Буцах",
   signInGoogle: "Google-ээр нэвтрэх",
-  googleNotEnabled: "Google-ээр нэвтрэх тохиргоо Supabase дээр идэвхжээгүй байна.",
+  googleNotEnabled:
+    "Google-ээр нэвтрэх тохиргоо Supabase дээр идэвхжээгүй байна.",
   googleFailed: "Google-ээр нэвтэрч чадсангүй. Дахин оролдоно уу.",
   signUp: "Бүртгүүлэх",
   email: "Имэйл",
@@ -263,8 +289,12 @@ const mn = {
   authNeedAccount: "Бүртгэлгүй юу?",
   authWorking: "Түр хүлээнэ үү…",
   authEmailTaken: "Энэ имэйлээр бүртгэл байна.",
+  authEmailInvalid: "Имэйл хаягаа зөв оруулна уу.",
+  authPasswordShort: "Нууц үг хамгийн багадаа 8 тэмдэгт байх ёстой.",
+  authPasswordLong: "Нууц үг 128 тэмдэгтээс урт байж болохгүй.",
   authBadLogin: "Имэйл/хэрэглэгчийн нэр эсвэл нууц үг буруу.",
-  authInvalid: "Имэйл, хэрэглэгчийн нэр, нууц үгээ шалгана уу. Нууц үг хамгийн багадаа 8 тэмдэгт.",
+  authInvalid:
+    "Имэйл, хэрэглэгчийн нэр, нууц үгээ шалгана уу. Нууц үг хамгийн багадаа 8 тэмдэгт.",
   authMismatch: "Нууц үг таарахгүй байна.",
   authFailed: "Нэвтэрч чадсангүй. Дахин оролдоно уу.",
   authLoginTitle: "Эргээд тавтай морил",
@@ -273,12 +303,15 @@ const mn = {
   authRegisterSub: "Анхны илтгэлээ хэдхэн минутад шалгуулаарай.",
   authIdentifier: "Имэйл эсвэл хэрэглэгчийн нэр",
   username: "Хэрэглэгчийн нэр",
-  authUsernameHint: "3–30 тэмдэгт: латин жижиг үсэг, тоо, цэг, доогуур зураас.",
+  authUsernameHint: "Хүссэн нэрээ бичнэ үү (1–40 тэмдэгт).",
+  authUsernameRequired: "Хэрэглэгчийн нэрээ оруулна уу.",
   authPasswordRepeat: "Нууц үгээ давтана уу",
   authOr: "эсвэл",
   authUsernameTaken: "Энэ хэрэглэгчийн нэр аль хэдийн бүртгэгдсэн байна.",
-  authUsernameInvalid: "Хэрэглэгчийн нэр 3–30 тэмдэгт, зөвхөн латин жижиг үсэг, тоо, цэг, доогуур зураас байна.",
-  authLegal: "Үргэлжлүүлснээр та үйлчилгээний нөхцөл, нууцлалын бодлогыг зөвшөөрч байна.",
+  authUsernameInvalid:
+    "Хэрэглэгчийн нэрээ 1–40 тэмдэгтээр оруулна уу.",
+  authLegal:
+    "Үргэлжлүүлснээр та үйлчилгээний нөхцөл, нууцлалын бодлогыг зөвшөөрч байна.",
   logOut: "Гарах",
   currentAccount: "Одоогийн бүртгэл",
   adminPanel: "Админ",
@@ -324,7 +357,8 @@ const mn = {
   adminActivityProjectCount: "{count} pitch",
   adminActivityAttemptCount: "{count} оролдлого",
   adminActivityEmpty: "Одоогоор дадлагын өгөгдөл алга.",
-  adminDemoNotice: "Демо горим: доорх эрх, төлөвийн өөрчлөлт зөвхөн жишээ мэдээлэлд үйлчилнэ.",
+  adminDemoNotice:
+    "Демо горим: доорх эрх, төлөвийн өөрчлөлт зөвхөн жишээ мэдээлэлд үйлчилнэ.",
   adminDemoChangeSaved: "Жишээ мэдээллийн өөрчлөлтийг харууллаа.",
   adminUsers: "Хэрэглэгчид",
   adminUserCount: "Нийт {count} хэрэглэгч",
@@ -353,11 +387,13 @@ const mn = {
   adminSaved: "Өөрчлөлтийг хадгаллаа.",
   adminRoleConfirmTitle: "Хэрэглэгчийн эрхийг өөрчлөх үү?",
   adminStatusConfirmTitle: "Хэрэглэгчийн төлөвийг өөрчлөх үү?",
-  adminPromoteConfirm: "{email}-д админ эрх олгох уу? Админ бусдын бүх pitch, бичлэг, transcript-д хандах боломжтой.",
+  adminPromoteConfirm:
+    "{email}-д админ эрх олгох уу? Админ бусдын бүх pitch, бичлэг, transcript-д хандах боломжтой.",
   adminDemoteConfirm: "{email}-ийн админ эрхийг авах уу?",
   adminActivateConfirm: "{email} бүртгэлийг идэвхжүүлэх үү?",
   adminDeactivateConfirm: "{email} бүртгэлийг идэвхгүй болгох уу?",
-  adminDeactivateNote: "Идэвхгүй болгосноор тухайн хэрэглэгчийн нэвтэрсэн бүх session хүчингүй болно.",
+  adminDeactivateNote:
+    "Идэвхгүй болгосноор тухайн хэрэглэгчийн нэвтэрсэн бүх session хүчингүй болно.",
   retry: "Дахин оролдох",
   confirm: "Батлах",
   // Camera coach
@@ -366,7 +402,8 @@ const mn = {
   coachSide: "Слайд миний",
   coachSideLeft: "зүүн талд",
   coachSideRight: "баруун талд",
-  coachSwipeHint: "Гараа биеийнхээ урдуур зүүн тийш шударвал дараагийн слайд, баруун тийш бол өмнөх слайд.",
+  coachSwipeHint:
+    "Гараа биеийнхээ урдуур зүүн тийш шударвал дараагийн слайд, баруун тийш бол өмнөх слайд.",
   coachLoading: "Камер асааж байна…",
   cameraBlocked: "Камер хаагдсан. Зөвшөөрсний дараа Камер нээх дээр дахин дар.",
   coachFailed: "Хөдөлгөөн танигчийг ачаалж чадсангүй.",
@@ -380,8 +417,12 @@ export type MessageKey = keyof typeof mn;
 
 const en: Record<MessageKey, string> = {
   folders: "Pitches",
+  foldersLoading: "Loading your pitches…",
+  foldersMigrating: "Saving your previous pitches…",
+  foldersMigrationFailed: "Couldn't save your previous pitches.",
   foldersNone: "No pitches yet",
-  foldersLead: "Each pitch keeps its slides, recordings, and feedback in one place.",
+  foldersLead:
+    "Each pitch keeps its slides, recordings, and feedback in one place.",
   folderSyncRetry: "Retry",
   addFolder: "Add pitch",
   folderName: "Pitch name",
@@ -390,7 +431,8 @@ const en: Record<MessageKey, string> = {
   change: "Change",
   upload: "Upload",
   createOpen: "Create and open",
-  foldersEmpty: "Create your first pitch and add its slides. Then record it and get feedback.",
+  foldersEmpty:
+    "Create your first pitch and add its slides. Then record it and get feedback.",
   noSlide: "No slide uploaded",
   audioCount: "{n} audio files",
   noAudioYet: "No audio files for this slide yet.",
@@ -399,7 +441,8 @@ const en: Record<MessageKey, string> = {
   slideDrawFail: "Could not draw the slide.",
   sttFail: "Could not turn the speech into text.",
   recordingName: "Recording",
-  browserNoRecord: "This browser can't record audio. Open it in Chrome, Edge or Firefox.",
+  browserNoRecord:
+    "This browser can't record audio. Open it in Chrome, Edge or Firefox.",
   micBlocked: "The microphone is blocked. Allow it, then press Speak again.",
   recordStartFail: "Could not start recording.",
   noSpeechInAudio: "No speech was found in the audio.",
@@ -426,8 +469,10 @@ const en: Record<MessageKey, string> = {
   ttsFail: "Couldn't play the voice.",
   ttsEmpty: "There's no text to read.",
   ttsTooLong: "The text is too long to read aloud.",
-  ttsNotConfigured: "No voice is set up (AZURE_SPEECH_KEY or ELEVENLABS_API_KEY).",
-  ttsDailyLimit: "Today's limit for reading aloud is used up. Try again tomorrow.",
+  ttsNotConfigured:
+    "No voice is set up (AZURE_SPEECH_KEY or ELEVENLABS_API_KEY).",
+  ttsDailyLimit:
+    "Today's limit for reading aloud is used up. Try again tomorrow.",
   figmaAdd: "Slide link",
   figmaChange: "Slide link",
   figmaRemove: "Remove Figma link",
@@ -438,15 +483,18 @@ const en: Record<MessageKey, string> = {
   renamePitch: "Rename",
   pitchActions: "Actions for “{name}”",
   deleteFolderTitle: "Delete “{name}”?",
-  deleteFolderText: "Its slides, recordings and speech text are removed from this browser. This can't be undone.",
+  deleteFolderText:
+    "Its slides, recordings and speech text are removed from this browser. This can't be undone.",
   figmaLinkLabel: "Slide link",
   sourceFile: "File",
   sourceLink: "Link",
   slideTransition: "transition",
   figmaBad: "Paste a link to a Figma Slides deck, design or prototype.",
   figmaLive: "Figma presentation · with animations",
-  figmaShareHint: "Share the deck in Figma as “Anyone with the link can view”, or viewers will be asked to sign in.",
-  figmaNeedsPdf: "Also upload the PDF: the analysis reads the slide text from it.",
+  figmaShareHint:
+    "Share the deck in Figma as “Anyone with the link can view”, or viewers will be asked to sign in.",
+  figmaNeedsPdf:
+    "Also upload the PDF: the analysis reads the slide text from it.",
   showPdf: "Show PDF",
   showFigma: "Show Figma (animated)",
   slidesHidden: "{count} animation steps or empty pages hidden",
@@ -500,7 +548,8 @@ const en: Record<MessageKey, string> = {
   audioWrongType: "Use WAV, MP3, M4A, WebM, or OGG.",
   removeAudio: "Remove",
   voiceDown: "The voice server isn't running. Start scripts\\voice.ps1.",
-  voiceTokenMissing: "PITCH_VOICE_TOKEN is missing (.env.voice or web/.env.local).",
+  voiceTokenMissing:
+    "PITCH_VOICE_TOKEN is missing (.env.voice or web/.env.local).",
   voiceTokenWrong: "The voice server rejected the token.",
   voiceError: "The voice server returned an error ({status}).",
   voiceBadReply: "The voice server's reply has the wrong shape.",
@@ -535,11 +584,14 @@ const en: Record<MessageKey, string> = {
   strengths: "Strengths",
   practiceTasks: "Practice tasks",
   practiceGoal: "Goal",
-  slideWrongType: "Use a PDF, PowerPoint (.pptx, .ppt), OpenDocument (.odp) or an image (PNG, JPG, WebP, GIF).",
+  slideWrongType:
+    "Use a PDF, PowerPoint (.pptx, .ppt), OpenDocument (.odp) or an image (PNG, JPG, WebP, GIF).",
   convertingSlide: "Converting the slides to PDF…",
-  deckNoOffice: "LibreOffice, which converts PowerPoint files, isn't on the server. Save the deck as PDF and upload that.",
+  deckNoOffice:
+    "LibreOffice, which converts PowerPoint files, isn't on the server. Save the deck as PDF and upload that.",
   deckTooBig: "The slide file is larger than 50 MB.",
-  deckConvertFailed: "Couldn't convert the slides to PDF. Save the deck as PDF in PowerPoint and upload that.",
+  deckConvertFailed:
+    "Couldn't convert the slides to PDF. Save the deck as PDF in PowerPoint and upload that.",
   writing: "writing…",
   analysisResult: "Analysis",
   showResult: "Show result",
@@ -556,17 +608,22 @@ const en: Record<MessageKey, string> = {
   rulesPointAction: "Say it in one clear sentence, with a fact or an example.",
   rulesFillersAction: "Pause silently instead of using a filler.",
   rulesRepeatsAction: "Say each word once; pause if you need time to think.",
-  rulesSlideAction: "Say each slide's main idea in one sentence, in your own words.",
+  rulesSlideAction:
+    "Say each slide's main idea in one sentence, in your own words.",
   rulesShortTitle: "The speech is short",
-  rulesShortWhy: "{n} words in total; likely too short to cover the problem, solution and ask.",
-  rulesShortAction: "Give the problem, the solution, why you, and what you're asking for, a sentence or two each.",
+  rulesShortWhy:
+    "{n} words in total; likely too short to cover the problem, solution and ask.",
+  rulesShortAction:
+    "Give the problem, the solution, why you, and what you're asking for, a sentence or two each.",
   measuredTag: "measured",
   longTitle: "Very long sentences",
-  longWhy: "{n} sentence(s) with more than {limit} words. Long sentences are hard to follow when spoken.",
+  longWhy:
+    "{n} sentence(s) with more than {limit} words. Long sentences are hard to follow when spoken.",
   longAction: "One idea per sentence. Split long sentences into two or three.",
   runOnTitle: "A run-on sentence joined with «тэгээд»",
   runOnWhy: "«Тэгээд» appears {n} times in one sentence.",
-  runOnAction: "End the sentence instead of saying «тэгээд», and pause briefly.",
+  runOnAction:
+    "End the sentence instead of saying «тэгээд», and pause briefly.",
   numberTitle: "A number doesn't match the slides",
   numberWhy: "The slides say {slide}, but the speech gave a different value.",
   numberAction: "Say the number exactly as on the slide, or correct the slide.",
@@ -580,7 +637,8 @@ const en: Record<MessageKey, string> = {
   backendUploading: "Sending the audio and slides…",
   backendAnalyzing: "Analysing… (this can take a few minutes)",
   backendNoAudio: "No audio. Record your speech or upload audio first.",
-  backendSlideSkipped: "The backend takes PDF or PPTX slides only, so the image wasn't sent.",
+  backendSlideSkipped:
+    "The backend takes PDF or PPTX slides only, so the image wasn't sent.",
   rulesName: "Simple check (no LLM)",
   rulesNoText: "There is no speech text to check.",
   rulesFillers: "Filler words",
@@ -589,13 +647,15 @@ const en: Record<MessageKey, string> = {
   rulesRepeats: "Repeats",
   rulesSlide: "Slide overlap",
   rulesSlideDetail: "{covered} of the slide's {total} key words were spoken.",
-  rulesSummary: "{n} words in total. A simple check without an LLM: main points, fillers, repeats, slide overlap, length.",
+  rulesSummary:
+    "{n} words in total. A simple check without an LLM: main points, fillers, repeats, slide overlap, length.",
   replyLanguage: "English",
   signIn: "Sign in",
   signInDemo: "Continue as demo",
   landingEyebrow: "AI pitch coach",
   landingTitle: "Good ideas deserve to be heard *clearly*",
-  landingSub: "Add your slides and record your pitch. Saylo analyzes what you said and tells you exactly what to fix.",
+  landingSub:
+    "Add your slides and record your pitch. Saylo analyzes what you said and tells you exactly what to fix.",
   landingStart: "Get started",
   landingSignIn: "Sign in",
   landingScroll: "Scroll",
@@ -631,8 +691,12 @@ const en: Record<MessageKey, string> = {
   authNeedAccount: "Need an account?",
   authWorking: "Please wait…",
   authEmailTaken: "An account with this email already exists.",
+  authEmailInvalid: "Enter a valid email address.",
+  authPasswordShort: "Password must be at least 8 characters.",
+  authPasswordLong: "Password must be no longer than 128 characters.",
   authBadLogin: "Email/username or password is wrong.",
-  authInvalid: "Check the email, username, and password. The password needs at least 8 characters.",
+  authInvalid:
+    "Check the email, username, and password. The password needs at least 8 characters.",
   authMismatch: "The passwords don't match.",
   authFailed: "Could not sign in. Try again.",
   authLoginTitle: "Welcome back",
@@ -641,12 +705,16 @@ const en: Record<MessageKey, string> = {
   authRegisterSub: "Get feedback on your first pitch in minutes.",
   authIdentifier: "Email or username",
   username: "Username",
-  authUsernameHint: "3–30 characters: lowercase Latin letters, digits, dots, underscores.",
+  authUsernameHint:
+    "Choose any username from 1 to 40 characters.",
+  authUsernameRequired: "Enter a username.",
   authPasswordRepeat: "Repeat your password",
   authOr: "or",
   authUsernameTaken: "This username is already taken.",
-  authUsernameInvalid: "Usernames are 3–30 lowercase Latin letters, digits, dots, or underscores.",
-  authLegal: "By continuing you agree to our Terms of Service and Privacy Policy.",
+  authUsernameInvalid:
+    "Enter a username from 1 to 40 characters.",
+  authLegal:
+    "By continuing you agree to our Terms of Service and Privacy Policy.",
   logOut: "Log out",
   currentAccount: "Current account",
   adminPanel: "Admin",
@@ -692,7 +760,8 @@ const en: Record<MessageKey, string> = {
   adminActivityProjectCount: "{count} pitches",
   adminActivityAttemptCount: "{count} attempts",
   adminActivityEmpty: "No practice activity yet.",
-  adminDemoNotice: "Demo mode: role and status changes below affect sample accounts only.",
+  adminDemoNotice:
+    "Demo mode: role and status changes below affect sample accounts only.",
   adminDemoChangeSaved: "Sample account updated.",
   adminUsers: "Users",
   adminUserCount: "{count} users",
@@ -721,7 +790,8 @@ const en: Record<MessageKey, string> = {
   adminSaved: "Changes saved.",
   adminRoleConfirmTitle: "Change this user's role?",
   adminStatusConfirmTitle: "Change this user's status?",
-  adminPromoteConfirm: "Give {email} admin access? Admins can access all pitches, recordings, and transcripts.",
+  adminPromoteConfirm:
+    "Give {email} admin access? Admins can access all pitches, recordings, and transcripts.",
   adminDemoteConfirm: "Remove admin access from {email}?",
   adminActivateConfirm: "Activate {email}'s account?",
   adminDeactivateConfirm: "Deactivate {email}'s account?",
@@ -733,26 +803,39 @@ const en: Record<MessageKey, string> = {
   coachSide: "The slide is on my",
   coachSideLeft: "left",
   coachSideRight: "right",
-  coachSwipeHint: "Swipe a hand across your body to your left for the next slide, to your right for the previous one.",
+  coachSwipeHint:
+    "Swipe a hand across your body to your left for the next slide, to your right for the previous one.",
   coachLoading: "Starting the camera…",
-  cameraBlocked: "The camera is blocked. Allow it, then press Open camera again.",
+  cameraBlocked:
+    "The camera is blocked. Allow it, then press Open camera again.",
   coachFailed: "Could not load movement tracking.",
   coachPoints: "Pointed at the slide: {n}",
   coachWrong: "with the wrong hand: {n}",
-  coachWrongHand: "Point with the hand on the slide's side, so you keep facing the audience.",
+  coachWrongHand:
+    "Point with the hand on the slide's side, so you keep facing the audience.",
   coachPointHint: "Point to your slide with your hand.",
 };
 
 const DICTS: Record<Lang, Record<MessageKey, string>> = { mn, en };
 
 export function isLang(value: unknown): value is Lang {
-  return typeof value === "string" && (LANGS as readonly string[]).includes(value);
+  return (
+    typeof value === "string" && (LANGS as readonly string[]).includes(value)
+  );
 }
 
 /** Text for `key`, with {name} placeholders filled from `vars`. */
-export function t(lang: Lang, key: MessageKey, vars?: Record<string, string | number>): string {
+export function t(
+  lang: Lang,
+  key: MessageKey,
+  vars?: Record<string, string | number>,
+): string {
   const text = DICTS[lang][key];
-  return vars ? text.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`)) : text;
+  return vars
+    ? text.replace(/\{(\w+)\}/g, (_, name: string) =>
+        String(vars[name] ?? `{${name}}`),
+      )
+    : text;
 }
 
 /** The language a route should answer in. */

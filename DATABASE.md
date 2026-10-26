@@ -9,7 +9,7 @@ An account. The browser keeps the access token.
 - `id`: UUID primary key
 - `token_hash`: SHA-256 of the access token (unique, indexed); the token itself is never stored
 - `email`: optional lowercase unique email; `NULL` for accounts created before login existed
-- `username`: optional lowercase unique username (3–30 characters of `a-z`, `0-9`, `.`, `_`), chosen at registration and usable instead of the email to sign in; `NULL` for Google, demo, and older accounts
+- `username`: optional unique normalized name (1–40 characters), chosen at registration and usable instead of the email to sign in; `NULL` for Google, demo, and older accounts
 - `password_hash`: PBKDF2-SHA256 (`pbkdf2_sha256$iterations$salt$digest`). The password itself is never stored
 - `role`: `member` (default) or `admin`; assigned and enforced by the backend
 - `is_active`: whether the account can authenticate (default `true`)
