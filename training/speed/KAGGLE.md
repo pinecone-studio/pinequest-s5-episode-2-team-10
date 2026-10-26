@@ -35,7 +35,7 @@ python -m training.speed.make_data --transcripts data/transcripts --synthetic 30
 ## 3. Upload the data as a private dataset
 
 1. **Create → New Dataset**, upload `train.jsonl` and `test.jsonl`, name it `saylo-speed`, and keep it **Private**.
-2. In the notebook, **Add Input → Your Datasets → saylo-speed**. It appears at `/kaggle/input/saylo-speed/`. Check the exact path with `!ls /kaggle/input`.
+2. In the notebook, **Add Input → Your Datasets → saylo-speed**. Kaggle mounts it somewhere under `/kaggle/input/`. `--data /kaggle/input` makes the script search there for `train.jsonl`.
 
 Each new batch of data is a **New Version** of the same dataset, so the notebook doesn't change.
 
@@ -58,7 +58,7 @@ Each new batch of data is a **New Version** of the same dataset, so the notebook
 # the GGUF export builds llama.cpp first, which adds about 5–10 minutes)
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"   # one GPU; Unsloth doesn't split across both
-!python -m training.speed.train_e2b --data /kaggle/input/saylo-speed --out /kaggle/working/model --epochs 2
+!python -m training.speed.train_e2b --data /kaggle/input --out /kaggle/working/model --epochs 2
 ```
 
 ```python

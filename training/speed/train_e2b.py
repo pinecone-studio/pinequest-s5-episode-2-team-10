@@ -36,6 +36,17 @@ def turn_markers(tokenizer) -> tuple[str, str]:
     return user_part, model_part
 
 
+def find_train_file(data: Path) -> Path:
+    """train.jsonl in `data`, or anywhere below it (Kaggle mounts datasets in nested folders)."""
+    if (data / "train.jsonl").is_file():
+        return data / "train.jsonl"
+    for root in (data, data.parent):
+        found = sorted(root.rglob("train.jsonl")) if root.is_dir() else []
+        if found:
+            return found[0]
+    raise SystemExit(f"train.jsonl not found in {data} or below it; pass the right folder with --data")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=Path("data/speed"))
@@ -46,10 +57,14 @@ def main() -> int:
     ap.add_argument("--max-seq", type=int, default=8192)
     args = ap.parse_args()
 
-    from datasets import Dataset
-    from trl import SFTConfig, SFTTrainer
+    # Unsloth first: it patches trl/transformers when imported.
     from unsloth import FastModel
     from unsloth.chat_templates import train_on_responses_only
+    from datasets import Dataset
+    from trl import SFTConfig, SFTTrainer
+
+    train_file = find_train_file(args.data)
+    print(f"training data: {train_file}")
 
     model, tokenizer = FastModel.from_pretrained(args.base, max_seq_length=args.max_seq, load_in_4bit=True)
     model = FastModel.get_peft_model(
@@ -58,7 +73,7 @@ def main() -> int:
         finetune_attention_modules=True, finetune_mlp_modules=True, random_state=7,
     )
 
-    rows = [json.loads(line) for line in (args.data / "train.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = [json.loads(line) for line in train_file.read_text(encoding="utf-8").splitlines() if line.strip()]
     texts = [tokenizer.apply_chat_template(r["messages"], tokenize=False) for r in rows]
     print(f"{len(texts)} training examples")
 
