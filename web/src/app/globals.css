@@ -3016,14 +3016,15 @@ textarea.ui-input {
 .landing h1,
 .landing h2 {
   margin: 0;
-  font-family: var(--font-display), Georgia, serif;
-  font-weight: 500;
-  letter-spacing: -0.015em;
+  font-family: var(--font-landing), var(--font-inter), system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.035em;
   text-wrap: balance;
 }
 
 .landing em {
-  font-style: italic;
+  color: #b7b1ff;
+  font-style: normal;
 }
 
 .landing-eyebrow {
@@ -3053,9 +3054,9 @@ textarea.ui-input {
 }
 
 .landing-hero h1 {
-  max-width: 11ch;
-  font-size: clamp(50px, 7.6vw, 108px);
-  line-height: 0.98;
+  max-width: 12ch;
+  font-size: clamp(40px, 5.8vw, 84px);
+  line-height: 1.05;
 }
 
 .landing-hero p,
@@ -3112,8 +3113,8 @@ textarea.ui-input {
 .landing-how h2,
 .landing-features-title {
   max-width: 12ch;
-  font-size: clamp(40px, 5.2vw, 72px);
-  line-height: 1.02;
+  font-size: clamp(32px, 4.2vw, 58px);
+  line-height: 1.05;
 }
 
 .landing-steps {
@@ -3149,9 +3150,9 @@ textarea.ui-input {
   border: 1px solid var(--landing-accent);
   border-radius: 50%;
   color: var(--landing-ink);
-  font-family: var(--font-display), Georgia, serif;
-  font-size: 22px;
-  font-weight: 500;
+  font-family: var(--font-landing), var(--font-inter), system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
 }
 
 .landing-step h3,
@@ -3228,8 +3229,8 @@ textarea.ui-input {
 
 .landing-cta h2 {
   max-width: 14ch;
-  font-size: clamp(44px, 6vw, 84px);
-  line-height: 1;
+  font-size: clamp(36px, 4.8vw, 66px);
+  line-height: 1.05;
 }
 
 .landing-cta .landing-actions {
