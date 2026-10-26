@@ -77,11 +77,7 @@ One attempt inside a project. Project details are copied in when it is analyzed,
 
 ### Added columns
 
-<<<<<<< Updated upstream
-`project.idea`, `project.key_points`, `session.idea`, `session.key_points`, `app_user.email`, `app_user.username`, `app_user.password_hash`, `app_user.role`, and `app_user.is_active` were added after the first release. `backend/db.py` adds them on startup when they are missing (`ADDED_COLUMNS`), on SQLite and Postgres alike, so existing databases keep their data. Existing users receive the safe defaults `member` and active. Unique indexes are added on `app_user.email` and `app_user.username` when the table does not already have them. Add later columns there too. Older rows keep a null email until someone registers.
-=======
 `project.idea`, `project.key_points`, `project.point_slides`, `project.figma_url`, `project.script`, `project.selected_audio_id`, `session.idea`, `session.key_points`, `session.audio_filename`, `app_user.email`, `app_user.password_hash`, `app_user.role`, and `app_user.is_active` are added when missing by `backend/db.py` (`ADDED_COLUMNS`), on SQLite and Postgres alike. Existing databases keep their data; no table recreation is needed. Existing users receive the safe defaults `member` and active. A unique index is added on `app_user.email` when the table does not already have one. Add later columns there too. Older rows keep a null email until someone registers.
->>>>>>> Stashed changes
 
 ## Relationships
 

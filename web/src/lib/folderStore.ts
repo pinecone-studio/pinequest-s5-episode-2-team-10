@@ -400,19 +400,16 @@ export const timingsKey = (storageKey: string) => `pitchcoach:timings:${storageK
 
 /** Deletes a stored file, and the word timings saved for it when it is a recording. */
 export async function deleteFolderBlob(key: string) {
-<<<<<<< Updated upstream
   try {
     localStorage.removeItem(timingsKey(key));
   } catch {
     /* storage blocked: nothing saved to remove */
   }
-=======
   if (remoteMode && key.startsWith("api-audio:")) {
     await deleteServerAudio(key.slice("api-audio:".length));
     return;
   }
   if (remoteMode) return;
->>>>>>> Stashed changes
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");
