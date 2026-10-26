@@ -2675,6 +2675,11 @@ textarea.ui-input {
   font-size: 14px;
 }
 
+.admin-demo-notice {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+}
+
 .admin-users-card {
   padding: 20px;
 }
