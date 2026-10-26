@@ -90,9 +90,10 @@ function upload<T>(id: string, kind: "audio" | "slides", file: Blob, filename: s
 }
 
 const realApi = {
-  register: (email: string, password: string) =>
-    send<AuthSession>("/auth/register", json("POST", { email, password }), null),
-  login: (email: string, password: string) => send<AuthSession>("/auth/login", json("POST", { email, password }), null),
+  register: (email: string, username: string, password: string) =>
+    send<AuthSession>("/auth/register", json("POST", { email, username, password }), null),
+  /** `login` is the email address or the username. */
+  login: (login: string, password: string) => send<AuthSession>("/auth/login", json("POST", { login, password }), null),
   demo: async () => {
     try {
       return await send<AuthSession>("/auth/demo", { method: "POST" }, null);
@@ -100,12 +101,12 @@ const realApi = {
       // The GPU PC still serves the older API, which creates an anonymous user at POST /users.
       if (!(err instanceof ApiRequestError) || err.status !== 404) throw err;
       const created = await send<{ id: string; access_token: string }>("/users", { method: "POST" }, null);
-      return { id: created.id, email: "demo@pitchcoach.local", role: "member" as const, access_token: created.access_token };
+      return { id: created.id, email: "demo@pitchcoach.local", username: null, role: "member" as const, access_token: created.access_token };
     }
   },
   google: (accessToken: string) =>
     send<AuthSession>("/auth/google", json("POST", { access_token: accessToken }), null),
-  me: () => request<{ id: string; email: string; role: "member" | "admin" }>("/auth/me"),
+  me: () => request<{ id: string; email: string; username: string | null; role: "member" | "admin" }>("/auth/me"),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   adminUsers: () => request<AdminUser[]>("/admin/users"),
   updateAdminUser: (id: string, changes: { role?: "member" | "admin"; is_active?: boolean }) =>

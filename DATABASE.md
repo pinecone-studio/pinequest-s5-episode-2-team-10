@@ -9,6 +9,7 @@ An account. The browser keeps the access token.
 - `id`: UUID primary key
 - `token_hash`: SHA-256 of the access token (unique, indexed); the token itself is never stored
 - `email`: optional lowercase unique email; `NULL` for accounts created before login existed
+- `username`: optional lowercase unique username (3–30 characters of `a-z`, `0-9`, `.`, `_`), chosen at registration and usable instead of the email to sign in; `NULL` for Google, demo, and older accounts
 - `password_hash`: PBKDF2-SHA256 (`pbkdf2_sha256$iterations$salt$digest`). The password itself is never stored
 - `role`: `member` (default) or `admin`; assigned and enforced by the backend
 - `is_active`: whether the account can authenticate (default `true`)
@@ -71,7 +72,7 @@ One attempt inside a project. Project details are copied in when it is analyzed,
 
 ### Added columns
 
-`project.idea`, `project.key_points`, `session.idea`, `session.key_points`, `app_user.email`, `app_user.password_hash`, `app_user.role`, and `app_user.is_active` were added after the first release. `backend/db.py` adds them on startup when they are missing (`ADDED_COLUMNS`), on SQLite and Postgres alike, so existing databases keep their data. Existing users receive the safe defaults `member` and active. A unique index is added on `app_user.email` when the table does not already have one. Add later columns there too. Older rows keep a null email until someone registers.
+`project.idea`, `project.key_points`, `session.idea`, `session.key_points`, `app_user.email`, `app_user.username`, `app_user.password_hash`, `app_user.role`, and `app_user.is_active` were added after the first release. `backend/db.py` adds them on startup when they are missing (`ADDED_COLUMNS`), on SQLite and Postgres alike, so existing databases keep their data. Existing users receive the safe defaults `member` and active. Unique indexes are added on `app_user.email` and `app_user.username` when the table does not already have them. Add later columns there too. Older rows keep a null email until someone registers.
 
 ## Relationships
 

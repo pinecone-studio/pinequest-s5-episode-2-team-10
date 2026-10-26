@@ -99,20 +99,6 @@
   }
 }
 
-.auth-theme {
-  position: absolute;
-  top: 22px;
-  right: 22px;
-  z-index: 2;
-}
-
-@media (max-width: 640px) {
-  .auth-theme {
-    top: 16px;
-    right: 16px;
-  }
-}
-
 /* Theme change: the new page is revealed by a growing circle (see ThemeToggle). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
