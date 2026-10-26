@@ -20,6 +20,7 @@ python -m training.speed.make_data --transcripts data/transcripts --synthetic 30
 
 - `data/transcripts/` holds one `.txt` per real pitch. Only include recordings whose speakers agreed to it.
 - Each answer takes about 25–35 s on the 4060, so 300 pitches take about 3 hours. Run it overnight, or start with `--synthetic 50` to try the whole path first.
+- It saves as it goes. Made-up pitches land in `data/speed/synthetic/`, and finished answers in `data/speed/rows.partial.jsonl`. If the run stops early, rerun with `--transcripts data/speed/synthetic` to reuse the pitches.
 - The result is `data/speed/train.jsonl` and `data/speed/test.jsonl`. They contain transcripts, so keep the Kaggle dataset **private**, and never commit them (`data/` is git-ignored).
 
 ## 2. Kaggle account and notebook (once)
