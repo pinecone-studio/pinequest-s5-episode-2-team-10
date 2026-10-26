@@ -7,10 +7,13 @@ import { api } from "@/lib/api";
 import { useLang } from "@/lib/i18nClient";
 import { clearSession, useAccount } from "@/lib/session";
 import LangToggle from "./LangToggle";
+import RingBackdrop from "./RingBackdrop";
 import SayloMark from "./SayloMark";
 import SidebarPitches from "./SidebarPitches";
 
-/** Shared signed-in frame: one sidebar, one content area. */
+const PANEL_WIDTH = 260;
+
+/** Shared signed-in frame: pitches on the left, the account in the top bar, one content area. */
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { tr } = useLang();
   const account = useAccount();
@@ -26,6 +29,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const openFolder = useSearchParams().get("folder");
   const email = account?.email ?? "";
   const label = email.includes("@") ? email.slice(0, email.indexOf("@")) : email;
+  const initial = (label || email || "?").slice(0, 1).toUpperCase();
+  const isAdmin = account?.role === "admin" || account?.email === "demo@pitchcoach.local";
+  // The ring plays behind the pitch list only. The shell stays mounted while signed out, so wait for an account.
+  const showScene = account !== null && pathname === "/" && !openFolder;
 
   useEffect(() => {
     const query = window.matchMedia("(max-width: 800px)");
@@ -46,13 +53,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen, accountOpen]);
 
+  useEffect(() => {
+    if (!accountOpen) return;
+    const close = () => setAccountOpen(false);
+    window.addEventListener("resize", close);
+    return () => window.removeEventListener("resize", close);
+  }, [accountOpen]);
+
   function toggleAccount() {
     if (accountOpen) {
       setAccountOpen(false);
       return;
     }
     const rect = accountBtnRef.current?.getBoundingClientRect();
-    if (rect) setPanelBox({ top: rect.bottom + 6, left: rect.left, width: Math.max(rect.width, 220) });
+    if (rect) {
+      const width = Math.min(PANEL_WIDTH, window.innerWidth - 16);
+      setPanelBox({ top: rect.bottom + 8, left: Math.max(8, rect.right - width), width });
+    }
     setAccountOpen(true);
   }
 
@@ -67,26 +84,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="app-shell">
-      <header className="app-top">
-        <button
-          type="button"
-          className="app-menu"
-          aria-expanded={menuOpen}
-          aria-controls={menuId}
-          aria-label={menuOpen ? tr("close") : undefined}
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          {menuOpen ? <CloseIcon /> : <MenuIcon />}
-          {menuOpen ? null : tr("menu")}
-        </button>
-        <span className="app-brand">
-          <Link href="/" className="app-brand-link" aria-label={`SAYLO · ${tr("folders")}`}>
-            <SayloMark />
-            <span className="desk-brand">SAYLO</span>
-          </Link>
-        </span>
-      </header>
+    <div className={showScene ? "app-shell has-scene" : "app-shell"}>
+      {showScene && (
+        <>
+          <RingBackdrop variant="desk" />
+          <div className="landing-grain desk-veil" aria-hidden />
+        </>
+      )}
       {menuOpen && (
         <button type="button" className="app-backdrop" aria-label={tr("close")} onClick={() => setMenuOpen(false)} />
       )}
@@ -97,39 +101,50 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <SayloMark />
             <span className="desk-brand">SAYLO</span>
           </Link>
-          {process.env.NODE_ENV === "development" && <LangToggle />}
         </div>
-        <div className="app-side-top">
-          <button
-            ref={accountBtnRef}
-            type="button"
-            className="app-account"
-            aria-expanded={accountOpen}
-            aria-haspopup="dialog"
-            onClick={toggleAccount}
-          >
-            <span className="app-avatar" aria-hidden>
-              {(label || email || "?").slice(0, 1).toUpperCase()}
-            </span>
-            <span className="app-account-copy">
-              <strong>{label || "SAYLO"}</strong>
-              {email && <span>{email}</span>}
-            </span>
-            <ChevronIcon />
-          </button>
-        </div>
-        <nav className="app-nav" aria-label="SAYLO">
+        <nav className="app-nav" aria-label={tr("folders")}>
           <SidebarPitches home={home} openId={openFolder} onNavigate={() => setMenuOpen(false)} />
-          {(account?.role === "admin" || account?.email === "demo@pitchcoach.local") && (
-            <Link href="/admin" aria-current={pathname === "/admin" ? "page" : undefined} onClick={() => setMenuOpen(false)}>
-              <AdminIcon />
-              <span>{tr("adminPanel")}</span>
-            </Link>
-          )}
         </nav>
       </aside>
       <div className="app-main">
-        {children}
+        <header className="app-header">
+          <button
+            type="button"
+            className="app-menu"
+            aria-expanded={menuOpen}
+            aria-controls={menuId}
+            aria-label={menuOpen ? tr("close") : tr("menu")}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            {menuOpen ? <CloseIcon /> : <MenuIcon />}
+          </button>
+          <Link href="/" className="app-brand-link app-header-brand" aria-label={`SAYLO · ${tr("folders")}`}>
+            <SayloMark />
+            <span className="desk-brand">SAYLO</span>
+          </Link>
+          <div className="app-header-actions">
+            {process.env.NODE_ENV === "development" && <LangToggle />}
+            <button
+              ref={accountBtnRef}
+              type="button"
+              className="app-account"
+              aria-expanded={accountOpen}
+              aria-haspopup="dialog"
+              aria-label={label || "SAYLO"}
+              onClick={toggleAccount}
+            >
+              <span className="app-avatar" aria-hidden>
+                {initial}
+              </span>
+              <span className="app-account-copy">
+                <strong>{label || "SAYLO"}</strong>
+                {email && <span>{email}</span>}
+              </span>
+              <ChevronIcon />
+            </button>
+          </div>
+        </header>
+        <div className="app-content">{children}</div>
       </div>
       {accountOpen && panelBox && (
         <>
@@ -139,41 +154,32 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-label={label || "SAYLO"}
-            style={{
-              position: "fixed",
-              zIndex: 61,
-              top: panelBox.top,
-              left: panelBox.left,
-              width: panelBox.width,
-              maxHeight: "calc(100vh - 24px)",
-              overflow: "auto",
-              boxSizing: "border-box",
-              padding: 8,
-            }}
+            style={{ top: panelBox.top, left: panelBox.left, width: panelBox.width }}
           >
             <div className="account-panel-section">
               <p>{tr("currentAccount")}</p>
-              <div className="account-panel-user" style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+              <div className="account-panel-user">
                 <span className="app-avatar" aria-hidden>
-                  {(label || email || "?").slice(0, 1).toUpperCase()}
+                  {initial}
                 </span>
-                <span className="account-panel-copy" style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
-                  <strong style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label || "SAYLO"}</strong>
-                  {email && (
-                    <span style={{ display: "block", overflow: "hidden", color: "var(--text-secondary)", fontSize: 12, textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {email}
-                    </span>
-                  )}
+                <span className="account-panel-copy">
+                  <strong>{label || "SAYLO"}</strong>
+                  {email && <span>{email}</span>}
                 </span>
               </div>
             </div>
-            <button
-              type="button"
-              className="account-panel-logout"
-              onClick={logout}
-              disabled={busy}
-              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}
-            >
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="account-panel-link"
+                aria-current={pathname === "/admin" ? "page" : undefined}
+                onClick={() => setAccountOpen(false)}
+              >
+                <AdminIcon />
+                <span>{tr("adminPanel")}</span>
+              </Link>
+            )}
+            <button type="button" className="account-panel-logout" onClick={logout} disabled={busy}>
               {tr("logOut")}
               <ChevronRight />
             </button>
@@ -224,4 +230,3 @@ function ChevronIcon() {
     </svg>
   );
 }
-
