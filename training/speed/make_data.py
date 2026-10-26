@@ -119,12 +119,21 @@ def main() -> int:
                             "Үүнд 3 сая төгрөг хэрэгтэй. Баярлалаа.", {"title": "dry run", "goal": "", "audience": "шүүгчид",
                                                                        "planned_s": 60, "pitch_type": "startup"}))
         else:
-            text, session = synthetic_pitch(args.teacher, rng)
+            try:
+                text, session = synthetic_pitch(args.teacher, rng)
+            except httpx.HTTPError as e:
+                print(f"synthetic {i + 1}/{args.synthetic}: request failed ({type(e).__name__}), skipped")
+                continue
             pitches.append((text, session))
+            # Saved as it goes, so a crash later doesn't lose the pitches (reuse them with --transcripts).
+            (args.out / "synthetic").mkdir(parents=True, exist_ok=True)
+            (args.out / "synthetic" / f"synthetic-{i + 1:04d}.txt").write_text(text, encoding="utf-8")
             print(f"synthetic {i + 1}/{args.synthetic}: {len(text.split())} words")
 
     args.out.mkdir(parents=True, exist_ok=True)
     rows, kept, dropped = [], 0, 0
+    # Every kept row is also appended here as it arrives, so a crash doesn't lose finished answers.
+    partial = (args.out / "rows.partial.jsonl").open("w", encoding="utf-8")
     for n, (text, session) in enumerate(pitches, 1):
         data = build(text, session)
         if data is None:
@@ -133,14 +142,19 @@ def main() -> int:
         if args.dry_run:
             answer, stats = {"note": "dry run, no teacher answer"}, {}
         else:
-            answer, stats = teach(args.teacher, data)
+            try:
+                answer, stats = teach(args.teacher, data)
+            except httpx.HTTPError as e:
+                dropped += 1
+                print(f"{n}/{len(pitches)}: request failed ({type(e).__name__}), skipped")
+                continue
             if answer is None:
                 dropped += 1
                 print(f"{n}/{len(pitches)}: teacher answer failed the schema, skipped")
                 continue
             print(f"{n}/{len(pitches)}: {stats['eval_count']} answer tokens in {stats['seconds']} s")
         kept += 1
-        rows.append({
+        row = {
             "messages": [
                 {"role": "system", "content": feedback.PROMPT},
                 {"role": "user", "content": json.dumps(data, ensure_ascii=False)},
@@ -148,7 +162,11 @@ def main() -> int:
                 {"role": "assistant", "content": json.dumps(answer, ensure_ascii=False, separators=(",", ":"))},
             ],
             "teacher": {"model": args.teacher, **stats, "prompt_version": feedback.PROMPT_VERSION},
-        })
+        }
+        rows.append(row)
+        partial.write(json.dumps(row, ensure_ascii=False) + "\n")
+        partial.flush()
+    partial.close()
 
     rng.shuffle(rows)
     n_test = max(1, int(len(rows) * args.test_share)) if len(rows) > 1 else 0
