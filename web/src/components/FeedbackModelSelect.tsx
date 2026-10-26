@@ -99,7 +99,7 @@ export default function FeedbackModelSelect({
         id={id}
         className="desk-field"
         aria-label={tr("model")}
-        style={{ width: "max-content", minWidth: 0, height: 32, padding: "0 28px 0 10px", fontSize: 13 }}
+        style={{ width: "max-content", minWidth: 0 }}
         value={value}
         disabled={!models}
         onChange={(e) => isProtoModel(e.target.value) && onChange(e.target.value)}
