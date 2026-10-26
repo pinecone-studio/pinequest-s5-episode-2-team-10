@@ -65,17 +65,60 @@ export function stopListening() {
   stopCurrent = null;
 }
 
-const spoken = new Map<string, Promise<string>>(); // text -> object URL of the coach voice
+// ---- Which voice reads -----------------------------------------------------------------------------
+
+export type TtsEngine = "voice" | "azure" | "elevenlabs";
+export type TtsChoice = TtsEngine | "auto"; // auto: the server's default
+const TTS_CHOICES: TtsChoice[] = ["auto", "voice", "azure", "elevenlabs"];
+const TTS_KEY = "pitchcoach:tts-engine";
+const ttsListeners = new Set<() => void>();
+let ttsChoice: TtsChoice | null = null;
+
+export const isTtsChoice = (v: unknown): v is TtsChoice => TTS_CHOICES.includes(v as TtsChoice);
+
+/** The voice chosen in this browser (remembered when storage is allowed). */
+export function getTtsChoice(): TtsChoice {
+  if (ttsChoice) return ttsChoice;
+  try {
+    const saved = localStorage.getItem(TTS_KEY);
+    ttsChoice = isTtsChoice(saved) ? saved : "auto";
+  } catch {
+    ttsChoice = "auto"; // storage blocked
+  }
+  return ttsChoice;
+}
+
+export function setTtsChoice(next: TtsChoice) {
+  if (next === getTtsChoice()) return;
+  stopListening(); // don't keep reading in the old voice
+  ttsChoice = next;
+  try {
+    localStorage.setItem(TTS_KEY, next);
+  } catch {
+    /* storage blocked; the choice lasts until reload */
+  }
+  ttsListeners.forEach((l) => l());
+}
+
+export function subscribeTts(listener: () => void) {
+  ttsListeners.add(listener);
+  return () => ttsListeners.delete(listener);
+}
+
+const spoken = new Map<string, Promise<string>>(); // voice + text -> object URL of the coach voice
 
 /** The coach voice for `text` (fetched once; a failed fetch is forgotten so it can be retried). */
 function fetchSpeech(text: string): Promise<string> {
-  let url = spoken.get(text);
+  const choice = getTtsChoice();
+  const engine = choice === "auto" ? undefined : choice;
+  const key = `${choice}:${text}`;
+  let url = spoken.get(key);
   if (!url) {
     url = (async () => {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...langHeaders() },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, engine }),
       }).catch(() => null);
       if (!res?.ok) {
         const body = (await res?.json().catch(() => null)) as { error?: unknown } | null;
@@ -83,8 +126,8 @@ function fetchSpeech(text: string): Promise<string> {
       }
       return URL.createObjectURL(await res.blob());
     })();
-    url.catch(() => spoken.delete(text));
-    spoken.set(text, url);
+    url.catch(() => spoken.delete(key));
+    spoken.set(key, url);
   }
   return url;
 }

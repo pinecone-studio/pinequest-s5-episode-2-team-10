@@ -2672,8 +2672,42 @@ textarea.ui-input {
   color: var(--text-primary);
 }
 
-.desk-listen-all {
+.desk-listen-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
   margin: 4px 0 10px;
+}
+
+.desk-tts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.desk-tts label {
+  display: inline;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.desk-tts select.desk-field {
+  width: auto;
+  height: 30px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 26px 0 8px;
+  font-size: 12px;
+}
+
+.desk-listen-all {
   padding: 6px 14px;
   font-size: 13px;
   border-color: var(--accent);

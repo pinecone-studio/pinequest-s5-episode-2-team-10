@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { langOf, t } from "@/lib/i18n";
-import { speak, TTS_ENGINES, type TtsEngine } from "@/lib/server/tts";
+import { speak, ttsEngines, TTS_ENGINES, type TtsEngine } from "@/lib/server/tts";
 import { VoiceError } from "@/lib/server/voice";
 
 export const maxDuration = 60;
+
+/** Which coach voices are set up on this server, and the default one. */
+export async function GET(request: Request) {
+  return NextResponse.json(ttsEngines(langOf(request)), { headers: { "Cache-Control": "no-store" } });
+}
 
 /** JSON `{text, engine?}` → the coach voice reading it (MP3 from Azure or ElevenLabs, WAV from the voice server). */
 export async function POST(request: Request) {

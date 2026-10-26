@@ -35,6 +35,31 @@ export function ttsBackend(): TtsEngine {
   return setting("AZURE_SPEECH_KEY") && setting("AZURE_SPEECH_REGION") ? "azure" : "voice";
 }
 
+export interface TtsEngineStatus {
+  id: TtsEngine;
+  available: boolean;
+  reason: string | null; // why it can't be used here
+}
+
+/** Which voices this server is set up for (keys present). The voice server may still be offline. */
+export function ttsEngines(lang: Lang): { engines: TtsEngineStatus[]; defaultEngine: TtsEngine } {
+  const missing = (names: string[]) => names.filter((n) => !setting(n));
+  const status = (id: TtsEngine, need: string[]): TtsEngineStatus => {
+    const gone = missing(need);
+    return { id, available: gone.length === 0, reason: gone.length ? t(lang, "ttsNeedsKey", { keys: gone.join(", ") }) : null };
+  };
+  return {
+    engines: [
+      voiceConfig().token
+        ? { id: "voice", available: true, reason: null }
+        : { id: "voice", available: false, reason: t(lang, "voiceTokenMissing") },
+      status("azure", ["AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION"]),
+      status("elevenlabs", ["ELEVENLABS_API_KEY"]),
+    ],
+    defaultEngine: ttsBackend(),
+  };
+}
+
 async function elevenlabs(text: string, lang: Lang): Promise<Speech> {
   const key = setting("ELEVENLABS_API_KEY");
   if (!key) throw new VoiceError(t(lang, "ttsFail"), 503);

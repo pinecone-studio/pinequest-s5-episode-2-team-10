@@ -38,6 +38,7 @@ import Modal from "./Modal";
 import ImprovementList, { ListenButton, type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, pointsToSend, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
+import TtsEngineSelect from "./TtsEngineSelect";
 
 type Live = { stream: MediaStream; ctx: AudioContext };
 
@@ -1218,7 +1219,10 @@ function FolderRoom({
                     </p>
                     <h3 className={reading === "summary" ? "desk-reading" : undefined}>{probeResult.summary}</h3>
                     {!probeResult.writing && (probeResult.summary || probeResult.improvements.length > 0) && (
-                      <ListenButton label={tr("listenAll")} play={readResult} primary />
+                      <div className="desk-listen-bar">
+                        <ListenButton label={tr("listenAll")} play={readResult} primary />
+                        <TtsEngineSelect />
+                      </div>
                     )}
                     <ImprovementList
                       strengths={probeResult.strengths}
