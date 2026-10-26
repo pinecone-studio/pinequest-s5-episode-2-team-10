@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/format";
 import { useLang } from "@/lib/i18nClient";
 import { useAccount } from "@/lib/session";
-import type { AdminUser } from "@/lib/types";
+import type { AdminUser, ProjectSummary } from "@/lib/types";
 import Modal from "./Modal";
 
 type Change = { role?: "member" | "admin"; is_active?: boolean };
@@ -24,6 +24,8 @@ export default function AdminUsersPanel() {
   const account = useAccount();
   const demoPreview = account?.email === DEMO_EMAIL && account.role !== "admin";
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [lastRefreshAt, setLastRefreshAt] = useState(0);
   const [demoUsers, setDemoUsers] = useState(DEMO_USERS);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -38,7 +40,10 @@ export default function AdminUsersPanel() {
     setLoading(true);
     setLoadError(null);
     try {
-      setUsers(await api.adminUsers());
+      const [nextUsers, nextProjects] = await Promise.all([api.adminUsers(), api.listProjects()]);
+      setUsers(nextUsers);
+      setProjects(nextProjects);
+      setLastRefreshAt(Date.now());
     } catch (error) {
       setLoadError(errorMessage(error));
     } finally {
@@ -50,14 +55,17 @@ export default function AdminUsersPanel() {
     if (demoPreview) return;
     if (account?.role !== "admin") return;
     let current = true;
-    void api.adminUsers().then(
-      (result) => {
-        if (current) setUsers(result);
+    void Promise.all([api.adminUsers(), api.listProjects()]).then(
+      ([nextUsers, nextProjects]) => {
+        if (current) {
+          setUsers(nextUsers);
+          setProjects(nextProjects);
+          setLastRefreshAt(Date.now());
+        }
       },
-      (error: unknown) => {
-        if (current) setLoadError(errorMessage(error));
-      },
-    ).finally(() => {
+    ).catch((error: unknown) => {
+      if (current) setLoadError(errorMessage(error));
+    }).finally(() => {
       if (current) setLoading(false);
     });
     return () => {
@@ -72,6 +80,45 @@ export default function AdminUsersPanel() {
     if (!term) return displayUsers;
     return displayUsers.filter((user) => `${user.email ?? ""} ${user.id}`.toLocaleLowerCase().includes(term));
   }, [displayUsers, query]);
+  const adminOverview = useMemo(() => {
+    const weekAgo = lastRefreshAt - 7 * 24 * 60 * 60 * 1000;
+    const recentlyUpdated = projects.filter((project) => new Date(project.updated_at).getTime() >= weekAgo).length;
+    const members = displayUsers.filter((user) => user.role === "member");
+    const activityByUser = new Map<string, { email: string; projects: number; attempts: number }>();
+    for (const project of projects) {
+      const id = project.owner_id;
+      if (!id) continue;
+      const owner = displayUsers.find((user) => user.id === id);
+      const current = activityByUser.get(id) ?? {
+        email: project.owner_email || owner?.email || tr("adminNoEmail"),
+        projects: 0,
+        attempts: 0,
+      };
+      current.projects += 1;
+      current.attempts += project.attempt_count;
+      activityByUser.set(id, current);
+    }
+    const mostActive = members
+      .map((user) => ({
+        id: user.id,
+        email: user.email || tr("adminNoEmail"),
+        projects: activityByUser.get(user.id)?.projects ?? 0,
+        attempts: activityByUser.get(user.id)?.attempts ?? 0,
+      }))
+      .filter((user) => user.projects > 0)
+      .sort((a, b) => b.attempts - a.attempts || b.projects - a.projects)
+      .slice(0, 5);
+    return {
+      activeUsers: displayUsers.filter((user) => user.is_active).length,
+      memberCount: members.length,
+      adminCount: displayUsers.filter((user) => user.role === "admin").length,
+      projectCount: projects.length,
+      attemptCount: projects.reduce((total, project) => total + project.attempt_count, 0),
+      recentlyUpdated,
+      mostActive,
+      maxAttempts: Math.max(1, ...mostActive.map((user) => user.attempts)),
+    };
+  }, [displayUsers, lastRefreshAt, projects, tr]);
 
   function askForChange(user: AdminUser, change: Change) {
     const roleChange = change.role !== undefined;
@@ -137,6 +184,66 @@ export default function AdminUsersPanel() {
       </header>
 
       {demoPreview && <p className="ui-card admin-demo-notice" role="status">{tr("adminDemoNotice")}</p>}
+
+      {!demoPreview && !loadError && (
+        <section className="admin-overview" aria-labelledby="admin-overview-heading">
+          <div className="admin-overview-heading">
+            <div>
+              <p className="admin-eyebrow">{tr("adminOverviewEyebrow")}</p>
+              <h2 id="admin-overview-heading" className="ui-section">{tr("adminOverviewTitle")}</h2>
+            </div>
+            <span className="admin-period">{tr("adminOverviewPeriod")}</span>
+          </div>
+          <div className="admin-stat-grid">
+            <article className="ui-card admin-stat-card admin-stat-indigo">
+              <span className="admin-stat-icon" aria-hidden="true">◉</span>
+              <p>{tr("adminStatActiveUsers")}</p>
+              <strong>{adminOverview.activeUsers}<small> / {displayUsers.length}</small></strong>
+              <span className="admin-stat-foot">{adminOverview.adminCount} {tr("adminRoleAdmin")} · {adminOverview.memberCount} {tr("adminRoleMember")}</span>
+            </article>
+            <article className="ui-card admin-stat-card admin-stat-cyan">
+              <span className="admin-stat-icon" aria-hidden="true">▱</span>
+              <p>{tr("adminStatProjects")}</p>
+              <strong>{adminOverview.projectCount}</strong>
+              <span className="admin-stat-foot">{adminOverview.recentlyUpdated} {tr("adminStatRecent")}</span>
+            </article>
+            <article className="ui-card admin-stat-card admin-stat-violet">
+              <span className="admin-stat-icon" aria-hidden="true">↗</span>
+              <p>{tr("adminStatAttempts")}</p>
+              <strong>{adminOverview.attemptCount}</strong>
+              <span className="admin-stat-foot">{tr("adminStatAttemptsFoot")}</span>
+            </article>
+          </div>
+          <section className="ui-card admin-activity-card" aria-labelledby="admin-activity-heading">
+            <div className="admin-activity-heading">
+              <div>
+                <h3 id="admin-activity-heading" className="ui-section">{tr("adminActivityTitle")}</h3>
+                <p className="ui-help">{tr("adminActivityDescription")}</p>
+              </div>
+              <span className="admin-activity-count">{adminOverview.mostActive.length} {tr("adminActivityPeople")}</span>
+            </div>
+            {adminOverview.mostActive.length ? (
+              <ol className="admin-activity-list">
+                {adminOverview.mostActive.map((user, index) => (
+                  <li key={user.id}>
+                    <span className={`admin-rank ${index === 0 ? "is-first" : ""}`}>{String(index + 1).padStart(2, "0")}</span>
+                    <div className="admin-activity-person">
+                      <strong>{user.email}</strong>
+                      <span>{tr("adminActivityProjectCount", { count: user.projects })}</span>
+                    </div>
+                    <div className="admin-activity-meter" aria-label={tr("adminActivityAttemptCount", { count: user.attempts })}>
+                      <span style={{ width: `${Math.max(6, (user.attempts / adminOverview.maxAttempts) * 100)}%` }} />
+                    </div>
+                    <strong className="admin-activity-attempts">{user.attempts}</strong>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="admin-message">{tr("adminActivityEmpty")}</p>
+            )}
+          </section>
+        </section>
+      )}
 
       <section className="ui-card admin-users-card" aria-labelledby="admin-users-heading">
         <div className="admin-users-toolbar">
