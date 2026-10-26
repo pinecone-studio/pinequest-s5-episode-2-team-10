@@ -291,6 +291,19 @@ const mn = {
   theme: "Горим",
   lightMode: "Гэрэл",
   darkMode: "Харанхуй",
+  // Camera coach
+  coachToggle: "Ярихад камер асаах",
+  coachSide: "Слайд миний",
+  coachSideLeft: "зүүн талд",
+  coachSideRight: "баруун талд",
+  coachSwipeHint: "Гараа биеийнхээ урдуур зүүн тийш шударвал дараагийн слайд, баруун тийш бол өмнөх слайд.",
+  coachLoading: "Камер асааж байна…",
+  cameraBlocked: "Камер хаагдсан. Зөвшөөрсний дараа Ярих дээр дахин дар.",
+  coachFailed: "Хөдөлгөөн танигчийг ачаалж чадсангүй.",
+  coachPoints: "Слайд руу заасан: {n}",
+  coachWrong: "буруу гараар: {n}",
+  coachWrongHand: "Слайд талын гараараа заа, үзэгчдээс нүүрээ бүү буруулаарай.",
+  coachPointHint: "Слайд руугаа гараараа заагаарай.",
 };
 
 export type MessageKey = keyof typeof mn;
@@ -576,6 +589,18 @@ const en: Record<MessageKey, string> = {
   theme: "Theme",
   lightMode: "Light",
   darkMode: "Dark",
+  coachToggle: "Turn on the camera while speaking",
+  coachSide: "The slide is on my",
+  coachSideLeft: "left",
+  coachSideRight: "right",
+  coachSwipeHint: "Swipe a hand across your body to your left for the next slide, to your right for the previous one.",
+  coachLoading: "Starting the camera…",
+  cameraBlocked: "The camera is blocked. Allow it, then press Speak again.",
+  coachFailed: "Could not load movement tracking.",
+  coachPoints: "Pointed at the slide: {n}",
+  coachWrong: "with the wrong hand: {n}",
+  coachWrongHand: "Point with the hand on the slide's side, so you keep facing the audience.",
+  coachPointHint: "Point to your slide with your hand.",
 };
 
 const DICTS: Record<Lang, Record<MessageKey, string>> = { mn, en };

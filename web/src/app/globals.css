@@ -705,6 +705,98 @@ body {
 
 .desk-slide-frame {
   position: relative;
+  border-radius: var(--radius-lg);
+  transition: box-shadow 0.35s ease;
+}
+
+/* The camera coach: green once the speaker points at this slide, red while they don't. */
+.desk-slide-frame[data-coach="pointed"] {
+  box-shadow: 0 0 0 3px #22c55e, 0 0 28px rgba(34, 197, 94, 0.45);
+}
+
+.desk-slide-frame[data-coach="idle"],
+.desk-slide-frame[data-coach="wrong"] {
+  box-shadow: 0 0 0 3px #ef4444, 0 0 28px rgba(239, 68, 68, 0.45);
+}
+
+.desk-full[data-coach="pointed"] {
+  box-shadow: inset 0 0 0 6px #22c55e;
+}
+
+.desk-full[data-coach="idle"],
+.desk-full[data-coach="wrong"] {
+  box-shadow: inset 0 0 0 6px #ef4444;
+}
+
+.pose-coach {
+  position: absolute;
+  z-index: 4;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(220px, 40%);
+  padding: 6px;
+  border-radius: 10px;
+  background: rgba(20, 20, 20, 0.72);
+  color: #e6e6e6;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.pose-coach-video {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 6px;
+  object-fit: cover;
+  transform: scaleX(-1); /* a mirror, so moving left looks like moving left */
+}
+
+.pose-coach-count,
+.pose-coach-note {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.pose-coach-count {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.desk-coach-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.desk-coach-tools label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.desk-coach-tools select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  padding: 2px 6px;
+}
+
+.desk-coach-tools .desk-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .desk-slide-frame {
+    transition: none;
+  }
 }
 
 .desk-slide-slot > .desk-slide-frame:not(.desk-full) {
