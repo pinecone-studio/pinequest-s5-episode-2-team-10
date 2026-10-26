@@ -206,7 +206,16 @@ export async function getFolderBlob(key: string): Promise<Blob | null> {
   }
 }
 
+/** Where the word timings of a stored recording are kept (see coachVoice.ts). */
+export const timingsKey = (storageKey: string) => `pitchcoach:timings:${storageKey}`;
+
+/** Deletes a stored file, and the word timings saved for it when it is a recording. */
 export async function deleteFolderBlob(key: string) {
+  try {
+    localStorage.removeItem(timingsKey(key));
+  } catch {
+    /* storage blocked: nothing saved to remove */
+  }
   const db = await openDb();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORE, "readwrite");

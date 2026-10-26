@@ -30,13 +30,15 @@ import { openPdf, paintPage, pickSlides, readSlideText } from "@/lib/slidePdf";
 import { runBackendAnalysis } from "@/lib/backendAnalysis";
 import { streamModelReply } from "@/lib/modelStream";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
+import { feedbackSteps, findQuote, loadTimings, playSpan, readAloud, saveTimings, speakText, type Clip } from "@/lib/coachVoice";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import { useTheme } from "@/lib/theme";
 import Modal from "./Modal";
-import ImprovementList, { type Improvement, type OffTopic, type Strength } from "./ImprovementList";
+import ImprovementList, { ListenButton, type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, pointsToSend, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
+import TtsEngineSelect from "./TtsEngineSelect";
 import PoseCoach, { type CoachState } from "./PoseCoach";
 import type { Side } from "@/lib/poseCoach";
 
@@ -312,7 +314,7 @@ function FolderRoom({
   /** Deletes the whole folder (after the user confirms). */
   onDelete: () => void;
 }) {
-  const { tr } = useLang();
+  const { tr, lang } = useLang();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const theme = useTheme();
   const recRef = useRef<PieceRecorder | null>(null);
@@ -349,6 +351,7 @@ function FolderRoom({
   const anySlide = hasSlide || !!figmaEmbed;
   const [pdfEpoch, setPdfEpoch] = useState(0);
   const [listening, setListening] = useState(false);
+  const [reading, setReading] = useState<string | null>(null); // the result item being read aloud
   const [finalText, setFinalText] = useState("");
   const textRef = useRef("");
   const [sttNote, setSttNote] = useState<string | null>(null);
@@ -593,6 +596,7 @@ function FolderRoom({
     try {
       await queueRef.current;
       const reply = await transcribeBlob(take, name);
+      saveTimings(stored, reply.words);
       if (aliveRef.current && sttGen.current === gen && reply.text.trim()) writeSpeech(`${base} ${reply.text}`);
     } catch {
       /* keep the live text */
@@ -676,6 +680,7 @@ function FolderRoom({
     setSttNote(null);
     try {
       const reply = await transcribeBlob(audio, folder.audioName ?? "audio.webm");
+      if (saved) saveTimings(saved.storageKey, reply.words);
       if (!aliveRef.current) return;
       if (reply.text.trim()) writeSpeech(reply.text);
       else setSttNote(tr("noSpeechInAudio"));
@@ -724,11 +729,11 @@ function FolderRoom({
   }
 
   /** Adds one audio file to this folder's slide. The newest take is the one that plays. */
-  async function storeAudio(file: Blob, name: string, type: string): Promise<boolean> {
+  async function storeAudio(file: Blob, name: string, type: string): Promise<string | null> {
     const problem = audioFileError({ name, type, size: file.size });
     if (problem) {
       setSttNote(tr(problem === "size" ? "audioTooBig" : "audioWrongType"));
-      return false;
+      return null;
     }
     const next = attachAudio(
       folder,
@@ -737,12 +742,12 @@ function FolderRoom({
       new Date().toISOString(),
     );
     const record = selectedAudio(next);
-    if (!record) return false;
+    if (!record) return null;
     await putFolderBlob(record.storageKey, file);
-    if (!aliveRef.current) return false;
+    if (!aliveRef.current) return null;
     onChange(next);
     setSttNote(null);
-    return true;
+    return record.storageKey;
   }
 
   async function chooseAudio(file: File | undefined) {
@@ -788,6 +793,32 @@ function FolderRoom({
     if (resultShownRef.current) return;
     resultShownRef.current = true;
     setResultOpen(true);
+  }
+
+  /** Where the speaker said `quote` in the selected recording, or null when its timing isn't known. */
+  function ownClip(quote: string): (() => Promise<Clip | null>) | null {
+    const saved = selectedAudio(folder);
+    const span = saved ? findQuote(quote, loadTimings(saved.storageKey)) : null;
+    if (!saved || !span) return null;
+    return async () => {
+      const recording = await getFolderBlob(saved.storageKey);
+      return recording ? { recording, ...span } : null;
+    };
+  }
+
+  function hearOwn(quote: string): (() => Promise<void>) | null {
+    const clip = ownClip(quote);
+    if (!clip) return null;
+    return async () => {
+      const c = await clip();
+      if (c) await playSpan(c.recording, c.start, c.end);
+    };
+  }
+
+  /** The coach voice reads the whole analysis, with the speaker's own words where they fit. */
+  function readResult(): Promise<void> {
+    if (!probeResult) return Promise.resolve();
+    return readAloud(feedbackSteps(probeResult, lang, ownClip), setReading);
   }
 
   async function sendToModel() {
@@ -1264,11 +1295,20 @@ function FolderRoom({
                         </>
                       )}
                     </p>
-                    <h3>{probeResult.summary}</h3>
+                    <h3 className={reading === "summary" ? "desk-reading" : undefined}>{probeResult.summary}</h3>
+                    {!probeResult.writing && (probeResult.summary || probeResult.improvements.length > 0) && (
+                      <div className="desk-listen-bar">
+                        <ListenButton label={tr("listenAll")} play={readResult} primary />
+                        <TtsEngineSelect />
+                      </div>
+                    )}
                     <ImprovementList
                       strengths={probeResult.strengths}
                       improvements={probeResult.improvements}
                       offTopic={probeResult.offTopic}
+                      speak={probeResult.writing ? undefined : speakText}
+                      hearOwn={hearOwn}
+                      reading={reading}
                     />
                     {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} slides={probeResult.pointSlides} />}
                   </div>

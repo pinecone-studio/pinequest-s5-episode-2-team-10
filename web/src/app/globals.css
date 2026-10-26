@@ -2799,6 +2799,92 @@ textarea.ui-input {
   cursor: default;
 }
 
+/* "Hear it": the coach voice and the speaker's own words. */
+.desk-listen-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.desk-listen-wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.desk-listen {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.desk-listen:hover,
+.desk-listen[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.desk-listen-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 4px 0 10px;
+}
+
+.desk-tts {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.desk-tts label {
+  display: inline;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.desk-tts select.desk-field {
+  width: auto;
+  height: 30px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 26px 0 8px;
+  font-size: 12px;
+}
+
+.desk-listen-all {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+/* The result item the coach voice is reading right now. */
+.desk-reading {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 12%, transparent);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.desk-listen-error {
+  color: var(--negative);
+  font-size: 12px;
+}
+
 .admin-page {
   width: min(1120px, 100%);
   margin: 0 auto;
