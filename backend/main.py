@@ -291,10 +291,18 @@ class AnalyzeBody(BaseModel):
     feedback_backend: Optional[str] = None
 
 
-class AuthCredentials(BaseModel):
+class RegisterBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     email: str = Field(min_length=1, max_length=254)
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    login: str = Field(min_length=1, max_length=254, description="Email address or username.")
     password: str = Field(min_length=8, max_length=128)
 
 
@@ -349,8 +357,19 @@ def _normalized_email(email: str) -> str:
     return normalized
 
 
+def _normalized_username(username: str) -> str:
+    normalized = username.strip().lower()
+    if not re.fullmatch(r"[a-z0-9._]{3,30}", normalized):
+        raise ApiError(
+            422,
+            "invalid_username",
+            "Use 3-30 characters: lowercase Latin letters, digits, dots, or underscores.",
+        )
+    return normalized
+
+
 def _auth_response(user: AppUser, token: str) -> dict:
-    return {"id": user.id, "email": user.email, "role": user.role, "access_token": token}
+    return {"id": user.id, "email": user.email, "username": user.username, "role": user.role, "access_token": token}
 
 
 def _replace_user_token(database: Session, user: AppUser) -> dict:
@@ -364,16 +383,20 @@ def _replace_user_token(database: Session, user: AppUser) -> dict:
 
 
 @api.post("/auth/register", status_code=201)
-def register(body: AuthCredentials, database: DB):
+def register(body: RegisterBody, database: DB):
     email = _normalized_email(body.email)
+    username = _normalized_username(body.username)
     if email == "demo@pitchcoach.local":
         raise ApiError(409, "email_taken", "This email address is already registered.")
     if database.exec(select(AppUser).where(func.lower(AppUser.email) == email)).first():
         raise ApiError(409, "email_taken", "This email address is already registered.")
+    if database.exec(select(AppUser).where(func.lower(AppUser.username) == username)).first():
+        raise ApiError(409, "username_taken", "This username is already taken.")
 
     token = secrets.token_urlsafe(32)
     user = AppUser(
         email=email,
+        username=username,
         password_hash=hash_password(body.password),
         token_hash=_hash(token),
     )
@@ -384,13 +407,14 @@ def register(body: AuthCredentials, database: DB):
 
 
 @api.post("/auth/login")
-def login(body: AuthCredentials, database: DB):
-    email = body.email.strip().lower()
-    user = database.exec(select(AppUser).where(func.lower(AppUser.email) == email)).first()
+def login(body: LoginBody, database: DB):
+    identifier = body.login.strip().lower()
+    column = AppUser.email if "@" in identifier else AppUser.username
+    user = database.exec(select(AppUser).where(func.lower(column) == identifier)).first()
     if not user or not verify_password(body.password, user.password_hash):
-        raise ApiError(401, "invalid_credentials", "Email or password is incorrect.")
+        raise ApiError(401, "invalid_credentials", "Email, username, or password is incorrect.")
     if not user.is_active:
-        raise ApiError(401, "invalid_credentials", "Email or password is incorrect.")
+        raise ApiError(401, "invalid_credentials", "Email, username, or password is incorrect.")
     return _replace_user_token(database, user)
 
 
@@ -440,7 +464,7 @@ def google_login(body: GoogleAuthBody, database: DB):
 
 @api.get("/auth/me")
 def auth_me(user: User):
-    return {"id": user.id, "email": user.email, "role": user.role}
+    return {"id": user.id, "email": user.email, "username": user.username, "role": user.role}
 
 
 @api.post("/auth/logout", status_code=204)

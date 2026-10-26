@@ -31,7 +31,7 @@ const STEPS: [MessageKey, MessageKey][] = [
 
 const REDUCED = "(prefers-reduced-motion: reduce)";
 
-function useReducedMotion(): boolean {
+export function useReducedMotion(): boolean {
   return useSyncExternalStore(
     (onChange) => {
       const query = window.matchMedia(REDUCED);
@@ -53,7 +53,7 @@ function Emphasis({ text }: { text: string }) {
 }
 
 /** Static stand-in for the 3D ring when motion is reduced or WebGL is missing. */
-function StaticRing() {
+export function StaticRing() {
   return (
     <div className="landing-fallback" aria-hidden>
       <span className="landing-fallback-ring" />

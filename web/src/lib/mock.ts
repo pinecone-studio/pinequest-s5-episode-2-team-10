@@ -137,6 +137,7 @@ function getSession(store: Store, id: string): MockSession {
 interface MockUser {
   id: string;
   email: string;
+  username?: string | null;
   salt: string;
   password_hash: string;
   token: string;
@@ -169,6 +170,18 @@ function cleanMockEmail(email: string): string {
   return value;
 }
 
+function cleanMockUsername(username: string): string {
+  const value = username.trim().toLowerCase();
+  if (!/^[a-z0-9._]{3,30}$/.test(value)) {
+    throw { code: "invalid_username", message: "Use 3-30 characters: lowercase Latin letters, digits, dots, or underscores." };
+  }
+  return value;
+}
+
+function mockSession(user: MockUser): AuthSession {
+  return { id: user.id, email: user.email, username: user.username ?? null, role: "member", access_token: user.token };
+}
+
 function currentMockUser(): MockUser {
   let token: string | null = null;
   try {
@@ -182,23 +195,26 @@ function currentMockUser(): MockUser {
 }
 
 export const mockApi = {
-  async register(email: string, password: string): Promise<AuthSession> {
+  async register(email: string, username: string, password: string): Promise<AuthSession> {
     await wait();
     const cleaned = cleanMockEmail(email);
+    const name = cleanMockUsername(username);
     if (password.length < 8 || password.length > 128) throw { code: "invalid_request", message: "Invalid password." };
     const users = loadUsers();
     if (users.some((row) => row.email === cleaned)) throw { code: "email_taken", message: "An account with this email already exists." };
+    if (users.some((row) => row.username === name)) throw { code: "username_taken", message: "This username is already taken." };
     const salt = crypto.randomUUID();
     const user: MockUser = {
       id: crypto.randomUUID(),
       email: cleaned,
+      username: name,
       salt,
       password_hash: await mockDigest(password, salt),
       token: crypto.randomUUID(),
     };
     users.push(user);
     saveUsers(users);
-    return { id: user.id, email: user.email, role: "member", access_token: user.token };
+    return mockSession(user);
   },
 
   async demo(): Promise<AuthSession> {
@@ -220,7 +236,7 @@ export const mockApi = {
       user.token = crypto.randomUUID();
     }
     saveUsers(users);
-    return { id: user.id, email: user.email, role: "member", access_token: user.token };
+    return mockSession(user);
   },
 
   /** Demo mode has no server to verify the Supabase token, so it trusts the email inside it. */
@@ -243,25 +259,25 @@ export const mockApi = {
       user.token = crypto.randomUUID();
     }
     saveUsers(users);
-    return { id: user.id, email: user.email, role: "member", access_token: user.token };
+    return mockSession(user);
   },
 
-  async login(email: string, password: string): Promise<AuthSession> {
+  async login(login: string, password: string): Promise<AuthSession> {
     await wait();
-    const cleaned = cleanMockEmail(email);
+    const cleaned = login.trim().toLowerCase();
     const users = loadUsers();
-    const user = users.find((row) => row.email === cleaned);
+    const user = users.find((row) => (cleaned.includes("@") ? row.email === cleaned : row.username === cleaned));
     const hash = user ? await mockDigest(password, user.salt) : "";
-    if (!user || hash !== user.password_hash) throw { code: "invalid_credentials", message: "Email or password is wrong." };
+    if (!user || hash !== user.password_hash) throw { code: "invalid_credentials", message: "Email, username, or password is wrong." };
     user.token = crypto.randomUUID();
     saveUsers(users);
-    return { id: user.id, email: user.email, role: "member", access_token: user.token };
+    return mockSession(user);
   },
 
   async me() {
     await wait(50);
     const user = currentMockUser();
-    return { id: user.id, email: user.email, role: "member" as const };
+    return { id: user.id, email: user.email, username: user.username ?? null, role: "member" as const };
   },
 
   async logout() {

@@ -1,21 +1,26 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { api, ApiRequestError } from "@/lib/api";
-import { t } from "@/lib/i18n";
+import { t, type MessageKey } from "@/lib/i18n";
 import { useLang } from "@/lib/i18nClient";
 import { clearSession, saveSession, useAccount } from "@/lib/session";
 import { googleEnabled, supabase } from "@/lib/supabase";
 import LangToggle from "./LangToggle";
+import { StaticRing, useReducedMotion } from "./Landing";
 import SayloMark from "./SayloMark";
-import ThemeToggle from "./ThemeToggle";
+
+const LandingScene = dynamic(() => import("./LandingScene"), { ssr: false, loading: () => null });
 
 type Mode = "login" | "register";
 
-function authMessage(err: unknown, tr: (key: "authEmailTaken" | "authBadLogin" | "authInvalid" | "serverUnreachable" | "authFailed") => string): string {
+function authMessage(err: unknown, tr: (key: MessageKey) => string): string {
   const code = err instanceof ApiRequestError ? err.code : err && typeof err === "object" && "code" in err ? String(err.code) : "";
   const status = err instanceof ApiRequestError ? err.status : 0;
   if (code === "email_taken") return tr("authEmailTaken");
+  if (code === "username_taken") return tr("authUsernameTaken");
+  if (code === "invalid_username") return tr("authUsernameInvalid");
   if (code === "invalid_credentials" || status === 401) return tr("authBadLogin");
   if (code === "network" || code === "timeout") return tr("serverUnreachable");
   if (code === "invalid_email" || code === "invalid_request" || status === 422) return tr("authInvalid");
@@ -39,11 +44,15 @@ function clearOAuthParams() {
 
 export default function AuthScreen({ initialMode = "login", onBack }: { initialMode?: Mode; onBack?: () => void }) {
   const { lang, tr } = useLang();
-  const emailId = useId();
-  const passwordId = useId();
-  const againId = useId();
+  const titleId = useId();
+  const hintId = useId();
+  const reduced = useReducedMotion();
+  const [sceneFailed, setSceneFailed] = useState(false);
+  const onSceneFail = useCallback(() => setSceneFailed(true), []);
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [again, setAgain] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +135,7 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
     }
     setBusy(true);
     try {
-      const session = registering ? await api.register(email, password) : await api.login(email, password);
+      const session = registering ? await api.register(email, username, password) : await api.login(identifier, password);
       saveSession(session);
     } catch (err) {
       setError(authMessage(err, tr));
@@ -135,7 +144,9 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
   }
 
   return (
-    <div className="auth-screen">
+    <main className="landing auth-screen">
+      {reduced || sceneFailed ? <StaticRing /> : <LandingScene variant="auth" onFail={onSceneFail} />}
+      <div className="landing-grain auth-veil" aria-hidden />
       {onBack && (
         <button type="button" className="auth-back" onClick={onBack}>
           <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
@@ -144,100 +155,119 @@ export default function AuthScreen({ initialMode = "login", onBack }: { initialM
           {tr("back")}
         </button>
       )}
-      <div className="auth-theme">
-        <ThemeToggle />
-      </div>
       <div className="auth-frame">
-        <form className="auth-form" onSubmit={submit}>
-          <div className="auth-logo" aria-hidden>
-            <SayloMark />
+        <form className="auth-form" onSubmit={submit} aria-labelledby={titleId}>
+          <div className="auth-brand" aria-hidden>
+            <span className="auth-logo">
+              <SayloMark />
+            </span>
+            <span className="auth-wordmark">SAYLO</span>
           </div>
-          <h1>{registering ? "Create your account" : "Yooo, welcome!"}</h1>
-          <p className="auth-sub">
-            {registering ? (
-              <>
-                Already have an account?{" "}
-                <button type="button" onClick={() => switchMode("login")}>
-                  Sign in
-                </button>
-              </>
-            ) : (
-              <>
-                First time here?{" "}
-                <button type="button" onClick={() => switchMode("register")}>
-                  Sign up for free
-                </button>
-              </>
-            )}
-          </p>
+          <h1 id={titleId}>{registering ? tr("authRegisterTitle") : tr("authLoginTitle")}</h1>
+          <p className="auth-sub">{registering ? tr("authRegisterSub") : tr("authLoginSub")}</p>
           {error && (
             <p className="auth-alert" role="alert">
               {error}
             </p>
           )}
           <div className="auth-fields">
+            {registering ? (
+              <>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  autoFocus
+                  required
+                  maxLength={254}
+                  placeholder={tr("email")}
+                  aria-label={tr("email")}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <input
+                  type="text"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  required
+                  pattern="[A-Za-z0-9._]{3,30}"
+                  maxLength={30}
+                  placeholder={tr("username")}
+                  aria-label={tr("username")}
+                  aria-describedby={hintId}
+                  title={tr("authUsernameHint")}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
+                <p className="auth-hint" id={hintId}>
+                  {tr("authUsernameHint")}
+                </p>
+              </>
+            ) : (
+              <input
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                autoFocus
+                required
+                maxLength={254}
+                placeholder={tr("authIdentifier")}
+                aria-label={tr("authIdentifier")}
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+              />
+            )}
             <input
-              id={emailId}
-              type="email"
-              autoComplete="email"
-              autoFocus
-              required
-              maxLength={254}
-              placeholder="Your email"
-              aria-label="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <input
-              id={passwordId}
               type="password"
               autoComplete={registering ? "new-password" : "current-password"}
               required
               minLength={8}
               maxLength={128}
-              placeholder="Password"
-              aria-label="Password"
+              placeholder={tr("password")}
+              aria-label={tr("password")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
             {registering && (
               <input
-                id={againId}
                 type="password"
                 autoComplete="new-password"
                 required
                 minLength={8}
                 maxLength={128}
-                placeholder="Repeat password"
-                aria-label="Repeat password"
+                placeholder={tr("authPasswordRepeat")}
+                aria-label={tr("authPasswordRepeat")}
                 value={again}
                 onChange={(e) => setAgain(e.target.value)}
               />
             )}
           </div>
           <button type="submit" className="auth-primary" disabled={busy}>
-            {busy ? "Please wait…" : registering ? "Create account" : "Sign in"}
+            {busy ? tr("authWorking") : registering ? tr("signUp") : tr("signIn")}
+          </button>
+          <div className="auth-or" role="separator">
+            {tr("authOr")}
+          </div>
+          <button type="button" className="auth-sso" onClick={signInWithGoogle} disabled={busy}>
+            <GoogleMark />
+            {tr("signInGoogle")}
           </button>
           {!registering && (
-            <>
-              <div className="auth-or" role="separator">
-                or
-              </div>
-              <button type="button" className="auth-sso" onClick={signInWithGoogle} disabled={busy}>
-                <GoogleMark />
-                {tr("signInGoogle")}
-              </button>
-              <button type="button" className="auth-demo" onClick={enterDemo} disabled={busy}>
-                {tr("signInDemo")}
-              </button>
-            </>
+            <button type="button" className="auth-demo" onClick={enterDemo} disabled={busy}>
+              {tr("signInDemo")}
+            </button>
           )}
-          <p className="auth-legal">
-            You acknowledge that you read, and agree, to our Terms of Service and our Privacy Policy.
+          <p className="auth-switch">
+            {registering ? tr("authHaveAccount") : tr("authNeedAccount")}{" "}
+            <button type="button" onClick={() => switchMode(registering ? "login" : "register")} disabled={busy}>
+              {registering ? tr("signIn") : tr("signUp")}
+            </button>
           </p>
+          <p className="auth-legal">{tr("authLegal")}</p>
         </form>
       </div>
-    </div>
+    </main>
   );
 }
 

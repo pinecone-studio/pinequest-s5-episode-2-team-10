@@ -29,7 +29,11 @@ def client(tmp_path, monkeypatch):
 def _headers(client: TestClient) -> dict[str, str]:
     response = client.post(
         "/api/v1/auth/register",
-        json={"email": f"test-{uuid.uuid4().hex}@example.com", "password": "test-password"},
+        json={
+            "email": f"test-{uuid.uuid4().hex}@example.com",
+            "username": f"test_{uuid.uuid4().hex[:20]}",
+            "password": "test-password",
+        },
     )
     assert response.status_code == 201
     return {"X-Access-Token": response.json()["access_token"]}
