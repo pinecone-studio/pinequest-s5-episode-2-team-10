@@ -62,7 +62,9 @@ comma-separated list of Google account emails in the API's private environment,
 then restart the API. A listed account must complete Google sign-in before it
 receives the admin role. Admins can access and manage all user content and
 manage account roles/statuses through the admin endpoints in `/docs`; grant this
-only to trusted team members. See `ROLE_ACCESS_UPDATE.md`.
+only to trusted team members. The shared demo button also grants admin access to
+anyone who can reach it, so keep that route private if the deployed API contains
+real user data. See `ROLE_ACCESS_UPDATE.md`.
 
 Changing `PITCH_DB_URL` does not copy old SQLite data. Back up each teammate's
 database and matching `data/sessions/`, then import one backup at a time with

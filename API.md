@@ -21,7 +21,7 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 | --- | --- | --- |
 | `POST /auth/register` | Create an account. `{email, password}` (password 8–128 characters). Email is stored in lowercase; role is always `member` | `201 {id, email, role, access_token}`; `409 email_taken`; `422` for a bad email or short password |
 | `POST /auth/login` | Sign in. Same body. Wrong email and wrong password return the same error | `200 {id, email, role, access_token}`; `401 invalid_credentials` |
-| `POST /auth/demo` | Sign in to the shared demo account from any browser. Creates it the first time. No body. Earlier demo sign-ins stay valid | `200 {id, email, role, access_token}` |
+| `POST /auth/demo` | Sign in to the shared demo administrator account from any browser. Creates it the first time and ensures its role is `admin`. No body. Earlier demo sign-ins stay valid | `200 {id, email, role: "admin", access_token}` |
 | `POST /auth/google` | Sign in with Google. `{access_token}` is the Supabase Auth token from the Google redirect; the server checks it with Supabase (`GET /auth/v1/user`) and accepts only a confirmed email from the `google` provider. An existing account with that email is reused, otherwise one is created without a password | `200 {id, email, role, access_token}`; `401 invalid_google_token`; `502 google_unreachable`; `503 google_disabled` when `SUPABASE_URL`/`SUPABASE_PUBLISHABLE_KEY` are unset |
 | `GET /auth/me` | The signed-in account | `{id, email, role}` |
 | `POST /auth/logout` | Forget the current token | `204` |
@@ -104,7 +104,7 @@ Category scores are `null` when there is no data (for example no slides); `overa
 
 ## Roles
 
-Accounts default to `member`. Only a server-configured comma-separated `PITCH_ADMIN_EMAILS` allowlist can bootstrap admins, and the email must be verified by Supabase Google sign-in. Admins may also promote/demote other users and enable/disable accounts through the admin endpoint. Allowlisted admins cannot be demoted through the API; remove an email from server configuration and then use the admin endpoint to change its stored role. At least one active admin must remain.
+Accounts default to `member`. The shared `POST /auth/demo` account is an exception: anyone can use the demo button, and it receives `admin` access. Other admins can be bootstrapped only through the server-configured comma-separated `PITCH_ADMIN_EMAILS` allowlist and a verified Supabase Google sign-in. Admins may promote/demote other users and enable/disable accounts through the admin endpoint. Allowlisted admins cannot be demoted through the API; remove an email from server configuration and then use the admin endpoint to change its stored role. At least one active admin must remain.
 
 Admin access bypasses project ownership checks and includes private audio, slides, transcripts, and reports. Treat admin membership as trusted access to all user content. The browser never assigns roles; all authorization is enforced by FastAPI.
 

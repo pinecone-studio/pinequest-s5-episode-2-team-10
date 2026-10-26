@@ -22,8 +22,9 @@ const DEMO_USERS: AdminUser[] = [
 export default function AdminUsersPanel() {
   const { lang, tr } = useLang();
   const account = useAccount();
-  const demoPreview = account?.email === DEMO_EMAIL;
+  const demoPreview = account?.email === DEMO_EMAIL && account.role !== "admin";
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [demoUsers, setDemoUsers] = useState(DEMO_USERS);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -64,7 +65,8 @@ export default function AdminUsersPanel() {
     };
   }, [account, demoPreview]);
 
-  const displayUsers = demoPreview ? DEMO_USERS : users;
+  const displayUsers = demoPreview ? demoUsers : users;
+  const isLoading = !demoPreview && loading;
   const visibleUsers = useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
     if (!term) return displayUsers;
@@ -87,6 +89,12 @@ export default function AdminUsersPanel() {
 
   async function applyChange() {
     if (!pending) return;
+    if (demoPreview) {
+      setDemoUsers((current) => current.map((user) => user.id === pending.user.id ? { ...user, ...pending.change } : user));
+      setPending(null);
+      setNotice(tr("adminDemoChangeSaved"));
+      return;
+    }
     setSaving(true);
     setActionError(null);
     try {
@@ -128,7 +136,7 @@ export default function AdminUsersPanel() {
         )}
       </header>
 
-      {demoPreview && <p className="ui-card admin-demo-notice" role="status">{tr("adminDemoReadOnly")}</p>}
+      {demoPreview && <p className="ui-card admin-demo-notice" role="status">{tr("adminDemoNotice")}</p>}
 
       <section className="ui-card admin-users-card" aria-labelledby="admin-users-heading">
         <div className="admin-users-toolbar">
@@ -149,7 +157,7 @@ export default function AdminUsersPanel() {
             <button type="button" className="ui-btn" onClick={() => void loadUsers()}>{tr("retry")}</button>
           </div>
         )}
-        {loading ? (
+        {isLoading ? (
           <p className="admin-message" role="status">{tr("loading")}</p>
         ) : !loadError && visibleUsers.length === 0 ? (
           <p className="admin-message">{query ? tr("adminNoMatches") : tr("adminNoUsers")}</p>
@@ -187,7 +195,22 @@ export default function AdminUsersPanel() {
                       <td data-label={tr("adminCreated")}>{formatCreated(user.created_at, lang)}</td>
                       <td data-label={tr("adminActions")}>
                         {demoPreview ? (
-                          <span className="ui-help">{tr("adminDemoSample")}</span>
+                          <div className="admin-actions">
+                            <button
+                              type="button"
+                              className="ui-btn"
+                              onClick={() => askForChange(user, { role: user.role === "admin" ? "member" : "admin" })}
+                            >
+                              {tr(user.role === "admin" ? "adminRemoveRole" : "adminGrantRole")}
+                            </button>
+                            <button
+                              type="button"
+                              className={user.is_active ? "ui-btn admin-danger" : "ui-btn"}
+                              onClick={() => askForChange(user, { is_active: !user.is_active })}
+                            >
+                              {tr(user.is_active ? "adminDeactivate" : "adminActivate")}
+                            </button>
+                          </div>
                         ) : isSelf ? (
                           <span className="ui-help">{tr("adminSelfManaged")}</span>
                         ) : (
@@ -220,7 +243,7 @@ export default function AdminUsersPanel() {
 
       {pending && (
         <Modal title={pending.title} onClose={() => { if (!saving) setPending(null); }}>
-          <div className="admin-confirm-body">
+          <form className="admin-confirm-body" onSubmit={(event) => { event.preventDefault(); void applyChange(); }}>
             <p>{pending.description}</p>
             {pending.change.is_active === false && <p className="ui-help">{tr("adminDeactivateNote")}</p>}
             {actionError && <p className="admin-error-text" role="alert">{actionError}</p>}
@@ -228,11 +251,11 @@ export default function AdminUsersPanel() {
               <button type="button" className="ui-btn" onClick={() => setPending(null)} disabled={saving}>
                 {tr("cancel")}
               </button>
-              <button type="button" className="ui-btn-primary" onClick={() => void applyChange()} disabled={saving}>
+              <button type="submit" className="ui-btn-primary" autoFocus disabled={saving}>
                 {saving ? tr("loading") : tr("confirm")}
               </button>
             </div>
-          </div>
+          </form>
         </Modal>
       )}
     </main>
