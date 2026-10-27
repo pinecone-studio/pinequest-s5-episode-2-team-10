@@ -18,6 +18,7 @@ import {
   cleanQuote,
   inSpeech,
   MAX_POINTS,
+  sentenceText,
   rulesCheck,
   toSentences,
   verifyOffTopic,
@@ -162,7 +163,7 @@ export async function POST(request: Request) {
           "point_checks: for each main point, judge whether the speech made it. Judge meaning, not wording; one shared word is not enough.",
           "- point: the number in brackets before that main point. One entry per main point, in the same order.",
           "- status: covered (clearly made), partial (vague or incomplete), missed (not said or only implied).",
-          "- evidence: the exact words from the speech that make the point; empty when missed.",
+          "- sentences: the numbers of the 1-2 speech sentences that make the point; empty when missed.",
           "- note: what was missing, in under 12 words, or empty.",
           "idea_comment: one short sentence on how well the speech as a whole got the idea across.",
           "",
@@ -179,14 +180,14 @@ export async function POST(request: Request) {
     "What to return. Be brief: the speaker reads this on one screen, so every field is short and plain, with no filler",
     "or repetition between fields.",
     "- summary: 1-2 short sentences (under 35 words in all) on the most important thing to change in the speech.",
-    "- strengths: 1-3 things the speaker did well, each a short phrase (under 10 words), with quote: the exact words",
-    "  from the speech that show it.",
+    "- strengths: 1-3 things the speaker did well, each a short phrase (under 10 words), with sentence: the number of",
+    "  the speech sentence that shows it.",
     "- improvements: 2-4 things to improve in what was said, most important first. Look at the opening, a clear problem,",
     "  the solution, proof (facts, numbers), a clear ask or next step at the end, off-topic parts, and numbers that",
     "  disagree with the slides. For each: title (3-6 words); why (one sentence, under 20 words: what in the speech",
     "  shows it and why it matters to the audience); action (one concrete thing to do, under 15 words); example (one",
-    "  sentence to say instead, keeping the meaning and adding no new facts or numbers); quote (the exact words from",
-    "  the speech where it shows, or empty).",
+    "  sentence to say instead, keeping the meaning and adding no new facts or numbers); sentence (the number of the",
+    "  speech sentence where it shows, or -1).",
     ...(checkPoints ? ["  Include main points that were missed or only partly made."] : []),
     "- off_topic: sentences that have nothing to do with this pitch (its problem, solution, team, customers or business),",
     "  such as personal stories that don't support the pitch. Give sentence_id and reason (in your own words; do not",
@@ -195,21 +196,21 @@ export async function POST(request: Request) {
     "Reply with JSON only:",
     JSON.stringify({
       summary: `1-2 short sentences in ${language}`,
-      strengths: [{ text: "short phrase", quote: "exact words" }],
+      strengths: [{ text: "short phrase", sentence: 0 }],
       improvements: [
-        { title: "3-6 words", why: "one short sentence", action: "one short instruction", example: "a better sentence", quote: "exact words or empty" },
+        { title: "3-6 words", why: "one short sentence", action: "one short instruction", example: "a better sentence", sentence: -1 },
       ],
       off_topic: [{ sentence_id: 0, reason: "short" }],
       ...(numbers.length ? { number_checks: [{ on_slide: numbers[0], said: "exact words or null", inconsistent: false }] } : {}),
       ...(checkPoints
         ? {
-            point_checks: [{ point: 0, status: "covered | partial | missed", evidence: "exact quote", note: "" }],
+            point_checks: [{ point: 0, status: "covered | partial | missed", sentences: [0], note: "" }],
             idea_comment: `1 short sentence in ${language}`,
           }
         : {}),
     }),
-    `Write all text in ${language}, except quotes: copy "quote", "evidence" and "said" word for word from the speech,`,
-    "in the speech's own language, never translated. Use only what the speech and slide text say; never invent quotes or numbers.",
+    `Write all text in ${language}, except "said": copy it word for word from the speech, in the speech's own language,`,
+    "never translated. Point to the speech only by sentence number. Use only what the speech and slide text say; never invent numbers.",
   ].join("\n");
 
   /** Number mismatches the model found, kept only when its quote of what was said is in the speech. */
@@ -273,8 +274,11 @@ export async function POST(request: Request) {
       numberIssues = numberFindings(reply.raw.number_checks);
     }
 
-    // A quote the model made up is dropped; the advice itself stays. A strength must quote the speech.
-    const quoted = (q: string) => {
+    // The quote is the sentence the model named by number; a text quote (older shape) must be in the speech.
+    // A quote that doesn't check out is dropped; the advice itself stays. A strength must have one.
+    const quoted = (q: string, sentence?: number) => {
+      const fromId = sentenceText(sentence, sentences);
+      if (fromId) return fromId;
       const c = cleanQuote(q);
       return c && inSpeech(c, sentences) ? c : "";
     };
@@ -285,9 +289,9 @@ export async function POST(request: Request) {
       .filter(Boolean);
     const modelAdvice = reply.improvements
       .filter((i) => i.source !== "model" || !flaggedFigures.some((v) => `${i.title} ${i.why}`.includes(v)))
-      .map((i) => ({ ...i, quote: i.source === "model" ? quoted(i.quote) : i.quote }));
+      .map(({ sentence, ...i }) => ({ ...i, quote: i.source === "model" ? quoted(i.quote, sentence) : i.quote }));
     const strengths = reply.strengths
-      .map((st) => ({ ...st, quote: quoted(st.quote) }))
+      .map(({ sentence, ...st }) => ({ ...st, quote: quoted(st.quote, sentence) }))
       .filter((st) => st.quote);
     return {
       summary: reply.summary,

@@ -107,6 +107,16 @@ export function cleanQuote(quote: unknown): string {
   return squash(typeof quote === "string" ? quote.replace(/\[\d+\]/g, " ") : "");
 }
 
+/** The text of the sentences a model named by number (at most 2, in speech order); "" when none are valid. */
+export function sentenceText(ids: unknown, sentences: Sentence[]): string {
+  const list: unknown[] = Array.isArray(ids) ? ids : typeof ids === "number" ? [ids] : [];
+  const valid = [...new Set(list)]
+    .filter((n): n is number => typeof n === "number" && Number.isInteger(n) && n >= 0 && n < sentences.length)
+    .sort((a, b) => a - b)
+    .slice(0, 2);
+  return valid.map((n) => sentences[n].text).join(" ");
+}
+
 /** True when `quote` appears word for word in the speech (case and punctuation ignored). */
 export function inSpeech(quote: string, sentences: Sentence[]): boolean {
   const words = tokens(quote).join(" ");
@@ -135,9 +145,12 @@ export function verifyPoints(
   const results: PointResult[] = points.map((text, i) => {
     const c = byPoint.get(i) ?? {};
     const status: Status = STATUSES.includes(c.status as Status) ? (c.status as Status) : "missed";
-    const evidence = cleanQuote(c.evidence);
+    // Evidence as sentence numbers (current prompt): the text comes from the speech, so it is real.
+    // Otherwise a text quote (rules, older prompt) must appear in the speech word for word.
+    const fromIds = sentenceText(c.sentences, sentences);
+    const evidence = fromIds || cleanQuote(c.evidence);
     const quoted = tokens(evidence).join(" ");
-    const verified = status === "missed" || (quoted !== "" && transcript.includes(` ${quoted} `));
+    const verified = status === "missed" || Boolean(fromIds) || (quoted !== "" && transcript.includes(` ${quoted} `));
     if (verified) total += STATUS_VALUE[status];
     return { point: i, text, status, verified, evidence: verified && status !== "missed" ? evidence : "", note: squash(c.note) };
   });
