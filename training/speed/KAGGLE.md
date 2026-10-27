@@ -35,7 +35,7 @@ python -m training.speed.make_data --transcripts data/transcripts --synthetic 30
 ## 3. Upload the data as a private dataset
 
 1. **Create → New Dataset**, upload `train.jsonl` and `test.jsonl`, name it `saylo-speed`, and keep it **Private**.
-2. In the notebook, **Add Input → Your Datasets → saylo-speed**. It appears at `/kaggle/input/saylo-speed/`. Check the exact path with `!ls /kaggle/input`.
+2. In the notebook, **Add Input → Your Datasets → saylo-speed**. Kaggle mounts it somewhere under `/kaggle/input/`. `--data /kaggle/input` makes the script search there for `train.jsonl`.
 
 Each new batch of data is a **New Version** of the same dataset, so the notebook doesn't change.
 
@@ -59,7 +59,7 @@ Each new batch of data is a **New Version** of the same dataset, so the notebook
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"   # one GPU; Unsloth doesn't split across both
 !df -h /tmp /kaggle/working                 # the export needs ~21 GB free on the --export-dir disk
-!python -m training.speed.train_e2b --data /kaggle/input/saylo-speed --out /kaggle/working/model --epochs 2 --export-dir /tmp/gguf
+!python -m training.speed.train_e2b --data /kaggle/input --out /kaggle/working/model --epochs 2 --export-dir /tmp/gguf
 ```
 
 **Why `--export-dir`:** the export writes a 16-bit copy of the model, then an F16 GGUF, then the Q4_K_M file, about 21 GB in total. `/kaggle/working` has only about 20 GB, so it runs out of space. `/tmp` is on the machine's larger disk and isn't saved with the notebook. The script builds the export there and copies only the ~3 GB Q4_K_M file into `/kaggle/working/model/gguf/`. If `df` shows less than 22 GB free on `/tmp`, point `--export-dir` at whichever disk has more room.

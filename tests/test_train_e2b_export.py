@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from training.speed.train_e2b import export_gguf, pick_gguf
+from training.speed.train_e2b import export_gguf, find_train_file, pick_gguf
 
 
 def touch(path: Path, size: int = 10) -> Path:
@@ -57,3 +57,8 @@ def test_export_in_scratch_copies_only_the_quantized_model(tmp_path):
     assert sorted(f.name for f in (out / "gguf").iterdir()) == ["gemma-4-e2b-it.Q4_K_M.gguf"]
     assert (out / "Modelfile").read_text(encoding="utf-8").startswith("FROM ./gguf/gemma-4-e2b-it.Q4_K_M.gguf\n")
     assert (scratch.parent / "gguf_gguf" / "mmproj-gemma-4-e2b-it.gguf").exists()  # scratch is left where it is
+
+
+def test_find_train_file_in_kaggles_nested_input_folders(tmp_path):
+    nested = touch(tmp_path / "input" / "datasets" / "someone" / "saylo-speed" / "train.jsonl")
+    assert find_train_file(tmp_path / "input") == nested

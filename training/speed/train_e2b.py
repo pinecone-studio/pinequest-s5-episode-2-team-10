@@ -51,6 +51,17 @@ def turn_markers(tokenizer) -> tuple[str, str]:
     return user_part, model_part
 
 
+def find_train_file(data: Path) -> Path:
+    """train.jsonl in `data`, or anywhere below it (Kaggle mounts datasets in nested folders)."""
+    if (data / "train.jsonl").is_file():
+        return data / "train.jsonl"
+    for root in (data, data.parent):
+        found = sorted(root.rglob("train.jsonl")) if root.is_dir() else []
+        if found:
+            return found[0]
+    raise SystemExit(f"train.jsonl not found in {data} or below it; pass the right folder with --data")
+
+
 def pick_gguf(files: list[Path]) -> Path | None:
     """The quantized model among the export's files: Q4_K_M, not the image projector or an F16 copy."""
     models = [f for f in files if "mmproj" not in f.name.lower()]
@@ -112,10 +123,11 @@ def main() -> int:
     ap.add_argument("--export-dir", type=Path, help="scratch folder for the export (~21 GB), e.g. /tmp/gguf on Kaggle")
     args = ap.parse_args()
 
-    from datasets import Dataset
-    from trl import SFTConfig, SFTTrainer
+    # Unsloth first: it patches trl/transformers when imported.
     from unsloth import FastModel
     from unsloth.chat_templates import train_on_responses_only
+    from datasets import Dataset
+    from trl import SFTConfig, SFTTrainer
 
     args.out.mkdir(parents=True, exist_ok=True)
     lora = args.out / "lora"
@@ -127,6 +139,8 @@ def main() -> int:
         model, tokenizer = FastModel.from_pretrained(str(lora), max_seq_length=args.max_seq, load_in_4bit=True)
         return export_gguf(model, tokenizer, args.out, args.export_dir)
 
+    train_file = find_train_file(args.data)
+    print(f"training data: {train_file}")
     model, tokenizer = FastModel.from_pretrained(args.base, max_seq_length=args.max_seq, load_in_4bit=True)
     model = FastModel.get_peft_model(
         model, r=args.rank, lora_alpha=args.rank, lora_dropout=0, bias="none",
@@ -134,7 +148,7 @@ def main() -> int:
         finetune_attention_modules=True, finetune_mlp_modules=True, random_state=7,
     )
 
-    rows = [json.loads(line) for line in (args.data / "train.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = [json.loads(line) for line in train_file.read_text(encoding="utf-8").splitlines() if line.strip()]
     texts = [tokenizer.apply_chat_template(r["messages"], tokenize=False) for r in rows]
     print(f"{len(texts)} training examples")
 
