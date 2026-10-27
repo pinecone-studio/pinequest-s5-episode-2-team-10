@@ -24,6 +24,9 @@ from pipeline.audio import AudioError, to_wav16k
 
 TOKEN = os.environ.get("VOICE_SERVER_TOKEN", "").strip()
 PRELOAD = os.environ.get("VOICE_PRELOAD", "1").strip() != "0"
+VOICE_TMP_DIR = Path(
+    os.environ.get("VOICE_TMP_DIR", str(Path(__file__).resolve().parents[1] / "data" / "voice" / "tmp"))
+)
 MAX_BYTES = 25 * 1024 * 1024  # same limits as the API's audio upload
 MAX_SECONDS = 5 * 60 + 5
 
@@ -44,6 +47,7 @@ class VoiceError(HTTPException):
 async def lifespan(_app: FastAPI):
     if not TOKEN:
         raise RuntimeError("Set VOICE_SERVER_TOKEN before starting the voice server.")
+    VOICE_TMP_DIR.mkdir(parents=True, exist_ok=True)
     if PRELOAD:
         asr._load()  # load the model now so the first request isn't slow
     yield
@@ -85,7 +89,7 @@ def health():
 
 @app.post("/v1/transcribe", dependencies=[Depends(require_token)])
 def transcribe(file: UploadFile):
-    with tempfile.TemporaryDirectory(prefix="voice-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="voice-", dir=VOICE_TMP_DIR) as tmp:
         src = Path(tmp) / f"upload{Path(file.filename or '').suffix.lower() or '.bin'}"
         size = 0
         with src.open("wb") as out:
