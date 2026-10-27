@@ -89,11 +89,13 @@ export interface Improvement {
   action: string;
   example: string;
   quote: string; // exact words from the speech; the route drops a model quote that isn't there
+  sentence?: number; // the model's sentence number for the quote; the route fills in its text
 }
 
 export interface Strength {
   text: string;
   quote: string; // the words that show it; strengths without a quote from the speech are dropped
+  sentence?: number; // as on Improvement
 }
 
 /** A checked reply plus the raw JSON, so callers can read extra fields (main points) themselves. */
@@ -108,9 +110,14 @@ export const MAX_IMPROVEMENTS = 5;
 const MAX_STRENGTHS = 3;
 
 const text = (value: unknown, max: number) => (typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "");
+/** A sentence number from the model: a whole number 0 or more, else none (the prompt uses -1 for none). */
+const sentenceOf = (value: unknown) =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0 ? { sentence: value } : {};
 
 /**
- * Checks the model's JSON: {summary, strengths: [{text, quote}], improvements: [{title, why, action, example, quote}]}.
+ * Checks the model's JSON: {summary, strengths: [{text, sentence}], improvements: [{title, why, action, example, sentence}]}.
+ * `sentence` is the number of the speech sentence that shows it; the route turns it into the quote.
+ * A text `quote` (older prompt, or a model that drifts) is kept for the route to check word for word.
  * Each improvement needs a title and an action; at most MAX_IMPROVEMENTS are kept.
  * The older {points: [{title, detail}]} shape is read as improvements, so small models that drift still work.
  */
@@ -128,14 +135,17 @@ export function parseReply(raw: unknown): ModelReply | null {
     const title = text(i.title, 120);
     const action = text(i.action ?? i.detail, 500);
     if (!title || !action) continue;
-    improvements.push({ source: "model", title, why: text(i.why, 500), action, example: text(i.example, 400), quote: text(i.quote, 400) });
+    improvements.push({
+      source: "model", title, why: text(i.why, 500), action, example: text(i.example, 400), quote: text(i.quote, 400),
+      ...sentenceOf(i.sentence),
+    });
     if (improvements.length === MAX_IMPROVEMENTS) break;
   }
   const strengths = (Array.isArray(body.strengths) ? body.strengths : [])
     .map((v): Strength => {
       if (typeof v === "string") return { text: text(v, 300), quote: "" };
       const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
-      return { text: text(o.text, 300), quote: text(o.quote, 400) };
+      return { text: text(o.text, 300), quote: text(o.quote, 400), ...sentenceOf(o.sentence) };
     })
     .filter((v) => v.text)
     .slice(0, MAX_STRENGTHS);
@@ -177,17 +187,19 @@ export async function askClaude(prompt: string, image: { mediaType: string; data
 }
 
 const str = { type: "string" } as const;
+const int = { type: "integer" } as const;
 
 /** JSON schema for the reply; Ollama uses it to constrain the output to this shape. */
 export function replySchema(withPoints: boolean, withNumbers = false): Record<string, unknown> {
   const obj = (props: Record<string, unknown>) => ({ type: "object", properties: props, required: Object.keys(props) });
   const properties: Record<string, unknown> = {
     summary: str,
-    strengths: { type: "array", maxItems: 3, items: obj({ text: str, quote: str }) },
+    // Sentence numbers instead of copied quotes: far fewer tokens, and a quote can't be invented.
+    strengths: { type: "array", maxItems: 3, items: obj({ text: str, sentence: int }) },
     improvements: {
       type: "array",
       maxItems: MAX_IMPROVEMENTS,
-      items: obj({ title: str, why: str, action: str, example: str, quote: str }),
+      items: obj({ title: str, why: str, action: str, example: str, sentence: int }),
     },
     off_topic: { type: "array", items: obj({ sentence_id: { type: "integer" }, reason: str }) },
   };
@@ -200,7 +212,12 @@ export function replySchema(withPoints: boolean, withNumbers = false): Record<st
   if (withPoints) {
     properties.point_checks = {
       type: "array",
-      items: obj({ point: { type: "integer" }, status: { type: "string", enum: ["covered", "partial", "missed"] }, evidence: str, note: str }),
+      items: obj({
+        point: int,
+        status: { type: "string", enum: ["covered", "partial", "missed"] },
+        sentences: { type: "array", maxItems: 2, items: int },
+        note: str,
+      }),
     };
     properties.idea_comment = str;
   }
