@@ -118,6 +118,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     clearSession();
   }
 
+  // Audience present window: slide only, no sidebar or top bar (still inside AuthGate for blobs).
+  if (pathname === "/present") return <>{children}</>;
+
   return (
     <div className={showScene ? "app-shell has-scene" : "app-shell"}>
       {showScene && (
