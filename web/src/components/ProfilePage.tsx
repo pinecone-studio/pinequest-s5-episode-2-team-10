@@ -29,6 +29,8 @@ export default function ProfilePage() {
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [avatarError, setAvatarError] = useState("");
   const [avatarSaved, setAvatarSaved] = useState(false);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
   const sharedDemo = account?.email.toLowerCase() === "demo@pitchcoach.local";
   const accountId = account?.id;
@@ -54,6 +56,10 @@ export default function ProfilePage() {
       active = false;
     };
   }, [accountId, reload]);
+
+  useEffect(() => () => {
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+  }, [avatarPreview]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -89,20 +95,32 @@ export default function ProfilePage() {
     }
   }
 
-  async function uploadAvatar(event: ChangeEvent<HTMLInputElement>) {
+  function chooseAvatar(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     setAvatarError("");
     setAvatarSaved(false);
     if (file.size > 5 * 1024 * 1024) {
+      setAvatarFile(null);
+      setAvatarPreview(null);
       setAvatarError(tr("profilePhotoTooLarge"));
       return;
     }
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  }
+
+  async function saveAvatar() {
+    if (!avatarFile) return;
+    setAvatarError("");
+    setAvatarSaved(false);
     setAvatarSaving(true);
     try {
-      await api.uploadProfileAvatar(file);
+      await api.uploadProfileAvatar(avatarFile);
       notifyProfileAvatarUpdated();
+      setAvatarFile(null);
+      setAvatarPreview(null);
       setAvatarSaved(true);
     } catch (cause) {
       const code = errorCode(cause);
@@ -139,14 +157,27 @@ export default function ProfilePage() {
         </div>
 
         <div className="profile-photo-row">
-          <AccountAvatar className="profile-photo-avatar" fallback={(username || account?.email || "?").slice(0, 1).toUpperCase()} />
+          <AccountAvatar className="profile-photo-avatar" fallback={(username || account?.email || "?").slice(0, 1).toUpperCase()} previewUrl={avatarPreview} />
           <div className="profile-photo-content">
             <strong>{tr("profilePhoto")}</strong>
             <span>{tr("profilePhotoHint")}</span>
-            <input ref={avatarInput} className="profile-file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadAvatar} aria-label={tr("profilePhoto")} />
-            <button type="button" className="profile-secondary-button" onClick={() => avatarInput.current?.click()} disabled={loading || loadError || sharedDemo || avatarSaving}>
-              {avatarSaving ? tr("profilePhotoUploading") : tr("profilePhotoButton")}
-            </button>
+            <input ref={avatarInput} className="profile-file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseAvatar} aria-label={tr("profilePhoto")} />
+            <div className="profile-photo-actions">
+              <button type="button" className="profile-secondary-button profile-photo-button" onClick={() => avatarInput.current?.click()} disabled={loading || loadError || sharedDemo || avatarSaving}>
+                {tr(avatarFile ? "profilePhotoChooseAnother" : "profilePhotoButton")}
+              </button>
+              {avatarFile && (
+                <>
+                  <button type="button" className="profile-primary-button profile-photo-button" onClick={saveAvatar} disabled={avatarSaving} aria-busy={avatarSaving}>
+                    {avatarSaving && <span className="profile-photo-spinner" aria-hidden="true" />}
+                    {avatarSaving ? tr("profilePhotoUploading") : tr("profilePhotoSave")}
+                  </button>
+                  <button type="button" className="profile-photo-cancel" onClick={() => { setAvatarFile(null); setAvatarPreview(null); setAvatarError(""); }} disabled={avatarSaving}>
+                    {tr("profileCancel")}
+                  </button>
+                </>
+              )}
+            </div>
             {avatarError && <span className="profile-message is-error" role="alert">{avatarError}</span>}
             {avatarSaved && <span className="profile-message is-success" role="status">{tr("profilePhotoSaved")}</span>}
           </div>
