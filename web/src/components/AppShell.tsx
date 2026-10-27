@@ -11,6 +11,7 @@ import LangToggle from "./LangToggle";
 import RingBackdrop from "./RingBackdrop";
 import SayloMark from "./SayloMark";
 import SidebarPitches from "./SidebarPitches";
+import AccountAvatar from "./AccountAvatar";
 
 const PANEL_WIDTH = 260;
 const INTRO_KEY = "saylo:intro:";
@@ -167,9 +168,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               aria-label={label || "SAYLO"}
               onClick={toggleAccount}
             >
-              <span className="app-avatar" aria-hidden>
-                {initial}
-              </span>
+              <AccountAvatar className="app-avatar" fallback={initial} />
               <span className="app-account-copy">
                 <strong>{label || "SAYLO"}</strong>
                 {email && <span>{email}</span>}
@@ -199,9 +198,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 aria-current={pathname === "/profile" ? "page" : undefined}
                 onClick={() => setAccountOpen(false)}
               >
-                <span className="app-avatar" aria-hidden>
-                  {initial}
-                </span>
+                <AccountAvatar className="app-avatar" fallback={initial} />
                 <span className="account-panel-copy">
                   <strong>{label || "SAYLO"}</strong>
                   {email && <span>{email}</span>}

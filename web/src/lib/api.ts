@@ -90,6 +90,16 @@ function upload<T>(id: string, kind: "audio" | "slides", file: Blob, filename: s
   return request<T>(`/sessions/${id}/${kind}`, { method: "POST", body: form, signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS) });
 }
 
+function uploadProfileAvatar(file: File) {
+  const form = new FormData();
+  form.append("file", file, file.name);
+  return request<void>("/auth/me/avatar", {
+    method: "PUT",
+    body: form,
+    signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+  });
+}
+
 const realApi = {
   register: (email: string, username: string, password: string) =>
     send<AuthSession>("/auth/register", json("POST", { email, username, password }), null),
@@ -109,6 +119,8 @@ const realApi = {
     send<AuthSession>("/auth/google", json("POST", { access_token: accessToken }), null),
   me: () => request<AccountProfile>("/auth/me"),
   updateProfile: (username: string) => request<AccountProfile>("/auth/me", json("PATCH", { username })),
+  profileAvatar: () => request<Blob>("/auth/me/avatar", {}, "blob"),
+  uploadProfileAvatar,
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   adminUsers: () => request<AdminUser[]>("/admin/users"),
   updateAdminUser: (id: string, changes: { role?: "member" | "admin"; is_active?: boolean }) =>

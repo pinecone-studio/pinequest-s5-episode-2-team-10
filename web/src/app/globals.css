@@ -276,6 +276,8 @@ body {
 }
 
 .app-avatar {
+  position: relative;
+  overflow: hidden;
   display: grid;
   width: 34px;
   height: 34px;
@@ -3384,6 +3386,8 @@ textarea.ui-input {
 }
 
 .profile-avatar {
+  position: relative;
+  overflow: hidden;
   display: grid;
   width: 58px;
   height: 58px;
@@ -3411,7 +3415,7 @@ textarea.ui-input {
   letter-spacing: -0.03em;
 }
 
-.profile-heading span {
+.profile-heading > div > span {
   display: block;
   margin-top: 4px;
   color: var(--text-secondary);
@@ -3441,6 +3445,42 @@ textarea.ui-input {
   color: var(--text-secondary);
   font-size: 12px;
 }
+
+.profile-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-photo-avatar {
+  position: relative;
+  display: grid;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid rgba(143, 136, 255, 0.46);
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.profile-photo-content {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.profile-photo-content strong { color: var(--text-primary); font-size: 13px; }
+.profile-photo-content .profile-message { margin: 0; }
+.profile-file-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .profile-form {
   display: grid;

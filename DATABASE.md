@@ -10,6 +10,7 @@ An account. The browser keeps the access token.
 - `token_hash`: SHA-256 of the access token (unique, indexed); the token itself is never stored
 - `email`: optional lowercase unique email; `NULL` for accounts created before login existed
 - `username`: optional unique normalized name (1–40 characters), chosen at registration or updated from Profile and usable instead of the email to sign in; `NULL` for Google, demo, and older accounts
+- `avatar_key`: optional key for the user's profile image in local data or private Supabase Storage
 - `password_hash`: PBKDF2-SHA256 (`pbkdf2_sha256$iterations$salt$digest`). The password itself is never stored
 - `role`: `member` (default) or `admin`; assigned and enforced by the backend
 - `is_active`: whether the account can authenticate (default `true`)
@@ -127,7 +128,7 @@ The current checkout has no source SQLite DB or session files in its `data/` dir
 
 ## File storage and Supabase Storage
 
-In local SQLite mode, original audio, converted WAV audio, and uploaded slide decks are kept under `PITCH_DATA_DIR/sessions/<session_id>/`. In shared Postgres mode, the backend stores these files in the configured private Supabase Storage bucket and stores `storage://` object keys in the database. The API downloads files server-side for playback and analysis; the browser never receives the service-role key or direct public object URLs.
+In local SQLite mode, original audio, converted WAV audio, and uploaded slide decks are kept under `PITCH_DATA_DIR/sessions/<session_id>/`; profile images are stored under `PITCH_DATA_DIR/user-avatars/`. In shared Postgres mode, the backend stores these files in the configured private Supabase Storage bucket and stores `storage://` object keys in the database. The API downloads files server-side for playback and analysis; the browser never receives the service-role key or direct public object URLs.
 
 The backend checks project/attempt ownership before every file download and delete. The service-role key bypasses Storage policies, so it must remain server-side; private bucket access is exposed only through the authenticated FastAPI API.
 

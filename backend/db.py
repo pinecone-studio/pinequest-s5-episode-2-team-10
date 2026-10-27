@@ -29,6 +29,7 @@ class AppUser(SQLModel, table=True):
     token_hash: str = Field(index=True, unique=True)
     email: Optional[str] = Field(default=None, index=True, unique=True)
     username: Optional[str] = Field(default=None, index=True, unique=True)
+    avatar_key: Optional[str] = None
     password_hash: Optional[str] = None
     role: str = "member"
     is_active: bool = True
@@ -167,6 +168,7 @@ ADDED_COLUMNS = {
     "app_user": {
         "email": "TEXT",
         "username": "TEXT",
+        "avatar_key": "TEXT",
         "password_hash": "TEXT",
         "role": "TEXT NOT NULL DEFAULT 'member'",
         "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",

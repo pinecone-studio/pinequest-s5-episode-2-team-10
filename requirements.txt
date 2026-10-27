@@ -12,3 +12,4 @@ praat-parselmouth
 pymupdf
 python-pptx
 imageio-ffmpeg   # bundled ffmpeg binary, used when ffmpeg is not on PATH
+Pillow           # validates and resizes profile images
