@@ -50,7 +50,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const home = pathname === "/" || pathname === "/figma";
   const openFolder = useSearchParams().get("folder");
   const email = account?.email ?? "";
-  const label = email.includes("@") ? email.slice(0, email.indexOf("@")) : email;
+  const emailLabel = email.includes("@") ? email.slice(0, email.indexOf("@")) : email;
+  const label = account?.username || emailLabel;
   const initial = (label || email || "?").slice(0, 1).toUpperCase();
   const isAdmin = account?.role === "admin" || account?.email === "demo@pitchcoach.local";
   // The ring plays behind the pitch list only. The shell stays mounted while signed out, so wait for an account.
@@ -191,7 +192,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             <div className="account-panel-section">
               <p>{tr("currentAccount")}</p>
-              <div className="account-panel-user">
+              <Link
+                href="/profile"
+                className="account-panel-user account-panel-profile"
+                aria-label={tr("profile")}
+                aria-current={pathname === "/profile" ? "page" : undefined}
+                onClick={() => setAccountOpen(false)}
+              >
                 <span className="app-avatar" aria-hidden>
                   {initial}
                 </span>
@@ -199,7 +206,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   <strong>{label || "SAYLO"}</strong>
                   {email && <span>{email}</span>}
                 </span>
-              </div>
+                <ChevronRight />
+              </Link>
             </div>
             <button
               type="button"

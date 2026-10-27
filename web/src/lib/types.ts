@@ -3,12 +3,15 @@
 
 export type AppRole = "member" | "admin";
 
-export interface AuthSession {
+export interface AccountProfile {
   id: string;
   email: string;
   /** Null for Google, demo, and older accounts. */
   username: string | null;
   role: AppRole;
+}
+
+export interface AuthSession extends AccountProfile {
   access_token: string;
 }
 
