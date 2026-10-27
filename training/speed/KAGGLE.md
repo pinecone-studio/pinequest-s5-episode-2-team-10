@@ -62,19 +62,37 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"   # one GPU; Unsloth doesn't split acro
 ```
 
 ```python
-# Cell 4: keep only what we need to download
+# Cell 4: keep only what we need to download, and show what's there
 !rm -rf /kaggle/working/model/checkpoints
-!ls -lh /kaggle/working/model /kaggle/working/model/gguf
+!find /kaggle/working/model -maxdepth 2 | sort; cat /kaggle/working/model/Modelfile
 ```
 
-**Long runs:** instead of keeping the browser open, use **Save Version → Save & Run All (Commit)**. It runs in the background, and the files appear under the version's **Output** tab when it finishes.
+**Run it as a committed version, not in the open editor.** Use **Save Version → Save & Run All (Commit)**. It runs in the background, and its files stay under the version's **Output** tab after it finishes. An editor session deletes `/kaggle/working` when it times out or restarts, so a long run there can finish and leave nothing to download.
+
+The script saves in stages, so a late failure doesn't lose the training:
+
+| Path in `/kaggle/working/model/` | Written | What it is |
+|---|---|---|
+| `lora/` | as soon as training ends | the trained adapter (small) |
+| `gguf/*.Q4_K_M.gguf` (or `gguf_gguf/`) | after the export | the model for Ollama, about 3 GB |
+| `Modelfile` | last | points Ollama at the Q4_K_M file |
+
+**If the export fails** (the log says `GGUF export failed`), the adapter is still in that version's `model/lora/`. Rerun only the export in a new session:
+
+1. **Add Input → Notebook Output Files**, and pick the version that trained. Check its path with `!ls /kaggle/input`.
+2. Run Cell 1 and Cell 2 again, then copy the adapter somewhere writable (inputs are read-only) and export:
+
+```python
+!mkdir -p /kaggle/working/model && cp -r /kaggle/input/<notebook-name>/model/lora /kaggle/working/model/
+!python -m training.speed.train_e2b --out /kaggle/working/model --export-only
+```
 
 **If it runs out of memory:** add `--max-seq 6144` or `--rank 8`. Don't go below 6144: a prompt plus its answer is 4,300–6,100 tokens, and anything longer is cut off.
 
 ## 5. Bring the model to the GPU PC
 
-1. In the notebook's **Output** panel (or the committed version's **Output** tab), download `model/gguf/*.gguf` (Q4_K_M, about 3 GB) and `model/Modelfile`.
-2. Put them on the PC in `B:\pinequest-data\models\pitchcoach-e2b\`, keeping the `gguf\` folder next to the `Modelfile`.
+1. In the committed version's **Output** tab, download the `.Q4_K_M.gguf` file (about 3 GB) and `model/Modelfile`. Skip `mmproj` and F16 files: they aren't needed.
+2. Put them on the PC in `B:\pinequest-data\models\pitchcoach-e2b\`, keeping the GGUF's folder (`gguf\` or `gguf_gguf\`) next to the `Modelfile`, as its `FROM` line says.
 3. Copy the chat template from the base model into the Modelfile: run `ollama show gemma4:e2b --modelfile` and paste its `TEMPLATE` and `PARAMETER stop` lines below the `FROM` line.
 4. Create the model, then compare it with the others:
 
