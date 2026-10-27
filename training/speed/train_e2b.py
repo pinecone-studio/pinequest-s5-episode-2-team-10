@@ -5,12 +5,27 @@ Run on a GPU (Kaggle T4/P100 or the RTX 4060), after make_data.py:
     python -m training.speed.train_e2b --data data/speed --out data/speed/model
 
 Stop Ollama first if it runs on the same GPU (the teacher would take the memory).
-Writes <out>/gguf/*.gguf (Q4_K_M) and <out>/Modelfile; see README.md for `ollama create`.
+
+Writes, in this order, so a later failure never loses an earlier step:
+    <out>/lora/            the trained adapter (small; saved as soon as training ends)
+    <out>/gguf/*.gguf      the Q4_K_M model for Ollama (about 3 GB)
+    <out>/Modelfile        points Ollama at that file; see README.md for `ollama create`
+
+If the GGUF export fails, rerun only the export from the saved adapter:
+    python -m training.speed.train_e2b --out <out> --export-only
+
+The export needs about 21 GB of scratch space (a 16-bit merge, an F16 GGUF, then the quant). On
+Kaggle, /kaggle/working has only ~20 GB, so pass --export-dir on a bigger disk (e.g. /tmp/gguf):
+the scratch files stay there and only the ~3 GB Q4_K_M file is copied into <out>/gguf/.
 """
 
 import argparse
 import json
+import shutil
+import sys
 from pathlib import Path
+
+EXPORT_NEEDS_GB = 22  # Unsloth's estimate for E2B was 21.1 GB
 
 PLACEHOLDER = "XQZ_PLACEHOLDER_XQZ"
 
@@ -36,6 +51,66 @@ def turn_markers(tokenizer) -> tuple[str, str]:
     return user_part, model_part
 
 
+def find_train_file(data: Path) -> Path:
+    """train.jsonl in `data`, or anywhere below it (Kaggle mounts datasets in nested folders)."""
+    if (data / "train.jsonl").is_file():
+        return data / "train.jsonl"
+    for root in (data, data.parent):
+        found = sorted(root.rglob("train.jsonl")) if root.is_dir() else []
+        if found:
+            return found[0]
+    raise SystemExit(f"train.jsonl not found in {data} or below it; pass the right folder with --data")
+
+
+def pick_gguf(files: list[Path]) -> Path | None:
+    """The quantized model among the export's files: Q4_K_M, not the image projector or an F16 copy."""
+    models = [f for f in files if "mmproj" not in f.name.lower()]
+    for f in sorted(models):
+        if "q4_k_m" in f.name.lower():
+            return f
+    return sorted(models, key=lambda f: f.stat().st_size)[0] if models else None
+
+
+def free_gb(path: Path) -> float:
+    """Free space on the disk that holds `path` (or its nearest existing parent)."""
+    while not path.exists() and path != path.parent:
+        path = path.parent
+    return shutil.disk_usage(path).free / 1e9
+
+
+def export_gguf(model, tokenizer, out: Path, scratch: Path | None = None) -> int:
+    """Q4_K_M GGUF plus a Modelfile in `out`.
+
+    The export's big scratch files go to `scratch` when given (then only the Q4_K_M file is copied
+    into out/gguf/), else to out/gguf. Some Unsloth versions write to `<dir>_gguf`, so search for it.
+    """
+    work = scratch or out / "gguf"
+    work.mkdir(parents=True, exist_ok=True)
+    print(f"Exporting in {work} ({free_gb(work):.1f} GB free; needs about {EXPORT_NEEDS_GB} GB)")
+    if free_gb(work) < EXPORT_NEEDS_GB:
+        print("Not much room here: if the export fails for disk space, point --export-dir at a bigger disk"
+              " (check with: df -h /tmp /kaggle/working).", file=sys.stderr)
+    model.save_pretrained_gguf(str(work), tokenizer, quantization_method="q4_k_m")
+    found = sorted(f for d in work.parent.glob(f"{work.name}*") if d.is_dir() for f in d.rglob("*.gguf"))
+    print("GGUF files:", *(f"  {f} ({f.stat().st_size / 1e9:.2f} GB)" for f in found), sep="\n")
+    gguf = pick_gguf(found)
+    if gguf is None:
+        print(f"No .gguf file was written under {work}.", file=sys.stderr)
+        return 1
+    if scratch is not None:  # keep only the model we need next to the Modelfile
+        (out / "gguf").mkdir(parents=True, exist_ok=True)
+        gguf = Path(shutil.copy2(gguf, out / "gguf" / gguf.name))
+        print(f"Copied to {gguf}")
+    (out / "Modelfile").write_text(
+        f"FROM ./{gguf.relative_to(out).as_posix()}\n"
+        "# Copy TEMPLATE and PARAMETER lines from: ollama show gemma4:e2b --modelfile\n"
+        "PARAMETER temperature 0\n",
+        encoding="utf-8",
+    )
+    print(f"Model: {gguf}\nModelfile: {out / 'Modelfile'}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--data", type=Path, default=Path("data/speed"))
@@ -44,13 +119,28 @@ def main() -> int:
     ap.add_argument("--epochs", type=float, default=2)
     ap.add_argument("--rank", type=int, default=16)
     ap.add_argument("--max-seq", type=int, default=8192)
+    ap.add_argument("--export-only", action="store_true", help="skip training; export the GGUF from <out>/lora")
+    ap.add_argument("--export-dir", type=Path, help="scratch folder for the export (~21 GB), e.g. /tmp/gguf on Kaggle")
     args = ap.parse_args()
 
-    from datasets import Dataset
-    from trl import SFTConfig, SFTTrainer
+    # Unsloth first: it patches trl/transformers when imported.
     from unsloth import FastModel
     from unsloth.chat_templates import train_on_responses_only
+    from datasets import Dataset
+    from trl import SFTConfig, SFTTrainer
 
+    args.out.mkdir(parents=True, exist_ok=True)
+    lora = args.out / "lora"
+    print(f"Output folder: {args.out.resolve()}")
+    if args.export_only:
+        if not (lora / "adapter_config.json").exists():
+            print(f"No saved adapter at {lora}; train first.", file=sys.stderr)
+            return 1
+        model, tokenizer = FastModel.from_pretrained(str(lora), max_seq_length=args.max_seq, load_in_4bit=True)
+        return export_gguf(model, tokenizer, args.out, args.export_dir)
+
+    train_file = find_train_file(args.data)
+    print(f"training data: {train_file}")
     model, tokenizer = FastModel.from_pretrained(args.base, max_seq_length=args.max_seq, load_in_4bit=True)
     model = FastModel.get_peft_model(
         model, r=args.rank, lora_alpha=args.rank, lora_dropout=0, bias="none",
@@ -58,7 +148,7 @@ def main() -> int:
         finetune_attention_modules=True, finetune_mlp_modules=True, random_state=7,
     )
 
-    rows = [json.loads(line) for line in (args.data / "train.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = [json.loads(line) for line in train_file.read_text(encoding="utf-8").splitlines() if line.strip()]
     texts = [tokenizer.apply_chat_template(r["messages"], tokenize=False) for r in rows]
     print(f"{len(texts)} training examples")
 
@@ -79,17 +169,17 @@ def main() -> int:
     trainer = train_on_responses_only(trainer, instruction_part=user_part, response_part=model_part)
     trainer.train()
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained_gguf(str(args.out / "gguf"), tokenizer, quantization_method="q4_k_m")
-    gguf = sorted((args.out / "gguf").glob("*.gguf"))
-    (args.out / "Modelfile").write_text(
-        f"FROM ./gguf/{gguf[-1].name if gguf else 'model.gguf'}\n"
-        "# Copy TEMPLATE and PARAMETER lines from: ollama show gemma4:e2b --modelfile\n"
-        "PARAMETER temperature 0\n",
-        encoding="utf-8",
-    )
-    print(f"GGUF written to {args.out / 'gguf'}; Modelfile at {args.out / 'Modelfile'}")
-    return 0
+    # Save the training before the export, which is the step most likely to fail.
+    model.save_pretrained(str(lora))
+    tokenizer.save_pretrained(str(lora))
+    print(f"Adapter saved: {lora}")
+    try:
+        return export_gguf(model, tokenizer, args.out, args.export_dir)
+    except Exception as e:  # keep the adapter; say how to retry
+        print(f"GGUF export failed: {e}\nThe training is saved in {lora}. Retry the export with:\n"
+              f"  python -m training.speed.train_e2b --out {args.out} --export-only --export-dir /tmp/gguf",
+              file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

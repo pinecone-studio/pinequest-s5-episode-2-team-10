@@ -35,7 +35,7 @@ python -m training.speed.make_data --transcripts data/transcripts --synthetic 30
 ## 3. Upload the data as a private dataset
 
 1. **Create → New Dataset**, upload `train.jsonl` and `test.jsonl`, name it `saylo-speed`, and keep it **Private**.
-2. In the notebook, **Add Input → Your Datasets → saylo-speed**. It appears at `/kaggle/input/saylo-speed/`. Check the exact path with `!ls /kaggle/input`.
+2. In the notebook, **Add Input → Your Datasets → saylo-speed**. Kaggle mounts it somewhere under `/kaggle/input/`. `--data /kaggle/input` makes the script search there for `train.jsonl`.
 
 Each new batch of data is a **New Version** of the same dataset, so the notebook doesn't change.
 
@@ -58,23 +58,44 @@ Each new batch of data is a **New Version** of the same dataset, so the notebook
 # the GGUF export builds llama.cpp first, which adds about 5–10 minutes)
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"   # one GPU; Unsloth doesn't split across both
-!python -m training.speed.train_e2b --data /kaggle/input/saylo-speed --out /kaggle/working/model --epochs 2
+!df -h /tmp /kaggle/working                 # the export needs ~21 GB free on the --export-dir disk
+!python -m training.speed.train_e2b --data /kaggle/input --out /kaggle/working/model --epochs 2 --export-dir /tmp/gguf
 ```
+
+**Why `--export-dir`:** the export writes a 16-bit copy of the model, then an F16 GGUF, then the Q4_K_M file, about 21 GB in total. `/kaggle/working` has only about 20 GB, so it runs out of space. `/tmp` is on the machine's larger disk and isn't saved with the notebook. The script builds the export there and copies only the ~3 GB Q4_K_M file into `/kaggle/working/model/gguf/`. If `df` shows less than 22 GB free on `/tmp`, point `--export-dir` at whichever disk has more room.
 
 ```python
-# Cell 4: keep only what we need to download
+# Cell 4: keep only what we need to download, and show what's there
 !rm -rf /kaggle/working/model/checkpoints
-!ls -lh /kaggle/working/model /kaggle/working/model/gguf
+!find /kaggle/working/model -maxdepth 2 | sort; cat /kaggle/working/model/Modelfile
 ```
 
-**Long runs:** instead of keeping the browser open, use **Save Version → Save & Run All (Commit)**. It runs in the background, and the files appear under the version's **Output** tab when it finishes.
+**Run it as a committed version, not in the open editor.** Use **Save Version → Save & Run All (Commit)**. It runs in the background, and its files stay under the version's **Output** tab after it finishes. An editor session deletes `/kaggle/working` when it times out or restarts, so a long run there can finish and leave nothing to download.
+
+The script saves in stages, so a late failure doesn't lose the training:
+
+| Path in `/kaggle/working/model/` | Written | What it is |
+|---|---|---|
+| `lora/` | as soon as training ends | the trained adapter (small) |
+| `gguf/*.Q4_K_M.gguf` | after the export | the model for Ollama, about 3 GB (copied from `--export-dir`) |
+| `Modelfile` | last | points Ollama at the Q4_K_M file |
+
+**If the export fails** (the log says `GGUF export failed`), the adapter is still in that version's `model/lora/`. Rerun only the export in a new session:
+
+1. **Add Input → Notebook Output Files**, and pick the version that trained. Check its path with `!ls /kaggle/input`.
+2. Run Cell 1 and Cell 2 again, then copy the adapter somewhere writable (inputs are read-only) and export:
+
+```python
+!mkdir -p /kaggle/working/model && cp -r /kaggle/input/<notebook-name>/model/lora /kaggle/working/model/
+!python -m training.speed.train_e2b --out /kaggle/working/model --export-only --export-dir /tmp/gguf
+```
 
 **If it runs out of memory:** add `--max-seq 6144` or `--rank 8`. Don't go below 6144: a prompt plus its answer is 4,300–6,100 tokens, and anything longer is cut off.
 
 ## 5. Bring the model to the GPU PC
 
-1. In the notebook's **Output** panel (or the committed version's **Output** tab), download `model/gguf/*.gguf` (Q4_K_M, about 3 GB) and `model/Modelfile`.
-2. Put them on the PC in `B:\pinequest-data\models\pitchcoach-e2b\`, keeping the `gguf\` folder next to the `Modelfile`.
+1. In the committed version's **Output** tab, download the `.Q4_K_M.gguf` file (about 3 GB) and `model/Modelfile`. Skip `mmproj` and F16 files: they aren't needed.
+2. Put them on the PC in `B:\pinequest-data\models\pitchcoach-e2b\`, keeping the `gguf\` folder next to the `Modelfile`, as its `FROM` line says.
 3. Copy the chat template from the base model into the Modelfile: run `ollama show gemma4:e2b --modelfile` and paste its `TEMPLATE` and `PARAMETER stop` lines below the `FROM` line.
 4. Create the model, then compare it with the others:
 
