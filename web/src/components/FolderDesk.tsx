@@ -37,6 +37,7 @@ import { feedbackSteps, findQuote, loadTimings, playSpan, readAloud, saveTimings
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
 import { langHeaders, useLang } from "@/lib/i18nClient";
 import type { MessageKey } from "@/lib/i18n";
+import { openPresentWindow, postPresent, postPresentState, subscribePresentAll, type PresentMode } from "@/lib/presentSync";
 import { useAccount } from "@/lib/session";
 import Modal from "./Modal";
 import ImprovementList, { ListenButton, type Improvement, type OffTopic, type Strength } from "./ImprovementList";
@@ -466,6 +467,10 @@ function FolderRoom({
   const [slideNote, setSlideNote] = useState<"pdfOpenFail" | "slideDrawFail" | null>(null);
   const [slideMsg, setSlideMsg] = useState<string | null>(null); // converting, or why a picked file was refused
   const [full, setFull] = useState(false);
+  /** Audience (TV) window — MacBook stays on this page with all tools. */
+  const presentWinRef = useRef<Window | null>(null);
+  const [presentNote, setPresentNote] = useState<string | null>(null);
+  const [slideRev, setSlideRev] = useState(0);
   // The camera coach: counts pointing at the slide and turns slides with a hand swipe.
   const coach = useSyncExternalStore(subscribeCoach, coachSnapshot, () => DEFAULT_COACH);
   const [cameraOn, setCameraOn] = useState(false);
@@ -512,6 +517,7 @@ function FolderRoom({
       setPage(1);
       rememberUrl(URL.createObjectURL(file));
       setSlideNote(null);
+      setSlideRev((n) => n + 1);
       return;
     }
     setSlidePdf(true);
@@ -540,6 +546,7 @@ function FolderRoom({
         setPageCount(picked.pages.length);
         setPage(1);
       }
+      if (slideGen.current === gen) setSlideRev((n) => n + 1);
     } catch {
       if (slideGen.current !== gen) return;
       setSlideNote("pdfOpenFail");
@@ -636,6 +643,72 @@ function FolderRoom({
     if (showFigma || pageCount < 2) return; // a Figma deck turns its own pages
     setPage((current) => (swipe === "next" ? Math.min(pageCount, current + 1) : Math.max(1, current - 1)));
   }
+
+  function presentMode(): PresentMode {
+    if (showFigma) return "figma";
+    if (slidePdf) return "pdf";
+    return "image";
+  }
+
+  function broadcastPresent() {
+    if (!anySlide) return;
+    postPresentState({
+      folderId: folder.id,
+      page,
+      pageCount,
+      shownPages,
+      mode: presentMode(),
+      slideRev,
+      figmaUrl: folder.figmaUrl ?? null,
+    });
+  }
+
+  /**
+   * Opens or reuses a slide-only window for the TV/projector. MacBook stays here.
+   * Window Management API places on an external display when allowed; else manual drag.
+   */
+  async function openPresent() {
+    setPresentNote(null);
+    if (!anySlide) return;
+    const existing = presentWinRef.current && !presentWinRef.current.closed ? presentWinRef.current : null;
+    const { win, onExternal, reused } = await openPresentWindow(folder.id, existing);
+    if (!win) {
+      setPresentNote(tr("presentBlocked"));
+      return;
+    }
+    presentWinRef.current = win;
+    setPresentNote(reused ? tr("presentTvReuseHint") : onExternal ? tr("presentTvAutoHint") : tr("presentTvHint"));
+    broadcastPresent();
+    window.setTimeout(() => broadcastPresent(), 250);
+  }
+
+  useEffect(() => {
+    if (!anySlide) return;
+    broadcastPresent();
+    return subscribePresentAll((msg) => {
+      if (msg.type === "hello") broadcastPresent();
+      if (msg.type === "closed") presentWinRef.current = null;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folder.id, page, pageCount, shownPages, showFigma, slidePdf, anySlide, folder.figmaUrl, slideRev]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (presentWinRef.current?.closed) presentWinRef.current = null;
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // Leaving the pitch room entirely (back to folder list) — end the present session.
+  // Folder switches keep the audience window and send a new state via broadcastPresent.
+  const presentFolderIdRef = useRef(folder.id);
+  presentFolderIdRef.current = folder.id;
+  useEffect(() => {
+    return () => {
+      postPresent({ type: "closed", folderId: presentFolderIdRef.current });
+      presentWinRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (!full) return;
@@ -1251,10 +1324,12 @@ function FolderRoom({
                   </div>
                 )}
                 {!full && anySlide && (
-                  <button type="button" className="room-glass-btn desk-full-toggle" onClick={() => setFull(true)}>
-                    <ExpandGlyph />
-                    {tr("fullscreen")}
-                  </button>
+                  <div className="desk-present-toggles">
+                    <button type="button" className="room-glass-btn desk-full-toggle" onClick={() => void openPresent()}>
+                      <PresentGlyph />
+                      {tr("present")}
+                    </button>
+                  </div>
                 )}
                 {full && anySlide && (
                   <div className="desk-full-bar">
@@ -1283,7 +1358,7 @@ function FolderRoom({
                 {!showFigma && pageButtons()}
               </div>
             )}
-            {!full && (cameraOn || showFigma || slideNote || slideMsg) && (
+            {!full && (cameraOn || showFigma || slideNote || slideMsg || presentNote) && (
               <div className="room-slide-notes">
                 {cameraOn && <p className="desk-hint">{tr("coachSwipeHint")}</p>}
                 {showFigma && (
@@ -1294,6 +1369,11 @@ function FolderRoom({
                 )}
                 {slideNote && <p className="desk-note">{tr(slideNote)}</p>}
                 {slideMsg && <p className="desk-note" aria-live="polite">{slideMsg}</p>}
+                {presentNote && (
+                  <p className="desk-hint" aria-live="polite">
+                    {presentNote}
+                  </p>
+                )}
               </div>
             )}
           </section>
@@ -1713,10 +1793,11 @@ function CameraGlyph() {
   );
 }
 
-function ExpandGlyph() {
+function PresentGlyph() {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
-      <path d="M2 5V2h3M9 2h3v3M12 9v3H9M5 12H2V9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="1.5" y="2" width="11" height="7.5" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M4 12h6M7 9.5V12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }
