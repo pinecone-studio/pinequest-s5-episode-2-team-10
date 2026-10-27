@@ -45,6 +45,7 @@ mimetypes.add_type("application/vnd.openxmlformats-officedocument.presentationml
 
 PROFILE_AVATAR_MAX_BYTES = 5 * 1024 * 1024
 PROFILE_AVATAR_MAX_PIXELS = 20_000_000
+DEMO_AVATAR_PATH = Path(__file__).resolve().parent / "assets" / "demo-avatar.webp"
 
 
 @asynccontextmanager
@@ -578,6 +579,18 @@ async def update_profile_avatar(user: User, database: DB, file: UploadFile):
 
 @api.get("/auth/me/avatar")
 def get_profile_avatar(user: User):
+    if user.email == "demo@pitchcoach.local":
+        try:
+            content = DEMO_AVATAR_PATH.read_bytes()
+        except OSError as exc:
+            log.error("Could not read the built-in demo avatar: %s", exc)
+            raise ApiError(503, "storage_unavailable", "Profile image storage is unavailable.") from exc
+        return Response(
+            content,
+            media_type="image/webp",
+            headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+        )
+
     if not user.avatar_key:
         raise ApiError(404, "avatar_not_found", "No profile image has been uploaded.")
 

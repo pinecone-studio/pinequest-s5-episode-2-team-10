@@ -304,6 +304,11 @@ export const mockApi = {
   async profileAvatar(): Promise<Blob> {
     await wait(50);
     const user = currentMockUser();
+    if (user.email === "demo@pitchcoach.local") {
+      const response = await fetch("/demo-avatar.webp");
+      if (response.ok) return response.blob();
+      throw { code: "avatar_not_found", message: "Demo profile image was not found." };
+    }
     const avatar = mockProfileAvatars.get(user.id);
     if (!avatar) throw { code: "avatar_not_found", message: "No profile image has been uploaded." };
     return avatar;

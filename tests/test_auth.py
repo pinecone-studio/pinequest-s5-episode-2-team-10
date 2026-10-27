@@ -198,6 +198,13 @@ def test_profile_avatar_rejects_invalid_image_and_shared_demo_upload(client: Tes
     assert invalid.json()["code"] == "invalid_avatar"
 
     demo = client.post("/api/v1/auth/demo").json()
+    demo_avatar = client.get(
+        "/api/v1/auth/me/avatar", headers={"X-Access-Token": demo["access_token"]}
+    )
+    assert demo_avatar.status_code == 200
+    assert demo_avatar.headers["content-type"] == "image/webp"
+    assert demo_avatar.content[:4] == b"RIFF" and demo_avatar.content[8:12] == b"WEBP"
+
     blocked = client.put(
         "/api/v1/auth/me/avatar",
         headers={"X-Access-Token": demo["access_token"]},
