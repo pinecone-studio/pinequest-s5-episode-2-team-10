@@ -186,26 +186,39 @@ function glowTexture(): THREE.CanvasTexture {
   return texture;
 }
 
-// A still scene shows the voice glow as it looks this many seconds in.
-const STILL_TIME = 2.2;
+/** `full` for a real GPU; `lite` for software rendering or weak GPUs: no reflections, fewer fins, 1x pixels. */
+export type SceneQuality = "full" | "lite";
+
 // Give up waiting for shader compilation after this long and draw anyway, so the ring never stays hidden.
 const COMPILE_TIMEOUT_MS = 2500;
-// Frames slower than this on average, even at 1x pixels, switch to the still image.
-const TOO_SLOW_MS = 45;
+// Speed is judged only after this long: the first seconds carry shader compiles, image decodes, and hydration.
+const SPEED_WARMUP_MS = 2000;
+const SPEED_SAMPLE_FRAMES = 60;
+// Gaps longer than this are a hidden tab or a breakpoint, not the GPU.
+const SPEED_IGNORE_MS = 250;
+// Median frame times that trigger each step down: 1x pixels, then fewer fins, then the picture.
+const SLOW_PIXELS_MS = 24;
+const SLOW_FINS_MS = 34;
+const TOO_SLOW_MS = 60;
+const FEWER_FINS = 0.6;
+
+type MountOptions = { quality: SceneQuality; gentle: boolean };
 
 /**
- * Builds the scene and returns a function that tears it down. Never throws: any failure (no WebGL,
- * a lost context, an error while drawing, a GPU too slow to animate) tears the scene down and calls
- * `onFail`, and the page shows the still image instead.
+ * Builds the scene and returns a function that tears it down. Never throws. A slow device steps
+ * down (fewer pixels, then fewer fins) before giving up; a lost GPU context calls `onLost`;
+ * any other failure tears the scene down and calls `onFail`, and the page shows the picture instead.
  */
 function mountScene(
   el: HTMLDivElement,
   variant: SceneVariant,
-  still: boolean,
+  { quality, gentle }: MountOptions,
   onFail: () => void,
+  onLost: () => void,
   isCancelled: () => boolean,
 ): () => void {
   const fixed = variant === "page" ? null : FIXED_VIEWS[variant];
+  const lite = quality === "lite";
   const disposables: { dispose: () => void }[] = [];
   const listeners: [EventTarget, string, EventListener][] = [];
   let renderer: THREE.WebGLRenderer | null = null;
@@ -252,10 +265,14 @@ function mountScene(
   }
 
   try {
-    const gl = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    const gl = new THREE.WebGLRenderer({
+      antialias: !lite,
+      powerPreference: lite ? "default" : "high-performance",
+      failIfMajorPerformanceCaveat: false,
+    });
     renderer = gl;
     const small = window.matchMedia("(max-width: 640px)").matches;
-    gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    gl.setPixelRatio(lite ? 1 : Math.min(window.devicePixelRatio || 1, 1.5));
     gl.setClearColor(BG, 1);
     gl.toneMapping = THREE.ACESFilmicToneMapping;
     gl.toneMappingExposure = 1;
@@ -263,16 +280,23 @@ function mountScene(
     el.appendChild(gl.domElement);
     listen(gl.domElement, "webglcontextlost", (event) => {
       event.preventDefault();
-      fail();
+      if (dead) return;
+      teardown();
+      onLost();
     });
 
     const scene = new THREE.Scene();
     scene.fog = fixed ? new THREE.Fog(BG, ...fixed.fog) : new THREE.Fog(BG, 5, 17);
-    const pmrem = new THREE.PMREMGenerator(gl);
-    const room = new RoomEnvironment();
-    const envMap = pmrem.fromScene(room, 0.04).texture;
-    disposables.push(envMap, room, pmrem);
-    scene.environment = envMap;
+    // Reflections come from a baked room. Software renderers choke on baking it, so lite uses a sky light.
+    if (lite) {
+      scene.add(new THREE.HemisphereLight(0xdedcff, 0x101014, 1.6));
+    } else {
+      const pmrem = new THREE.PMREMGenerator(gl);
+      const room = new RoomEnvironment();
+      const envMap = pmrem.fromScene(room, 0.04).texture;
+      disposables.push(envMap, room, pmrem);
+      scene.environment = envMap;
+    }
     const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 60);
 
     const group = new THREE.Group();
@@ -280,25 +304,32 @@ function mountScene(
 
     // Black titanium fins. The material stays white; each fin's colour carries the titanium tone and the voice glow.
     const fin = finGeometry();
-    const finMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.24, envMapIntensity: 0.9 });
-    const count = fixed ? fixed.fins[small ? 0 : 1] : small ? 180 : 300;
-    const fins = new THREE.InstancedMesh(fin, finMaterial, count);
+    const finMaterial = lite
+      ? new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.55, roughness: 0.38 })
+      : new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.24, envMapIntensity: 0.9 });
+    const baseCount = fixed ? fixed.fins[small ? 0 : 1] : small ? 180 : 300;
+    const maxCount = lite ? Math.round(baseCount * FEWER_FINS) : baseCount;
+    const fins = new THREE.InstancedMesh(fin, finMaterial, maxCount);
     disposables.push(fin, finMaterial, fins);
     fins.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const zAxis = new THREE.Vector3(0, 0, 1);
     const ahead = new THREE.Vector3();
     const radial = new THREE.Vector3();
     const tilt = new THREE.Quaternion();
-    const rest = Array.from({ length: count }, (_, i) => {
-      const angle = (i / count) * Math.PI * 2;
-      const center = ringPoint(angle, new THREE.Vector3());
-      const tangent = ringPoint(angle + 0.001, ahead).sub(center).normalize();
-      radial.set(Math.cos(angle), Math.sin(angle), 0);
-      const facing = new THREE.Quaternion().setFromUnitVectors(zAxis, tangent);
-      tilt.setFromAxisAngle(radial, FIN_TILT);
-      fins.setColorAt(i, TITANIUM);
-      return { angle, center, rotation: tilt.clone().multiply(facing) };
-    });
+    /** Rest pose of `n` fins spread evenly round the ring; a slow device lays out fewer. */
+    const layout = (n: number) =>
+      Array.from({ length: n }, (_, i) => {
+        const angle = (i / n) * Math.PI * 2;
+        const center = ringPoint(angle, new THREE.Vector3());
+        const tangent = ringPoint(angle + 0.001, ahead).sub(center).normalize();
+        radial.set(Math.cos(angle), Math.sin(angle), 0);
+        const facing = new THREE.Quaternion().setFromUnitVectors(zAxis, tangent);
+        tilt.setFromAxisAngle(radial, FIN_TILT);
+        fins.setColorAt(i, TITANIUM);
+        return { angle, center, rotation: tilt.clone().multiply(facing) };
+      });
+    let count = maxCount;
+    let rest = layout(count);
     group.add(fins);
 
     // The slide that appears inside the ring at the bottom of the page, with a soft glow behind it.
@@ -343,15 +374,13 @@ function mountScene(
     const finMatrix = new THREE.Matrix4();
     const finColor = new THREE.Color();
     const startedAt = performance.now();
-    let progress = fixed || still ? 0 : scrollProgress();
+    let progress = fixed ? 0 : scrollProgress();
 
     /** Updates the scene for a moment `time` seconds in and renders one frame. */
     function draw(time: number) {
-      if (!still) {
-        if (!fixed) progress += (scrollProgress() - progress) * 0.07;
-        mouse.x += (mouse.tx - mouse.x) * 0.05;
-        mouse.y += (mouse.ty - mouse.y) * 0.05;
-      }
+      if (!fixed) progress += (scrollProgress() - progress) * 0.07;
+      mouse.x += (mouse.tx - mouse.x) * 0.05;
+      mouse.y += (mouse.ty - mouse.y) * 0.05;
 
       if (fixed) {
         camPos.set(...fixed.camera);
@@ -405,23 +434,32 @@ function mountScene(
     }
     resize();
 
-    // Slow GPUs: after a short sample, drop to 1x pixels; if that is still too slow, use the image.
-    let sampled = 0;
-    let sampleStart = 0;
+    // Slow devices step down in ways that keep the motion smooth: 1x pixels, then fewer fins.
+    // Only when that is still too slow does the page switch to the picture. Every frame is drawn.
+    let runningSince = 0;
+    let lastFrame = 0;
+    let intervals: number[] = [];
     let speedKnown = false;
     function checkSpeed(now: number) {
-      if (speedKnown) return;
-      sampled++;
-      if (sampled === 5) sampleStart = now;
-      if (sampled < 50) return;
-      const average = (now - sampleStart) / 45;
-      sampled = 0;
-      if (average > 30 && gl.getPixelRatio() > 1) {
+      const gap = now - lastFrame;
+      lastFrame = now;
+      if (speedKnown || now - runningSince < SPEED_WARMUP_MS || gap > SPEED_IGNORE_MS) return;
+      intervals.push(gap);
+      if (intervals.length < SPEED_SAMPLE_FRAMES) return;
+      const median = intervals.sort((a, b) => a - b)[intervals.length >> 1];
+      intervals = [];
+      if (median > SLOW_PIXELS_MS && gl.getPixelRatio() > 1) {
         gl.setPixelRatio(1);
         resize();
         return;
       }
-      if (average > TOO_SLOW_MS) {
+      if (median > SLOW_FINS_MS && count === maxCount) {
+        count = Math.round(maxCount * FEWER_FINS);
+        rest = layout(count);
+        fins.count = count;
+        return;
+      }
+      if (median > TOO_SLOW_MS) {
         fail();
         return;
       }
@@ -441,18 +479,11 @@ function mountScene(
       if (running && !dead) frame = requestAnimationFrame(loop);
     }
 
-    function drawStill() {
-      try {
-        draw(STILL_TIME);
-      } catch {
-        fail();
-      }
-    }
-
     function start() {
-      if (still || running || dead || document.hidden) return;
+      if (running || dead || document.hidden) return;
       running = true;
-      sampled = 0;
+      runningSince = lastFrame = performance.now();
+      intervals = [];
       frame = requestAnimationFrame(loop);
     }
 
@@ -467,28 +498,26 @@ function mountScene(
         resize();
       } catch {
         fail();
-        return;
       }
-      if (still && begun) drawStill();
     });
-    if (!still) {
+    // Reduced motion keeps the ring moving as usual but drops the pointer parallax.
+    if (!gentle) {
       listen(window, "pointermove", (event) => {
         const e = event as PointerEvent;
         mouse.tx = (e.clientX / window.innerWidth) * 2 - 1;
         mouse.ty = (e.clientY / window.innerHeight) * 2 - 1;
       });
-      listen(document, "visibilitychange", () => {
-        if (document.hidden) stop();
-        else start();
-      });
     }
+    listen(document, "visibilitychange", () => {
+      if (document.hidden) stop();
+      else start();
+    });
 
     function begin() {
       if (begun || dead || isCancelled()) return;
       begun = true;
       window.clearTimeout(compileTimer);
-      if (still) drawStill();
-      else start();
+      start();
       if (!dead) requestAnimationFrame(() => el.classList.add("is-ready"));
     }
 
@@ -506,15 +535,20 @@ function mountScene(
   return teardown;
 }
 
+// After a lost GPU context, wait this long and build the scene once more before using the picture.
+const RETRY_AFTER_LOST_MS = 600;
+
 export default function LandingScene({
   onFail,
   variant = "page",
-  still = false,
+  quality = "full",
+  gentle = false,
 }: {
   onFail: () => void;
   variant?: SceneVariant;
-  /** Reduced motion: draw one frame and keep it, with no animation, scrolling camera, or parallax. */
-  still?: boolean;
+  quality?: SceneQuality;
+  /** Reduced motion: the ring moves as usual, without pointer parallax. */
+  gentle?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
 
@@ -522,9 +556,20 @@ export default function LandingScene({
     const el = host.current;
     if (!el) return;
     let cancelled = false;
+    let lostOnce = false;
+    let retryTimer = 0;
     let teardown: (() => void) | null = null;
     const build = () => {
-      if (!cancelled) teardown = mountScene(el, variant, still, onFail, () => cancelled);
+      if (!cancelled) teardown = mountScene(el, variant, { quality, gentle }, onFail, onLost, () => cancelled);
+    };
+    const onLost = () => {
+      if (cancelled) return;
+      if (lostOnce) {
+        onFail();
+        return;
+      }
+      lostOnce = true;
+      retryTimer = window.setTimeout(build, RETRY_AFTER_LOST_MS);
     };
     // Let the page text paint and hydrate first; the ring fades in once it is ready.
     const idle = typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(build, { timeout: 1200 }) : null;
@@ -533,9 +578,10 @@ export default function LandingScene({
       cancelled = true;
       if (idle !== null) window.cancelIdleCallback?.(idle);
       window.clearTimeout(timer);
+      window.clearTimeout(retryTimer);
       teardown?.();
     };
-  }, [onFail, variant, still]);
+  }, [onFail, variant, quality, gentle]);
 
   return <div ref={host} className="landing-scene" aria-hidden />;
 }

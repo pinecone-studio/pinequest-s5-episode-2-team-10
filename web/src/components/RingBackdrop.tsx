@@ -2,10 +2,10 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { useWebGL } from "@/lib/webgl";
-import type { SceneVariant } from "./LandingScene";
+import { useRingTier } from "@/lib/webgl";
+import type { SceneQuality, SceneVariant } from "./LandingScene";
 
-type SceneProps = { onFail: () => void; variant?: SceneVariant; still?: boolean };
+type SceneProps = { onFail: () => void; variant?: SceneVariant; quality?: SceneQuality; gentle?: boolean };
 
 /** Stands in when the 3D chunk fails to download (offline, blocked): it just reports the failure. */
 function SceneImportFailed({ onFail }: SceneProps) {
@@ -34,22 +34,22 @@ export function useReducedMotion(): boolean {
   );
 }
 
-/** A picture of the real 3D ring, for browsers that can't draw it. */
+/** A picture of the real 3D ring, turning slowly, for browsers that can't draw it. */
 export function StaticRing({ variant = "page" }: { variant?: SceneVariant }) {
-  return <div className={variant === "page" ? "landing-fallback" : `landing-fallback is-${variant}`} aria-hidden />;
+  return <div className={variant === "page" ? "landing-fallback is-animated" : `landing-fallback is-${variant} is-animated`} aria-hidden />;
 }
 
 /**
- * The ribbed ring behind the landing, sign-in, and pitch list pages. Animated 3D where WebGL runs well, a still
- * 3D frame when the visitor asks for reduced motion, and the picture whenever WebGL is missing,
- * too slow, or fails at any point.
+ * The ribbed ring behind the landing, sign-in, and pitch list pages. Full 3D on a real GPU, a
+ * lighter 3D scene on software rendering or weak GPUs, and the turning picture when WebGL2 is
+ * missing or the scene fails at any point. Reduced motion only drops the pointer parallax.
  */
 export default function RingBackdrop({ variant = "page" }: { variant?: SceneVariant }) {
-  const webgl = useWebGL();
+  const tier = useRingTier();
   const reduced = useReducedMotion();
   const [failed, setFailed] = useState(false);
   const onFail = useCallback(() => setFailed(true), []);
 
-  if (!webgl || failed) return <StaticRing variant={variant} />;
-  return <LandingScene variant={variant} still={reduced} onFail={onFail} />;
+  if (tier === "css" || failed) return <StaticRing variant={variant} />;
+  return <LandingScene variant={variant} quality={tier} gentle={reduced} onFail={onFail} />;
 }

@@ -2,33 +2,46 @@
 
 import { useSyncExternalStore } from "react";
 
-let cached: boolean | null = null;
-
 /**
- * Whether this browser can draw the 3D ring at a usable speed. Software-only WebGL (no GPU,
- * graphics acceleration turned off, some remote desktops) reports a major performance caveat and
- * counts as unsupported, so those visitors get the still image instead of a stuttering scene.
+ * How the 3D ring is drawn here. `full`: WebGL2 on a real GPU. `lite`: WebGL2 that is software
+ * rendered or on a weak GPU (graphics acceleration off, blocklisted drivers, remote desktops), so
+ * a lighter scene. `css`: no WebGL2 at all (three.js needs it), so an animated picture.
  */
-export function canUseWebGL(): boolean {
-  if (cached !== null) return cached;
-  cached = false;
+export type RingTier = "full" | "lite" | "css";
+
+const TIERS: readonly RingTier[] = ["full", "lite", "css"];
+let cached: RingTier | null = null;
+
+function opensWebGL2(failIfMajorPerformanceCaveat: boolean): boolean {
+  const canvas = document.createElement("canvas");
+  const gl = canvas.getContext("webgl2", { failIfMajorPerformanceCaveat }) as WebGL2RenderingContext | null;
+  if (!gl) return false;
+  gl.getExtension("WEBGL_lose_context")?.loseContext();
+  return true;
+}
+
+/** In development, `?ring=full|lite|css` forces a tier so each one can be checked. */
+function forcedTier(): RingTier | null {
+  if (process.env.NODE_ENV !== "development") return null;
+  const value = new URLSearchParams(window.location.search).get("ring");
+  return TIERS.includes(value as RingTier) ? (value as RingTier) : null;
+}
+
+export function ringTier(): RingTier {
+  if (cached) return cached;
+  cached = forcedTier();
+  if (cached) return cached;
   try {
-    const canvas = document.createElement("canvas");
-    const options = { failIfMajorPerformanceCaveat: true };
-    const gl = (canvas.getContext("webgl2", options) ?? canvas.getContext("webgl", options)) as WebGLRenderingContext | null;
-    if (gl) {
-      cached = true;
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
-    }
+    cached = opensWebGL2(true) ? "full" : opensWebGL2(false) ? "lite" : "css";
   } catch {
-    cached = false;
+    cached = "css";
   }
   return cached;
 }
 
 const noSubscribe = () => () => {};
 
-/** `canUseWebGL()` for components: false on the server and during hydration, then the real answer. */
-export function useWebGL(): boolean {
-  return useSyncExternalStore(noSubscribe, canUseWebGL, () => false);
+/** `ringTier()` for components: `css` on the server and during hydration, then the real answer. */
+export function useRingTier(): RingTier {
+  return useSyncExternalStore(noSubscribe, ringTier, () => "css");
 }
