@@ -13,12 +13,19 @@ Writes, in this order, so a later failure never loses an earlier step:
 
 If the GGUF export fails, rerun only the export from the saved adapter:
     python -m training.speed.train_e2b --out <out> --export-only
+
+The export needs about 21 GB of scratch space (a 16-bit merge, an F16 GGUF, then the quant). On
+Kaggle, /kaggle/working has only ~20 GB, so pass --export-dir on a bigger disk (e.g. /tmp/gguf):
+the scratch files stay there and only the ~3 GB Q4_K_M file is copied into <out>/gguf/.
 """
 
 import argparse
 import json
+import shutil
 import sys
 from pathlib import Path
+
+EXPORT_NEEDS_GB = 22  # Unsloth's estimate for E2B was 21.1 GB
 
 PLACEHOLDER = "XQZ_PLACEHOLDER_XQZ"
 
@@ -53,15 +60,36 @@ def pick_gguf(files: list[Path]) -> Path | None:
     return sorted(models, key=lambda f: f.stat().st_size)[0] if models else None
 
 
-def export_gguf(model, tokenizer, out: Path) -> int:
-    """Q4_K_M GGUF plus a Modelfile. Some Unsloth versions write to `<dir>_gguf`, so search for it."""
-    model.save_pretrained_gguf(str(out / "gguf"), tokenizer, quantization_method="q4_k_m")
-    found = sorted(out.rglob("*.gguf"))
+def free_gb(path: Path) -> float:
+    """Free space on the disk that holds `path` (or its nearest existing parent)."""
+    while not path.exists() and path != path.parent:
+        path = path.parent
+    return shutil.disk_usage(path).free / 1e9
+
+
+def export_gguf(model, tokenizer, out: Path, scratch: Path | None = None) -> int:
+    """Q4_K_M GGUF plus a Modelfile in `out`.
+
+    The export's big scratch files go to `scratch` when given (then only the Q4_K_M file is copied
+    into out/gguf/), else to out/gguf. Some Unsloth versions write to `<dir>_gguf`, so search for it.
+    """
+    work = scratch or out / "gguf"
+    work.mkdir(parents=True, exist_ok=True)
+    print(f"Exporting in {work} ({free_gb(work):.1f} GB free; needs about {EXPORT_NEEDS_GB} GB)")
+    if free_gb(work) < EXPORT_NEEDS_GB:
+        print("Not much room here: if the export fails for disk space, point --export-dir at a bigger disk"
+              " (check with: df -h /tmp /kaggle/working).", file=sys.stderr)
+    model.save_pretrained_gguf(str(work), tokenizer, quantization_method="q4_k_m")
+    found = sorted(f for d in work.parent.glob(f"{work.name}*") if d.is_dir() for f in d.rglob("*.gguf"))
     print("GGUF files:", *(f"  {f} ({f.stat().st_size / 1e9:.2f} GB)" for f in found), sep="\n")
     gguf = pick_gguf(found)
     if gguf is None:
-        print(f"No .gguf file was written under {out}.", file=sys.stderr)
+        print(f"No .gguf file was written under {work}.", file=sys.stderr)
         return 1
+    if scratch is not None:  # keep only the model we need next to the Modelfile
+        (out / "gguf").mkdir(parents=True, exist_ok=True)
+        gguf = Path(shutil.copy2(gguf, out / "gguf" / gguf.name))
+        print(f"Copied to {gguf}")
     (out / "Modelfile").write_text(
         f"FROM ./{gguf.relative_to(out).as_posix()}\n"
         "# Copy TEMPLATE and PARAMETER lines from: ollama show gemma4:e2b --modelfile\n"
@@ -81,6 +109,7 @@ def main() -> int:
     ap.add_argument("--rank", type=int, default=16)
     ap.add_argument("--max-seq", type=int, default=8192)
     ap.add_argument("--export-only", action="store_true", help="skip training; export the GGUF from <out>/lora")
+    ap.add_argument("--export-dir", type=Path, help="scratch folder for the export (~21 GB), e.g. /tmp/gguf on Kaggle")
     args = ap.parse_args()
 
     from datasets import Dataset
@@ -96,7 +125,7 @@ def main() -> int:
             print(f"No saved adapter at {lora}; train first.", file=sys.stderr)
             return 1
         model, tokenizer = FastModel.from_pretrained(str(lora), max_seq_length=args.max_seq, load_in_4bit=True)
-        return export_gguf(model, tokenizer, args.out)
+        return export_gguf(model, tokenizer, args.out, args.export_dir)
 
     model, tokenizer = FastModel.from_pretrained(args.base, max_seq_length=args.max_seq, load_in_4bit=True)
     model = FastModel.get_peft_model(
@@ -131,10 +160,11 @@ def main() -> int:
     tokenizer.save_pretrained(str(lora))
     print(f"Adapter saved: {lora}")
     try:
-        return export_gguf(model, tokenizer, args.out)
+        return export_gguf(model, tokenizer, args.out, args.export_dir)
     except Exception as e:  # keep the adapter; say how to retry
         print(f"GGUF export failed: {e}\nThe training is saved in {lora}. Retry the export with:\n"
-              f"  python -m training.speed.train_e2b --out {args.out} --export-only", file=sys.stderr)
+              f"  python -m training.speed.train_e2b --out {args.out} --export-only --export-dir /tmp/gguf",
+              file=sys.stderr)
         return 1
 
 

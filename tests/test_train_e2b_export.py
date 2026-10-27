@@ -49,3 +49,11 @@ class NoOutputModel:
 def test_export_reports_failure_when_nothing_is_written(tmp_path):
     assert export_gguf(NoOutputModel(), None, tmp_path) == 1
     assert not (tmp_path / "Modelfile").exists()
+
+
+def test_export_in_scratch_copies_only_the_quantized_model(tmp_path):
+    out, scratch = tmp_path / "model", tmp_path / "scratch" / "gguf"
+    assert export_gguf(FakeModel(), None, out, scratch) == 0
+    assert sorted(f.name for f in (out / "gguf").iterdir()) == ["gemma-4-e2b-it.Q4_K_M.gguf"]
+    assert (out / "Modelfile").read_text(encoding="utf-8").startswith("FROM ./gguf/gemma-4-e2b-it.Q4_K_M.gguf\n")
+    assert (scratch.parent / "gguf_gguf" / "mmproj-gemma-4-e2b-it.gguf").exists()  # scratch is left where it is
