@@ -28,7 +28,7 @@ const STEPS: [MessageKey, MessageKey][] = [
 ];
 
 /** Renders `*word*` in a message as italics. */
-function Emphasis({ text }: { text: string }) {
+export function Emphasis({ text }: { text: string }) {
   return (
     <>
       {text.split("*").map((part, i) => (i % 2 ? <em key={i}>{part}</em> : <Fragment key={i}>{part}</Fragment>))}

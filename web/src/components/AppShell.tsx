@@ -6,12 +6,34 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useLang } from "@/lib/i18nClient";
 import { clearSession, useAccount } from "@/lib/session";
+import IntroTour from "./IntroTour";
 import LangToggle from "./LangToggle";
 import RingBackdrop from "./RingBackdrop";
 import SayloMark from "./SayloMark";
 import SidebarPitches from "./SidebarPitches";
 
 const PANEL_WIDTH = 260;
+const INTRO_KEY = "saylo:intro:";
+// Accounts that closed the tour this session, for when storage is blocked.
+const introClosed = new Set<string>();
+
+function introSeen(accountId: string): boolean {
+  if (introClosed.has(accountId)) return true;
+  try {
+    return localStorage.getItem(INTRO_KEY + accountId) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markIntroSeen(accountId: string) {
+  introClosed.add(accountId);
+  try {
+    localStorage.setItem(INTRO_KEY + accountId, "1");
+  } catch {
+    /* storage blocked; the tour stays closed until reload */
+  }
+}
 
 /** Shared signed-in frame: pitches on the left, the account in the top bar, one content area. */
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -33,6 +55,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isAdmin = account?.role === "admin" || account?.email === "demo@pitchcoach.local";
   // The ring plays behind the pitch list only. The shell stays mounted while signed out, so wait for an account.
   const showScene = account !== null && pathname === "/" && !openFolder;
+  // Each account sees the tour once on its first sign-in; the account panel opens it again.
+  const [introAsked, setIntroAsked] = useState(false);
+  const [introDismissed, setIntroDismissed] = useState<string | null>(null);
+  const accountId = account?.id ?? null;
+  const showIntro = introAsked || (accountId !== null && introDismissed !== accountId && !introSeen(accountId));
+
+  function closeIntro() {
+    if (accountId) markIntroSeen(accountId);
+    setIntroDismissed(accountId);
+    setIntroAsked(false);
+  }
 
   useEffect(() => {
     const query = window.matchMedia("(max-width: 800px)");
@@ -168,6 +201,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 </span>
               </div>
             </div>
+            <button
+              type="button"
+              className="account-panel-link"
+              onClick={() => {
+                setAccountOpen(false);
+                setIntroAsked(true);
+              }}
+            >
+              <IntroIcon />
+              <span>{tr("introOpen")}</span>
+            </button>
             {isAdmin && (
               <Link
                 href="/admin"
@@ -186,7 +230,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </>
       )}
+      {showIntro && <IntroTour onClose={closeIntro} />}
     </div>
+  );
+}
+
+function IntroIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M2.5 3.5h4a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 0-1.5-1.5h-4v-8ZM13.5 3.5h-4A1.5 1.5 0 0 0 8 5v8a1.5 1.5 0 0 1 1.5-1.5h4v-8Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
