@@ -26,7 +26,7 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 | `GET /auth/me` | The signed-in account | `{id, email, username, role}` |
 | `PATCH /auth/me` | Update only the signed-in user's `{username}` (1–40 characters, normalized and unique). Shared demo account is read-only | `{id, email, username, role}`; `401 unauthorized`; `403 shared_account_readonly`; `409 username_taken`; `422 invalid_username` |
 | `PUT /auth/me/avatar` | Upload a JPG, PNG, or WebP profile image (max 5 MB); the server validates and resizes it | `204`; `401 unauthorized`; `403 shared_account_readonly`; `413 avatar_too_large`; `415 invalid_avatar`; `503 storage_unavailable` |
-| `GET /auth/me/avatar` | Read the signed-in user's private profile image | WebP image; `404 avatar_not_found`; `503 storage_unavailable` |
+| `GET /auth/me/avatar` | Read the signed-in user's private profile image; the shared demo account receives the built-in demo avatar | WebP image; `404 avatar_not_found`; `503 storage_unavailable` |
 | `POST /auth/logout` | Forget the current token | `204` |
 | `GET /admin/users` | List accounts (admin only) | `[{id, email, role, is_active, created_at}]`; `403 admin_required` |
 | `PATCH /admin/users/{user_id}` | Set `{role?: "member" \| "admin", is_active?: boolean}` (admin only). Disabling an account revokes its app tokens; it must sign in again after reactivation. An admin cannot change their own account, remove a configured admin, or deactivate/demote the last active admin | updated user; `404` unknown account; `409` protected admin update; `403 admin_required` |
