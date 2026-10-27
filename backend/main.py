@@ -1,12 +1,14 @@
 """AI Pitch Coach API (TDD v2 + projects). Run: uvicorn server.main:app --reload"""
 
 import hashlib
+import io
 import logging
 import mimetypes
 import re
 import secrets
 import shutil
 import unicodedata
+import warnings
 from contextlib import asynccontextmanager
 from datetime import timezone
 from pathlib import Path
@@ -16,6 +18,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, FastAPI, Header, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
+from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 from sqlmodel import Session, func, select
 
@@ -39,6 +42,9 @@ mimetypes.add_type("audio/mp4", ".m4a")
 mimetypes.add_type("audio/webm", ".webm")
 mimetypes.add_type("audio/ogg", ".ogg")
 mimetypes.add_type("application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx")
+
+PROFILE_AVATAR_MAX_BYTES = 5 * 1024 * 1024
+PROFILE_AVATAR_MAX_PIXELS = 20_000_000
 
 
 @asynccontextmanager
@@ -390,6 +396,35 @@ def _normalized_username(username: str) -> str:
     return normalized
 
 
+def _profile_avatar_webp(content: bytes) -> bytes:
+    if not content:
+        raise ApiError(400, "empty_avatar", "Choose an image first.")
+    if len(content) > PROFILE_AVATAR_MAX_BYTES:
+        raise ApiError(413, "avatar_too_large", "Profile images must be 5 MB or smaller.")
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(content)) as source:
+                if source.format not in {"JPEG", "PNG", "WEBP"} or getattr(source, "n_frames", 1) > 1:
+                    raise ApiError(415, "invalid_avatar", "Upload a JPG, PNG, or WebP image.")
+                if source.width * source.height > PROFILE_AVATAR_MAX_PIXELS:
+                    raise ApiError(413, "avatar_too_large", "Image dimensions are too large.")
+                source.verify()
+
+            with Image.open(io.BytesIO(content)) as source:
+                has_alpha = source.mode in {"RGBA", "LA"} or "transparency" in source.info
+                image = ImageOps.exif_transpose(source).convert("RGBA" if has_alpha else "RGB")
+                image.thumbnail((512, 512), Image.Resampling.LANCZOS)
+                output = io.BytesIO()
+                image.save(output, format="WEBP", quality=85, method=6)
+                return output.getvalue()
+    except ApiError:
+        raise
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise ApiError(415, "invalid_avatar", "Upload a valid JPG, PNG, or WebP image.") from exc
+
+
 def _auth_response(user: AppUser, token: str) -> dict:
     return {"id": user.id, "email": user.email, "username": user.username, "role": user.role, "access_token": token}
 
@@ -509,6 +544,67 @@ def update_auth_me(body: UserProfileUpdate, user: User, database: DB):
     database.commit()
     database.refresh(user)
     return {"id": user.id, "email": user.email, "username": user.username, "role": user.role}
+
+
+@api.put("/auth/me/avatar", status_code=204)
+async def update_profile_avatar(user: User, database: DB, file: UploadFile):
+    if user.email == "demo@pitchcoach.local":
+        raise ApiError(403, "shared_account_readonly", "The shared demo account profile cannot be changed.")
+
+    content = await file.read(PROFILE_AVATAR_MAX_BYTES + 1)
+    image = _profile_avatar_webp(content)
+    object_key = f"user-avatars/{user.id}.webp"
+
+    if db.shared_storage_enabled():
+        try:
+            storage.upload_bytes(object_key, image, "image/webp", upsert=True)
+        except storage.StorageError as exc:
+            raise _storage_failure(exc) from exc
+        user.avatar_key = storage.uri_for(object_key)
+    else:
+        destination = config.DATA_DIR / "user-avatars" / f"{user.id}.webp"
+        try:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(image)
+        except OSError as exc:
+            log.error("Could not save profile image: %s", exc)
+            raise ApiError(503, "storage_unavailable", "Profile image storage is unavailable.") from exc
+        user.avatar_key = f"local://{object_key}"
+
+    database.add(user)
+    database.commit()
+    return Response(status_code=204)
+
+
+@api.get("/auth/me/avatar")
+def get_profile_avatar(user: User):
+    if not user.avatar_key:
+        raise ApiError(404, "avatar_not_found", "No profile image has been uploaded.")
+
+    object_key = storage.key_from_uri(user.avatar_key)
+    if object_key:
+        try:
+            content = storage.download_bytes(object_key)
+        except storage.StorageNotFound as exc:
+            raise ApiError(404, "avatar_not_found", "Profile image was not found.") from exc
+        except storage.StorageError as exc:
+            raise _storage_failure(exc) from exc
+    elif user.avatar_key == f"local://user-avatars/{user.id}.webp":
+        path = config.DATA_DIR / "user-avatars" / f"{user.id}.webp"
+        try:
+            content = path.read_bytes()
+        except FileNotFoundError as exc:
+            raise ApiError(404, "avatar_not_found", "Profile image was not found.") from exc
+        except OSError as exc:
+            raise ApiError(503, "storage_unavailable", "Profile image storage is unavailable.") from exc
+    else:
+        raise ApiError(404, "avatar_not_found", "Profile image was not found.")
+
+    return Response(
+        content,
+        media_type="image/webp",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @api.post("/auth/logout", status_code=204)

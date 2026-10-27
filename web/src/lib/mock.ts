@@ -48,6 +48,7 @@ const STAGES: Stage[] = ["transcribing", "measuring", "slides", "feedback", "sco
 const STAGE_MS = 1500;
 const KEY = "pitchcoach:mock:v2";
 const USERS_KEY = "pitchcoach:mock-users";
+const mockProfileAvatars = new Map<string, Blob>();
 const TOKEN_KEY = "pitchcoach:user-token";
 const audioBlobs = new Map<string, Blob>();
 
@@ -298,6 +299,26 @@ export const mockApi = {
     user.username = cleaned;
     saveUsers(users);
     return { id: user.id, email: user.email, username: user.username, role: "member" };
+  },
+
+  async profileAvatar(): Promise<Blob> {
+    await wait(50);
+    const user = currentMockUser();
+    const avatar = mockProfileAvatars.get(user.id);
+    if (!avatar) throw { code: "avatar_not_found", message: "No profile image has been uploaded." };
+    return avatar;
+  },
+
+  async uploadProfileAvatar(file: File): Promise<void> {
+    await wait();
+    const user = currentMockUser();
+    if (user.email === "demo@pitchcoach.local") {
+      throw { code: "shared_account_readonly", message: "The shared demo account profile cannot be changed." };
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw { code: "avatar_too_large", message: "Profile images must be 5 MB or smaller." };
+    }
+    mockProfileAvatars.set(user.id, file);
   },
 
   async logout() {

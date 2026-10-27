@@ -1,6 +1,7 @@
 """Register, login, Google sign-in, logout, and project ownership."""
 
 import os
+import io
 import tempfile
 from pathlib import Path
 
@@ -10,6 +11,7 @@ os.environ["PITCH_DB_URL"] = f"sqlite:///{_root / 'auth.db'}"
 
 import httpx
 import pytest
+from PIL import Image
 from sqlalchemy import create_engine as create_sqlalchemy_engine, inspect, text
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -157,6 +159,52 @@ def test_shared_demo_profile_is_read_only(client: TestClient):
     )
     assert response.status_code == 403
     assert response.json()["code"] == "shared_account_readonly"
+
+
+def test_profile_avatar_upload_is_private_and_returns_webp(client: TestClient):
+    owner = _register(client, "avatar.owner@example.com")
+    other = _register(client, "avatar.other@example.com")
+    image = Image.new("RGB", (12, 8), "purple")
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    headers = {"X-Access-Token": owner["access_token"]}
+
+    uploaded = client.put(
+        "/api/v1/auth/me/avatar",
+        headers=headers,
+        files={"file": ("portrait.png", buffer.getvalue(), "image/png")},
+    )
+    assert uploaded.status_code == 204, uploaded.text
+
+    fetched = client.get("/api/v1/auth/me/avatar", headers=headers)
+    assert fetched.status_code == 200
+    assert fetched.headers["content-type"] == "image/webp"
+    assert fetched.content[:4] == b"RIFF" and fetched.content[8:12] == b"WEBP"
+
+    other_avatar = client.get(
+        "/api/v1/auth/me/avatar", headers={"X-Access-Token": other["access_token"]}
+    )
+    assert other_avatar.status_code == 404
+
+
+def test_profile_avatar_rejects_invalid_image_and_shared_demo_upload(client: TestClient):
+    owner = _register(client, "avatar.invalid@example.com")
+    invalid = client.put(
+        "/api/v1/auth/me/avatar",
+        headers={"X-Access-Token": owner["access_token"]},
+        files={"file": ("portrait.jpg", b"not an image", "image/jpeg")},
+    )
+    assert invalid.status_code == 415
+    assert invalid.json()["code"] == "invalid_avatar"
+
+    demo = client.post("/api/v1/auth/demo").json()
+    blocked = client.put(
+        "/api/v1/auth/me/avatar",
+        headers={"X-Access-Token": demo["access_token"]},
+        files={"file": ("portrait.png", b"anything", "image/png")},
+    )
+    assert blocked.status_code == 403
+    assert blocked.json()["code"] == "shared_account_readonly"
 
 
 def test_login_with_username_or_email(client: TestClient):
