@@ -3480,6 +3480,24 @@ textarea.ui-input {
 
 .profile-photo-content strong { color: var(--text-primary); font-size: 13px; }
 .profile-photo-content .profile-message { margin: 0; }
+.profile-photo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.profile-photo-button { display: inline-flex; align-items: center; gap: 9px; }
+.profile-photo-cancel { padding: 8px 4px; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+.profile-photo-cancel:hover { color: var(--text-primary); }
+.profile-photo-cancel:disabled { cursor: not-allowed; opacity: 0.55; }
+.profile-photo-spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: profile-photo-spin 0.7s linear infinite;
+}
+@keyframes profile-photo-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .profile-photo-spinner { animation-duration: 1.8s; }
+}
 .profile-file-input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 .profile-form {
