@@ -343,6 +343,12 @@ class AdminUserUpdate(BaseModel):
         return self
 
 
+class UserProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=1, max_length=64)
+
+
 class AdminUserView(BaseModel):
     id: str
     email: Optional[str]
@@ -483,6 +489,25 @@ def google_login(body: GoogleAuthBody, database: DB):
 
 @api.get("/auth/me")
 def auth_me(user: User):
+    return {"id": user.id, "email": user.email, "username": user.username, "role": user.role}
+
+
+@api.patch("/auth/me")
+def update_auth_me(body: UserProfileUpdate, user: User, database: DB):
+    if user.email == "demo@pitchcoach.local":
+        raise ApiError(403, "shared_account_readonly", "The shared demo account profile cannot be changed.")
+
+    username = _normalized_username(body.username)
+    duplicate = database.exec(
+        select(AppUser).where(func.lower(AppUser.username) == username, AppUser.id != user.id)
+    ).first()
+    if duplicate:
+        raise ApiError(409, "username_taken", "This username is already taken.")
+
+    user.username = username
+    database.add(user)
+    database.commit()
+    database.refresh(user)
     return {"id": user.id, "email": user.email, "username": user.username, "role": user.role}
 
 

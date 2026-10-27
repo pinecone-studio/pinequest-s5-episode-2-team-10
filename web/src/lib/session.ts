@@ -1,16 +1,12 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import type { AppRole } from "./types";
+import type { AccountProfile } from "./types";
 
 const TOKEN_KEY = "pitchcoach:user-token";
 const ACCOUNT_KEY = "pitchcoach:account";
 
-export interface Account {
-  id: string;
-  email: string;
-  role: AppRole;
-}
+export type Account = AccountProfile;
 
 let account: Account | null | undefined;
 const listeners = new Set<() => void>();
@@ -22,7 +18,12 @@ function readStored(): Account | null {
     if (!token || !raw) return null;
     const parsed = JSON.parse(raw) as Partial<Account>;
     if (!parsed?.id || !parsed.email) return null;
-    return { id: parsed.id, email: parsed.email, role: parsed.role === "admin" ? "admin" : "member" };
+    return {
+      id: parsed.id,
+      email: parsed.email,
+      username: typeof parsed.username === "string" ? parsed.username : null,
+      role: parsed.role === "admin" ? "admin" : "member",
+    };
   } catch {
     return null;
   }
@@ -47,12 +48,24 @@ function publish(next: Account | null) {
 }
 
 export function saveSession(session: Account & { access_token: string }) {
-  const next = { id: session.id, email: session.email, role: session.role };
+  const next = { id: session.id, email: session.email, username: session.username ?? null, role: session.role };
   try {
     localStorage.setItem(TOKEN_KEY, session.access_token);
     localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next));
   } catch {
     /* private mode: the session lasts until reload */
+  }
+  publish(next);
+}
+
+export function updateAccountUsername(username: string | null) {
+  const current = readAccount();
+  if (!current) return;
+  const next = { ...current, username };
+  try {
+    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(next));
+  } catch {
+    /* private mode: keep the updated name until reload */
   }
   publish(next);
 }

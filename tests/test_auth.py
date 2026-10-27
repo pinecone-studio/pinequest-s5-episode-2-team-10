@@ -109,6 +109,56 @@ def test_duplicate_username_ignores_case(client: TestClient):
     assert res.json()["code"] == "username_taken"
 
 
+def test_profile_update_changes_only_the_authenticated_users_username(client: TestClient):
+    owner = _register(client, "profile.owner@example.com", "owner_name")
+    other = _register(client, "profile.other@example.com", "other_name")
+
+    updated = client.patch(
+        "/api/v1/auth/me",
+        headers={"X-Access-Token": owner["access_token"]},
+        json={"username": "  Шинэ Нэр  "},
+    )
+    assert updated.status_code == 200
+    assert updated.json() == {
+        "id": owner["id"],
+        "email": owner["email"],
+        "username": "шинэ нэр",
+        "role": "member",
+    }
+
+    owner_me = client.get("/api/v1/auth/me", headers={"X-Access-Token": owner["access_token"]})
+    other_me = client.get("/api/v1/auth/me", headers={"X-Access-Token": other["access_token"]})
+    assert owner_me.json()["username"] == "шинэ нэр"
+    assert other_me.json()["username"] == "other_name"
+
+
+def test_profile_update_rejects_duplicate_username_and_missing_auth(client: TestClient):
+    _register(client, "profile.taken@example.com", "already_used")
+    owner = _register(client, "profile.changer@example.com", "changer")
+    headers = {"X-Access-Token": owner["access_token"]}
+
+    duplicate = client.patch("/api/v1/auth/me", headers=headers, json={"username": "ALREADY_USED"})
+    unauthorized = client.patch("/api/v1/auth/me", json={"username": "new_name"})
+    invalid = client.patch("/api/v1/auth/me", headers=headers, json={"username": "x" * 41})
+
+    assert duplicate.status_code == 409
+    assert duplicate.json()["code"] == "username_taken"
+    assert unauthorized.status_code == 401
+    assert invalid.status_code == 422
+    assert invalid.json()["code"] == "invalid_username"
+
+
+def test_shared_demo_profile_is_read_only(client: TestClient):
+    demo = client.post("/api/v1/auth/demo").json()
+    response = client.patch(
+        "/api/v1/auth/me",
+        headers={"X-Access-Token": demo["access_token"]},
+        json={"username": "someone_else"},
+    )
+    assert response.status_code == 403
+    assert response.json()["code"] == "shared_account_readonly"
+
+
 def test_login_with_username_or_email(client: TestClient):
     created = _register(client, "both@example.com", "Both_Ways")
     by_name = client.post("/api/v1/auth/login", json={"login": "  BOTH_ways ", "password": PASSWORD})

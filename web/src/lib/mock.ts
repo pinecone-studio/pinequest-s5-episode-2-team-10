@@ -5,6 +5,7 @@
 import type {
   Attempt,
   AdminUser,
+  AccountProfile,
   AuthSession,
   FeedbackBackend,
   Project,
@@ -275,10 +276,28 @@ export const mockApi = {
     return mockSession(user);
   },
 
-  async me() {
+  async me(): Promise<AccountProfile> {
     await wait(50);
     const user = currentMockUser();
     return { id: user.id, email: user.email, username: user.username ?? null, role: "member" as const };
+  },
+
+  async updateProfile(username: string): Promise<AccountProfile> {
+    await wait();
+    const current = currentMockUser();
+    if (current.email === "demo@pitchcoach.local") {
+      throw { code: "shared_account_readonly", message: "The shared demo account profile cannot be changed." };
+    }
+    const cleaned = cleanMockUsername(username);
+    const users = loadUsers();
+    const user = users.find((row) => row.id === current.id);
+    if (!user) throw { code: "unauthorized", message: "Sign in required." };
+    if (users.some((row) => row.id !== user.id && row.username?.normalize("NFC").toLocaleLowerCase() === cleaned)) {
+      throw { code: "username_taken", message: "This username is already taken." };
+    }
+    user.username = cleaned;
+    saveUsers(users);
+    return { id: user.id, email: user.email, username: user.username, role: "member" };
   },
 
   async logout() {
