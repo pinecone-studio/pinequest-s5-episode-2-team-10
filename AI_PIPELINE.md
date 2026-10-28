@@ -32,6 +32,12 @@ The worker runs these steps for each attempt (`pipeline/run.py`):
    - The JSON schema is enforced by the provider and checked again with Pydantic; failures become a readable error.
    - Code then checks the content: timestamps must match a transcript sentence, slide numbers must exist, filler occurrences must be in the named sentence, main-point quotes must be in the transcript, and number checks must match the candidates. Anything else is dropped.
 
+6b. **Delivery checks** (`delivery.py`, `loudness.py`), by code after the model's advice
+   - Added to `recommendations` as `area: "delivery"` items, after the model's (up to 5), each with `start_s` at the moment it happened so the page shows the sentence said there. Messages are in Mongolian, like the rest of the backend's feedback.
+   - Rushed 30 s stretch (30% and 25 words/min above the speaker's usual pace); speeding up in the last quarter (25% faster, pitches of 60 s or more); silences of 3 s or more; 4+ fillers within 20 s (the fillers confirmed in context); sentences whose last two words are both 6 dB quieter than the rest (in at least 2 sentences and a quarter of them).
+   - Word times are estimates (pauses are real silences; times inside speech are spread evenly), so pace is never judged per word. Loudness per word is read from the recording (90th percentile of its frames, so silence next to a short last word doesn't count) and only compared within one recording. Mongolian sentence endings are naturally softer, so one quiet last word isn't a fade. The limits are first guesses; tune them on real recordings.
+   - The numbers behind them are stored in the report's `extra.delivery_checks` (not in the API). A failure here is logged and skipped; it never fails the analysis. Tests: `tests/test_delivery.py`, `tests/test_loudness.py`.
+
 7. **Scoring** (`scoring.py`)
    - Overall = 0.35 Content + 0.30 Delivery + 0.25 Slide alignment + 0.10 Timing, computed in code; a category without data is null and the rest are reweighted.
    - All thresholds live in one table. Scores are coaching estimates until validated by human review.

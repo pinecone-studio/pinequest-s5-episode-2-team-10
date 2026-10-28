@@ -167,6 +167,7 @@ class Worker:
                     "wording": r["wording"],
                     "notes": r["notes"],
                     "asr_backend": r["asr_backend"],
+                    "delivery_checks": r.get("delivery", {}),
                 },
                 backend=backend,
                 created_at=utcnow(),
