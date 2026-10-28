@@ -93,9 +93,13 @@ const mn = {
   fullscreen: "Бүтэн дэлгэц",
   present: "Present",
   presentBlocked: "TV цонх нээгдсэнгүй. Браузерийн popup-ыг зөвшөөрөөд дахин Present дарна уу.",
-  presentTvHint: "TV цонхыг зурагт руу зөөж Full screen хийнэ. MacBook дээрх Saylo хэвээр үлдэнэ.",
-  presentTvAutoHint: "Слайд зурагт дээр нээгдлээ. Шаардлагатай бол Full screen дар. MacBook дээрх Saylo хэвээр.",
+  presentTvHint:
+    "TV цонхыг гарчиг бараар зурагт руу чир. Бүтэн дэлгэц автоматаар асна — TV дээр хулгана хэрэггүй. MacBook дээрх Saylo хэвээр.",
+  presentTvAutoHint: "Слайд зурагт дээр нээгдлээ; бүтэн дэлгэц удахгүй асна. MacBook дээрх Saylo хэвээр.",
   presentTvReuseHint: "TV цонх аль хэдийн нээлттэй — түүнийг ашиглаж байна. MacBook дээрх Saylo хэвээр.",
+  presentMirrorHint:
+    "Mirror/нэг дэлгэц дээр Present ажиллахгүй (Mac болон TV ижил зураг). Displays дээр Stop Mirroring дарж Extend болгоод дахин Present дарна уу.",
+  presentDragHint: "Цонхыг зурагт руу чир — бүтэн дэлгэц ~2 сек-д автоматаар (F = асаах/унтраах).",
   presentFullscreen: "Бүтэн дэлгэц",
   presentExitFs: "Бүтэн дэлгэцээс гарах",
   presentExit: "Гарах",
@@ -639,9 +643,13 @@ const en: Record<MessageKey, string> = {
   fullscreen: "Full screen",
   present: "Present",
   presentBlocked: "Could not open the TV window. Allow popups for this site, then click Present again.",
-  presentTvHint: "Drag the TV window to your display and press Full screen. Saylo stays on this MacBook.",
-  presentTvAutoHint: "Slides opened on your TV. Press Full screen if needed. Saylo stays on this MacBook.",
+  presentTvHint:
+    "Drag the TV window by its title bar onto the TV. Full screen starts automatically — no mouse needed on the TV. Saylo stays on this MacBook.",
+  presentTvAutoHint: "Slides opened on your TV; full screen starts shortly. Saylo stays on this MacBook.",
   presentTvReuseHint: "Reusing the open TV window. Saylo stays on this MacBook.",
+  presentMirrorHint:
+    "Present does not work in Mirror/single-display mode (Mac and TV show the same image). Click Stop Mirroring in Displays, then Present again.",
+  presentDragHint: "Drag this window to the TV — full screen auto-starts in ~2s (F to toggle).",
   presentFullscreen: "Full screen",
   presentExitFs: "Exit full screen",
   presentExit: "Exit",
