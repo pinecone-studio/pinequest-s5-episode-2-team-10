@@ -5333,6 +5333,24 @@ a.profile-secondary-button {
   backdrop-filter: blur(10px);
 }
 
+.app-version {
+  position: fixed;
+  z-index: 15;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  left: max(18px, env(safe-area-inset-left));
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sidebar) 82%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
 .landing-actions {
   display: flex;
   flex-wrap: wrap;
