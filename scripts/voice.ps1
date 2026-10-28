@@ -32,6 +32,8 @@ foreach ($line in Get-Content $envFile) {
         Set-Item -Path "env:$($Matches[1])" -Value $Matches[2].Trim()
     }
 }
+# The voice proxy forwards to Ollama running on this PC.
+$env:OLLAMA_URL = "http://127.0.0.1:11434"
 
 $python = Join-Path $env:VOICE_VENV "Scripts\python.exe"
 if (-not (Test-Path $python)) {
