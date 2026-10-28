@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="mn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Сул үг шошголох</title>
+<!--
+  Hand labels for filler words. Open this file in a browser (no server needed), load the sheet
+  made by `python -m training.fillers.sheet`, click words to mark or unmark them, tick "шалгасан"
+  for every sentence you have read, then save. Nothing leaves this computer; work in progress is
+  also kept in this browser's storage in case the tab closes.
+-->
+<style>
+  :root {
+    --bg: #fafaf9; --panel: #ffffff; --text: #1c1917; --muted: #78716c; --line: #e7e5e4;
+    --mark: #f59e0b; --mark-text: #1c1917; --accent: #4f46e5; --ok: #15803d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1917; --panel: #292524; --text: #f5f5f4; --muted: #a8a29e; --line: #44403c;
+            --mark: #fbbf24; --mark-text: #1c1917; --accent: #818cf8; --ok: #4ade80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }
+  header { position: sticky; top: 0; z-index: 1; background: var(--panel); border-bottom: 1px solid var(--line);
+           padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  h1 { font-size: 18px; margin: 0 8px 0 0; }
+  main { max-width: 960px; margin: 0 auto; padding: 16px; }
+  button, label.file { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+                       border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:focus-visible, input:focus-visible, label.file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .progress { color: var(--muted); margin-left: auto; }
+  .help { color: var(--muted); font-size: 14px; }
+  section.pitch { margin: 24px 0; }
+  section.pitch h2 { font-size: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .row { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 8px 0;
+         display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+  .row.done { border-left: 4px solid var(--ok); }
+  .orig { color: var(--muted); font-size: 13px; grid-column: 1 / -1; }
+  .words { display: flex; flex-wrap: wrap; gap: 4px; }
+  .w { padding: 2px 8px; border-radius: 6px; }
+  .w[aria-pressed="true"] { background: var(--mark); border-color: var(--mark); color: var(--mark-text); font-weight: 600; }
+  .check { white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+  .empty { color: var(--muted); padding: 48px 0; text-align: center; }
+  input[type=file] { position: absolute; opacity: 0; width: 1px; height: 1px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Сул үг шошголох</h1>
+  <label class="file">Файл нээх (labels.jsonl)<input id="file" type="file" accept=".jsonl,.json,application/json"></label>
+  <button id="save" class="primary" disabled>Хадгалах</button>
+  <label class="check"><input id="onlyTodo" type="checkbox"> Зөвхөн шалгаагүй</label>
+  <span id="progress" class="progress" aria-live="polite"></span>
+</header>
+<main>
+  <p class="help">Сул үг болж буй үг дээр дарж тэмдэглэ (дахин дарвал болино). «тэгээд» нь «дараа нь» гэсэн утгатай бол
+    тэмдэглэхгүй. Өгүүлбэрийг уншиж дуусаад «шалгасан»-ыг чагтал. Шар өнгөтэй нь жагсаалтаас урьдчилан тэмдэглэсэн эсвэл
+    таны тэмдэглэсэн үгс.</p>
+  <div id="list"><p class="empty">labels.jsonl файлаа нээнэ үү.</p></div>
+</main>
+<script>
+  const STORE = "filler-labels:";
+  let rows = [], fileName = "labels.jsonl";
+
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k) { try { return localStorage.getItem(STORE + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(STORE + k, v); } catch { /* storage off: saving the file still works */ } },
+  };
+
+  function toJsonlOf(rs) { return rs.map(r => JSON.stringify(r)).join("\n") + "\n"; }
+  function toJsonl() { return toJsonlOf(rows); }
+  function autosave() { store.set(fileName, toJsonl()); }
+  function parse(text) {
+    return text.split("\n").filter(l => l.trim()).map(l => JSON.parse(l));
+  }
+
+  function progress() {
+    const done = rows.filter(r => r.checked).length;
+    const marked = rows.filter(r => r.checked).reduce((n, r) => n + r.filler_idx.length, 0);
+    $("progress").textContent = `${done} / ${rows.length} өгүүлбэр шалгасан · ${marked} сул үг`;
+  }
+
+  function render() {
+    const list = $("list");
+    list.textContent = "";
+    if (!rows.length) { list.innerHTML = '<p class="empty">labels.jsonl файлаа нээнэ үү.</p>'; return; }
+    const onlyTodo = $("onlyTodo").checked;
+    const pitches = new Map();
+    rows.forEach((r, i) => { if (!pitches.has(r.pitch)) pitches.set(r.pitch, []); pitches.get(r.pitch).push(i); });
+
+    for (const [pitch, idx] of pitches) {
+      const shown = idx.filter(i => !onlyTodo || !rows[i].checked);
+      if (!shown.length) continue;
+      const sec = document.createElement("section");
+      sec.className = "pitch";
+      const h = document.createElement("h2");
+      h.textContent = pitch;
+      const all = document.createElement("button");
+      all.textContent = "Энэ илтгэлийг бүгдийг шалгасан";
+      all.addEventListener("click", () => { idx.forEach(i => rows[i].checked = true); changed(); });
+      h.appendChild(all);
+      sec.appendChild(h);
+      shown.forEach(i => sec.appendChild(rowEl(i)));
+      list.appendChild(sec);
+    }
+    if (!list.children.length) list.innerHTML = '<p class="empty">Бүгдийг шалгасан байна.</p>';
+  }
+
+  function rowEl(i) {
+    const r = rows[i];
+    const el = document.createElement("div");
+    el.className = "row" + (r.checked ? " done" : "");
+    const words = document.createElement("div");
+    words.className = "words";
+    words.setAttribute("role", "group");
+    words.setAttribute("aria-label", `Өгүүлбэр ${r.sentence_id + 1}`);
+    r.tokens.forEach((t, k) => {
+      const b = document.createElement("button");
+      b.className = "w";
+      b.textContent = t;
+      b.setAttribute("aria-pressed", r.filler_idx.includes(k) ? "true" : "false");
+      b.addEventListener("click", () => {
+        const on = r.filler_idx.includes(k);
+        r.filler_idx = on ? r.filler_idx.filter(x => x !== k) : [...r.filler_idx, k].sort((a, b) => a - b);
+        b.setAttribute("aria-pressed", on ? "false" : "true");
+        autosave(); progress();
+      });
+      words.appendChild(b);
+    });
+    const check = document.createElement("label");
+    check.className = "check";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = !!r.checked;
+    box.addEventListener("change", () => { r.checked = box.checked; changed(); });
+    check.append(box, "шалгасан");
+    const orig = document.createElement("div");
+    orig.className = "orig";
+    orig.textContent = r.text;
+    el.append(words, check, orig);
+    return el;
+  }
+
+  function changed() { autosave(); progress(); render(); }
+
+  $("file").addEventListener("change", async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    fileName = f.name;
+    try {
+      const fromFile = parse(await f.text());
+      const saved = store.get(fileName);
+      const useSaved = saved && saved !== toJsonlOf(fromFile) &&
+        confirm("Энэ файлын хадгалаагүй ажил энэ браузерт байна. Түүнийг үргэлжлүүлэх үү? (Үгүй бол файлаас нь нээнэ)");
+      rows = useSaved ? parse(saved) : fromFile;
+    } catch (err) {
+      alert("Файлыг уншиж чадсангүй: " + err.message);
+      return;
+    }
+    $("save").disabled = false;
+    progress(); render();
+  });
+
+  $("save").addEventListener("click", () => {
+    const blob = new Blob([toJsonl()], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+  $("onlyTodo").addEventListener("change", render);
+</script>
+</body>
+</html>
