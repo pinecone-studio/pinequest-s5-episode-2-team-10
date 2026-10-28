@@ -9,7 +9,7 @@ Run from the repository root:
 
 import os
 import secrets
-import tempfile
+import shutil
 import threading
 import time
 from contextlib import asynccontextmanager
@@ -36,6 +36,13 @@ OLLAMA_PATHS = {"api/chat", "api/generate", "api/tags", "api/ps", "api/version"}
 
 # One GPU, one model: transcribe one file at a time.
 _gpu_lock = threading.Lock()
+
+
+def _new_upload_dir() -> Path:
+    """Create a per-request directory without tempfile's restrictive Windows ACLs."""
+    path = VOICE_TMP_DIR / f"voice-{secrets.token_hex(12)}"
+    path.mkdir(parents=True)
+    return path
 
 
 class VoiceError(HTTPException):
@@ -89,8 +96,9 @@ def health():
 
 @app.post("/v1/transcribe", dependencies=[Depends(require_token)])
 def transcribe(file: UploadFile):
-    with tempfile.TemporaryDirectory(prefix="voice-", dir=VOICE_TMP_DIR) as tmp:
-        src = Path(tmp) / f"upload{Path(file.filename or '').suffix.lower() or '.bin'}"
+    tmp = _new_upload_dir()
+    try:
+        src = tmp / f"upload{Path(file.filename or '').suffix.lower() or '.bin'}"
         size = 0
         with src.open("wb") as out:
             while chunk := file.file.read(1024 * 1024):
@@ -101,7 +109,7 @@ def transcribe(file: UploadFile):
         if size == 0:
             raise VoiceError(400, "empty", "The audio file is empty.")
 
-        wav = Path(tmp) / "audio16k.wav"
+        wav = tmp / "audio16k.wav"
         try:
             duration = to_wav16k(src, wav)
         except AudioError as e:
@@ -116,6 +124,11 @@ def transcribe(file: UploadFile):
             except asr.AsrError as e:
                 raise VoiceError(503, "model_unavailable", str(e)) from e
         elapsed = time.monotonic() - started
+
+    finally:
+        # Windows may deny chmod while removing a temp tree; cleanup must not turn
+        # a completed transcription (or its original error) into an HTTP 500.
+        shutil.rmtree(tmp, ignore_errors=True)
 
     # Log timing only; never the transcript or audio.
     print(f"[voice] transcribed {duration:.1f}s of audio in {elapsed:.1f}s ({len(words)} words)")
