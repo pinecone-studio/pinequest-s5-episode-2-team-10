@@ -11,8 +11,18 @@ import {
   subscribeFolders,
 } from "@/lib/folderStore";
 import { useLang } from "@/lib/i18nClient";
-import { postPresent, subscribePresentAll, type PresentMode, type PresentState } from "@/lib/presentSync";
+import {
+  detectDisplayLayout,
+  postPresent,
+  subscribePresentAll,
+  type DisplayLayout,
+  type PresentMode,
+  type PresentState,
+} from "@/lib/presentSync";
 import { openPdf, paintPage } from "@/lib/slidePdf";
+
+const THEATRE_DELAY_MS = 1800;
+const THEATRE_REHIDE_MS = 2200;
 
 function isPdf(file: Blob) {
   return file.type === "application/pdf" || /\.pdf$/i.test((file as File).name ?? "");
@@ -22,10 +32,10 @@ function isCancel(err: unknown) {
   return err instanceof Error && /cancel/i.test(err.message);
 }
 
-type Props = { folderId: string; wantFullscreen?: boolean };
+type Props = { folderId: string };
 
 /** Audience-only slide surface for dual-screen Present mode. */
-export default function PresentView({ folderId: initialFolderId, wantFullscreen = false }: Props) {
+export default function PresentView({ folderId: initialFolderId }: Props) {
   const { tr } = useLang();
   const folders = useSyncExternalStore(subscribeFolders, folderSnapshot, serverFolderSnapshot);
 
@@ -53,10 +63,12 @@ export default function PresentView({ folderId: initialFolderId, wantFullscreen 
   const [slideRev, setSlideRev] = useState(0);
   const [pdfEpoch, setPdfEpoch] = useState(0);
   const [note, setNote] = useState<string | null>(null);
-  const [isFs, setIsFs] = useState(false);
+  const [theatre, setTheatre] = useState(false);
+  const [layout, setLayout] = useState<DisplayLayout>("unknown");
 
   const figmaEmbed = figmaUrl ? figmaEmbedUrl(figmaUrl) : folder?.figmaUrl ? figmaEmbedUrl(folder.figmaUrl) : null;
   const showFigma = mode === "figma" && !!figmaEmbed;
+  const anySlide = hasSlide || showFigma;
 
   function rememberUrl(next: string | null) {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -106,6 +118,7 @@ export default function PresentView({ folderId: initialFolderId, wantFullscreen 
       setNote(null);
       return;
     }
+
     setSlidePdf(true);
     setNote(null);
     rememberUrl(null);
@@ -135,8 +148,7 @@ export default function PresentView({ folderId: initialFolderId, wantFullscreen 
     }
   }
 
-  // Load (or reload) slide bytes when the active folder or slideRev from the presenter changes.
-  // Page-only updates do not change slideRev, so this effect stays idle while flipping slides.
+  // Reload slide bytes when folder or slideRev changes (page flips keep the same slideRev).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -165,12 +177,11 @@ export default function PresentView({ folderId: initialFolderId, wantFullscreen 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFolderId, slideRev, folder?.slide?.storageKey, folder?.figmaUrl]);
 
-  // Follow presenter state; re-hello until the first state arrives (reconnect / race).
+  // Follow presenter; re-hello until the first state arrives.
   useEffect(() => {
     gotStateRef.current = false;
     const onMsg = (msg: { type: string } & Partial<PresentState>) => {
       if (msg.type === "closed") {
-        // Controller left the room — keep last frame; stop expecting live updates until hello gets state again.
         gotStateRef.current = false;
         return;
       }
@@ -241,40 +252,53 @@ export default function PresentView({ folderId: initialFolderId, wantFullscreen 
     };
   }, [page, pdfEpoch, slidePdf, shownPages, showFigma, tr]);
 
+  // Layout + CSS theatre (no document.fullscreen — keeps multi-monitor mouse usable).
   useEffect(() => {
-    const onFs = () => setIsFs(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onFs);
-    return () => document.removeEventListener("fullscreenchange", onFs);
-  }, []);
-
-  // Best-effort fullscreen when opened with ?fs=1 from Present (may need one click if blocked).
-  useEffect(() => {
-    if (!wantFullscreen) return;
     let cancelled = false;
-    const tryFs = () => {
-      if (cancelled || document.fullscreenElement) return;
-      void document.documentElement.requestFullscreen().catch(() => undefined);
+    let allowTheatre = false;
+    let autoTimer = 0;
+    let hideTimer = 0;
+
+    void detectDisplayLayout().then((next) => {
+      if (cancelled) return;
+      setLayout(next);
+      allowTheatre = next !== "single";
+      if (!allowTheatre) {
+        setTheatre(false);
+        return;
+      }
+      autoTimer = window.setTimeout(() => setTheatre(true), THEATRE_DELAY_MS);
+    });
+
+    const reveal = () => {
+      if (cancelled || !allowTheatre) return;
+      setTheatre(false);
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => setTheatre(true), THEATRE_REHIDE_MS);
     };
-    const t = window.setTimeout(tryFs, 400);
+
+    const onKey = (e: KeyboardEvent) => {
+      if (!allowTheatre) return;
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        setTheatre((v) => !v);
+      }
+      if (e.key === "Escape") setTheatre(false);
+    };
+
+    window.addEventListener("mousemove", reveal);
+    window.addEventListener("keydown", onKey);
     return () => {
       cancelled = true;
-      window.clearTimeout(t);
+      window.clearTimeout(autoTimer);
+      window.clearTimeout(hideTimer);
+      window.removeEventListener("mousemove", reveal);
+      window.removeEventListener("keydown", onKey);
     };
-  }, [wantFullscreen]);
-
-  async function toggleFullscreen() {
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await document.documentElement.requestFullscreen();
-    } catch {
-      /* user gesture / browser policy */
-    }
-  }
-
-  const anySlide = hasSlide || showFigma;
+  }, []);
 
   return (
-    <div className={`present-root${isFs ? " is-fs" : ""}`}>
+    <div className={`present-root${theatre ? " is-fs" : ""}`}>
       <div ref={frameRef} className="present-frame" data-mode={showFigma ? "figma" : slidePdf ? "pdf" : "image"}>
         {showFigma ? (
           <div className="present-slide present-figma">
@@ -292,14 +316,17 @@ export default function PresentView({ folderId: initialFolderId, wantFullscreen 
         )}
       </div>
 
-      <div className="present-bar" hidden={isFs}>
+      <div className="present-bar" hidden={theatre}>
+        <span className="present-count">
+          {layout === "single" ? tr("presentMirrorHint") : tr("presentDragHint")}
+        </span>
         {anySlide && !showFigma && pageCount > 1 && (
           <span className="present-count">{tr("slideOf", { page, count: pageCount })}</span>
         )}
         {showFigma && <span className="present-count">{tr("presentFigmaNote")}</span>}
         {note && <span className="present-count">{note}</span>}
-        <button type="button" className="room-glass-btn" onClick={() => void toggleFullscreen()}>
-          {tr("presentFullscreen")}
+        <button type="button" className="room-glass-btn" onClick={() => setTheatre((v) => !v)}>
+          {theatre ? tr("presentExitFs") : tr("presentFullscreen")}
         </button>
         <button type="button" className="room-glass-btn" onClick={() => window.close()}>
           {tr("presentExit")}

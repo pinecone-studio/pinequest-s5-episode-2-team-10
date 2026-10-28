@@ -675,17 +675,26 @@ function FolderRoom({
    * Opens or reuses a slide-only window for the TV/projector. MacBook stays here.
    * Window Management API places on an external display when allowed; else manual drag.
    */
+  /** Slide-only TV window. Needs Extend (not Mirror). MacBook stays on FolderDesk. */
   async function openPresent() {
     setPresentNote(null);
     if (!anySlide) return;
     const existing = presentWinRef.current && !presentWinRef.current.closed ? presentWinRef.current : null;
-    const { win, onExternal, reused } = await openPresentWindow(folder.id, existing);
+    const { win, onExternal, reused, layout } = await openPresentWindow(folder.id, existing);
     if (!win) {
       setPresentNote(tr("presentBlocked"));
       return;
     }
     presentWinRef.current = win;
-    setPresentNote(reused ? tr("presentTvReuseHint") : onExternal ? tr("presentTvAutoHint") : tr("presentTvHint"));
+    const noteKey =
+      layout === "single"
+        ? "presentMirrorHint"
+        : reused
+          ? "presentTvReuseHint"
+          : onExternal
+            ? "presentTvAutoHint"
+            : "presentTvHint";
+    setPresentNote(tr(noteKey));
     broadcastPresent();
     window.setTimeout(() => broadcastPresent(), 250);
   }

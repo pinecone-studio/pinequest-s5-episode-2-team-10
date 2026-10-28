@@ -1,21 +1,12 @@
 /**
  * Dual-screen Present protocol (same-origin BroadcastChannel).
  *
- * Roles
- * - Controller: FolderDesk on the MacBook (full Saylo UI).
- * - Audience: /present window (slide surface only).
+ * Controller: FolderDesk on the MacBook. Audience: /present (slides only).
+ * Requires macOS Extend (not Mirror). No auto document.fullscreen — that pins
+ * the window to one display; the audience uses CSS theatre instead.
  *
- * Messages
- * - hello { folderId }     audience → all: request current state (reconnect)
- * - state  PresentState    controller → audience: authoritative selection
- * - closed { folderId }    either side: audience gone or controller left the room
- *
- * Rules
- * - Controller is source of truth; audience never writes slide selection back.
- * - state.seq is monotonic per controller tab; audience ignores seq <= last applied
- *   unless folderId changed (folder switch).
- * - slideRev bumps only when slide bytes change; page flips keep the same slideRev.
- * - openPresentWindow reuses name "saylo-present"; Window Management API is optional.
+ * Messages: hello | state | closed. Controller owns selection; state.seq is
+ * monotonic; slideRev bumps only when slide bytes change.
  */
 
 export const PRESENT_CHANNEL = "saylo-present-v1";
@@ -24,13 +15,11 @@ export type PresentMode = "pdf" | "image" | "figma";
 
 export type PresentState = {
   folderId: string;
-  /** Monotonic per controller; drops stale/out-of-order updates. */
   seq: number;
   page: number;
   pageCount: number;
   shownPages: number[];
   mode: PresentMode;
-  /** Bumps whenever the presenter reloads slide bytes (replace PDF/image). */
   slideRev: number;
   figmaUrl?: string | null;
 };
@@ -39,6 +28,37 @@ export type PresentMsg =
   | { type: "hello"; folderId: string }
   | ({ type: "state" } & PresentState)
   | { type: "closed"; folderId: string };
+
+export type DisplayLayout = "extended" | "single" | "unknown";
+
+export type OpenPresentResult = {
+  win: Window | null;
+  onExternal: boolean;
+  reused: boolean;
+  layout: DisplayLayout;
+};
+
+type PresentScreen = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  availLeft?: number;
+  availTop?: number;
+  availWidth?: number;
+  availHeight?: number;
+  isPrimary?: boolean;
+  isInternal?: boolean;
+};
+
+type ScreenDetailsLike = {
+  screens: PresentScreen[];
+  currentScreen?: PresentScreen;
+};
+
+type WindowWithScreens = Window & {
+  getScreenDetails?: () => Promise<ScreenDetailsLike>;
+};
 
 function isPresentState(data: Record<string, unknown>): data is PresentState & { type: "state" } {
   return (
@@ -79,25 +99,14 @@ export function postPresent(msg: PresentMsg): void {
   }
 }
 
-/** Posts authoritative controller state with the next seq. */
 export function postPresentState(state: Omit<PresentState, "seq">): void {
   controllerSeq += 1;
   postPresent({ type: "state", ...state, seq: controllerSeq });
 }
 
-/** Subscribe to present messages for one folder. Returns unsubscribe. */
-export function subscribePresent(folderId: string, onMsg: (msg: PresentMsg) => void): () => void {
-  return subscribePresentAll((msg) => {
-    if (msg.folderId !== folderId) return;
-    onMsg(msg);
-  });
-}
-
-/** Subscribe to every present message (any folder). Used so the audience can follow folder switches. */
 export function subscribePresentAll(onMsg: (msg: PresentMsg) => void): () => void {
   const ch = getChannel();
   if (!ch) return () => {};
-
   const handler = (event: MessageEvent) => {
     if (!isPresentMsg(event.data)) return;
     onMsg(event.data);
@@ -106,91 +115,96 @@ export function subscribePresentAll(onMsg: (msg: PresentMsg) => void): () => voi
   return () => ch.removeEventListener("message", handler);
 }
 
-/** Screen from the multi-screen Window Management API (Chromium). */
-type PresentScreen = {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-  availLeft?: number;
-  availTop?: number;
-  availWidth?: number;
-  availHeight?: number;
-  isPrimary?: boolean;
-  isInternal?: boolean;
-  label?: string;
-};
-
-type ScreenDetailsLike = {
-  screens: PresentScreen[];
-  currentScreen?: PresentScreen;
-};
+/** Mirror reports one logical screen; Extend reports isExtended or 2+ screens. */
+export async function detectDisplayLayout(): Promise<DisplayLayout> {
+  const s = window.screen as Screen & { isExtended?: boolean };
+  if (typeof s.isExtended === "boolean") {
+    return s.isExtended ? "extended" : "single";
+  }
+  const w = window as WindowWithScreens;
+  if (typeof w.getScreenDetails !== "function") return "unknown";
+  try {
+    const details = await w.getScreenDetails();
+    return (details.screens?.length ?? 0) >= 2 ? "extended" : "single";
+  } catch {
+    return "unknown";
+  }
+}
 
 async function externalScreen(): Promise<PresentScreen | null> {
-  const w = window as Window & {
-    getScreenDetails?: () => Promise<ScreenDetailsLike>;
-  };
+  const w = window as WindowWithScreens;
   if (typeof w.getScreenDetails !== "function") return null;
   try {
     const details = await w.getScreenDetails();
     const screens = details.screens ?? [];
     if (screens.length < 2) return null;
     const current = details.currentScreen;
-    const other =
+    return (
       screens.find((s) => current && (s.left !== current.left || s.top !== current.top)) ??
       screens.find((s) => s.isPrimary === false) ??
       screens.find((s) => s.isInternal === false) ??
-      null;
-    return other;
+      null
+    );
   } catch {
     return null;
   }
 }
 
-export type OpenPresentResult = {
-  win: Window | null;
-  /** True when the window was positioned on a second display via Window Management API. */
-  onExternal: boolean;
-  /** True when an existing audience window was focused instead of opening a new one. */
-  reused: boolean;
-};
+function placedOnExternal(win: Window): boolean {
+  if (typeof win.screenX !== "number") return false;
+  const primaryW = window.screen?.availWidth ?? 0;
+  return win.screenX < -10 || win.screenX > primaryW - 40;
+}
+
+function openAudience(url: string, name: string, features?: string): Window | null {
+  return features ? window.open(url, name, features) : window.open(url, name);
+}
 
 /**
- * Opens or reuses the slide-only audience page. Tries to place a new window on an
- * external display when allowed; otherwise opens a normal popup to drag manually.
+ * Opens or reuses the slide-only audience page. Places on an external display
+ * when Extend + Window Management allow; otherwise a popup to drag manually.
  */
 export async function openPresentWindow(
   folderId: string,
   existing: Window | null = null,
 ): Promise<OpenPresentResult> {
+  const layout = await detectDisplayLayout();
+  const url = `/present?folder=${encodeURIComponent(folderId)}`;
+  const name = "saylo-present";
+
   if (existing && !existing.closed) {
     try {
       existing.focus();
     } catch {
       /* ignore */
     }
-    return { win: existing, onExternal: false, reused: true };
+    return { win: existing, onExternal: false, reused: true, layout };
   }
 
-  const url = `/present?folder=${encodeURIComponent(folderId)}&fs=1`;
-  const name = "saylo-present";
-  const screen = await externalScreen();
-  if (screen) {
-    const left = Math.round(screen.availLeft ?? screen.left);
-    const top = Math.round(screen.availTop ?? screen.top);
-    const width = Math.round(screen.availWidth ?? screen.width);
-    const height = Math.round(screen.availHeight ?? screen.height);
-    const features = `popup=yes,left=${left},top=${top},width=${width},height=${height}`;
-    const win = window.open(url, name, features);
-    if (win) {
-      try {
-        win.moveTo(left, top);
-        win.resizeTo(width, height);
-      } catch {
-        /* some browsers block moveTo after open */
+  if (layout === "extended") {
+    const screen = await externalScreen();
+    if (screen) {
+      const left = Math.round(screen.availLeft ?? screen.left);
+      const top = Math.round(screen.availTop ?? screen.top);
+      const width = Math.round(screen.availWidth ?? screen.width);
+      const height = Math.round(screen.availHeight ?? screen.height);
+      const win = openAudience(url, name, `popup=yes,left=${left},top=${top},width=${width},height=${height}`);
+      if (win) {
+        try {
+          win.moveTo(left, top);
+          win.resizeTo(width, height);
+        } catch {
+          /* moveTo often blocked */
+        }
+        return { win, onExternal: placedOnExternal(win), reused: false, layout };
       }
-      return { win, onExternal: true, reused: false };
     }
   }
-  return { win: window.open(url, name), onExternal: false, reused: false };
+
+  return {
+    win: openAudience(url, name, "popup=yes,width=1280,height=720"),
+    onExternal: false,
+    reused: false,
+    layout,
+  };
 }

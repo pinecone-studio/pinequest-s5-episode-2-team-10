@@ -9,7 +9,6 @@ function PresentInner() {
   const { tr } = useLang();
   const params = useSearchParams();
   const folderId = params.get("folder")?.trim() ?? "";
-  const wantFs = params.get("fs") === "1";
   if (!folderId) {
     return (
       <div className="present-root">
@@ -17,7 +16,7 @@ function PresentInner() {
       </div>
     );
   }
-  return <PresentView folderId={folderId} wantFullscreen={wantFs} />;
+  return <PresentView folderId={folderId} />;
 }
 
 export default function PresentPage() {
