@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from backend import config, db as db_module, main as main_module, supabase_auth
-from backend.db import AppUser, AudioAsset, engine
+from backend.db import AccessToken, AppUser, AudioAsset, engine
 from backend.main import app
 
 PASSWORD = "password1"
@@ -50,7 +50,13 @@ def test_register_stores_a_hash_and_answers_me(client: TestClient):
     created = _register(client, "Ada@Example.com")
     me = client.get("/api/v1/auth/me", headers={"X-Access-Token": created["access_token"]})
     assert me.status_code == 200
-    assert me.json() == {"id": created["id"], "email": "ada@example.com", "username": "ada", "role": "member"}
+    assert me.json() == {
+        "id": created["id"],
+        "email": "ada@example.com",
+        "username": "ada",
+        "role": "member",
+        "has_password": True,
+    }
 
     with Session(engine) as db:
         user = db.exec(select(AppUser).where(AppUser.email == "ada@example.com")).one()
@@ -126,6 +132,7 @@ def test_profile_update_changes_only_the_authenticated_users_username(client: Te
         "email": owner["email"],
         "username": "шинэ нэр",
         "role": "member",
+        "has_password": True,
     }
 
     owner_me = client.get("/api/v1/auth/me", headers={"X-Access-Token": owner["access_token"]})
@@ -184,7 +191,8 @@ def test_profile_avatar_upload_is_private_and_returns_webp(client: TestClient):
     other_avatar = client.get(
         "/api/v1/auth/me/avatar", headers={"X-Access-Token": other["access_token"]}
     )
-    assert other_avatar.status_code == 404
+    assert other_avatar.status_code == 204
+    assert other_avatar.content == b""
 
 
 def test_profile_avatar_rejects_invalid_image_and_shared_demo_upload(client: TestClient):
@@ -369,6 +377,84 @@ def test_google_creates_an_account_without_a_password(client: TestClient, supaba
     assert body["username"] is None
     no_password = client.post("/api/v1/auth/login", json={"login": "new.person@gmail.com", "password": PASSWORD})
     assert no_password.status_code == 401
+
+
+def _change_password(client: TestClient, token: str | None, body: dict):
+    headers = {"X-Access-Token": token} if token else {}
+    return client.post("/api/v1/auth/me/password", headers=headers, json=body)
+
+
+def _login(client: TestClient, login: str, password: str):
+    return client.post("/api/v1/auth/login", json={"login": login, "password": password})
+
+
+def test_password_change_needs_the_current_password(client: TestClient):
+    owner = _register(client, "pw.change@example.com", "pw_change")
+    token = owner["access_token"]
+
+    wrong = _change_password(client, token, {"current_password": "not-the-password", "new_password": "brand-new-pass"})
+    missing = _change_password(client, token, {"new_password": "brand-new-pass"})
+    assert wrong.status_code == missing.status_code == 400
+    assert wrong.json()["code"] == missing.json()["code"] == "wrong_password"
+    still_old = _login(client, "pw_change", PASSWORD)
+    assert still_old.status_code == 200
+    token = still_old.json()["access_token"]  # signing in replaced the registration token
+
+    changed = _change_password(client, token, {"current_password": PASSWORD, "new_password": "brand-new-pass"})
+    assert changed.status_code == 204
+    assert _login(client, "pw_change", PASSWORD).status_code == 401
+    assert _login(client, "pw.change@example.com", "brand-new-pass").status_code == 200
+
+
+def test_password_change_rejects_short_same_or_unauthenticated(client: TestClient):
+    owner = _register(client, "pw.rules@example.com", "pw_rules")
+    token = owner["access_token"]
+
+    short = _change_password(client, token, {"current_password": PASSWORD, "new_password": "short"})
+    same = _change_password(client, token, {"current_password": PASSWORD, "new_password": PASSWORD})
+    anonymous = _change_password(client, None, {"current_password": PASSWORD, "new_password": "brand-new-pass"})
+    extra = _change_password(client, token, {"current_password": PASSWORD, "new_password": "brand-new-pass", "role": "admin"})
+
+    assert short.status_code == 422
+    assert same.status_code == 422
+    assert same.json()["code"] == "same_password"
+    assert anonymous.status_code == 401
+    assert extra.status_code == 422
+    assert _login(client, "pw_rules", PASSWORD).status_code == 200
+
+
+def test_password_change_signs_out_other_devices_but_keeps_this_one(client: TestClient):
+    _register(client, "pw.devices@example.com", "pw_devices")
+    current = _login(client, "pw_devices", PASSWORD).json()["access_token"]
+    with Session(engine) as db:
+        user = db.exec(select(AppUser).where(AppUser.email == "pw.devices@example.com")).one()
+        db.add(AccessToken(token_hash=main_module._hash("other-device-token"), user_id=user.id))
+        db.commit()
+    assert client.get("/api/v1/auth/me", headers={"X-Access-Token": "other-device-token"}).status_code == 200
+
+    changed = _change_password(client, current, {"current_password": PASSWORD, "new_password": "brand-new-pass"})
+    assert changed.status_code == 204
+    assert client.get("/api/v1/auth/me", headers={"X-Access-Token": "other-device-token"}).status_code == 401
+    assert client.get("/api/v1/auth/me", headers={"X-Access-Token": current}).status_code == 200
+
+
+def test_google_account_sets_a_first_password_without_the_current_one(client: TestClient, supabase):
+    supabase.reply = httpx.Response(200, json=_supabase_user("first.password@gmail.com"))
+    token = _google(client).json()["access_token"]
+    headers = {"X-Access-Token": token}
+    assert client.get("/api/v1/auth/me", headers=headers).json()["has_password"] is False
+
+    changed = _change_password(client, token, {"new_password": "my-first-pass"})
+    assert changed.status_code == 204
+    assert client.get("/api/v1/auth/me", headers=headers).json()["has_password"] is True
+    assert _login(client, "first.password@gmail.com", "my-first-pass").status_code == 200
+
+
+def test_shared_demo_password_cannot_change(client: TestClient):
+    demo = client.post("/api/v1/auth/demo").json()
+    res = _change_password(client, demo["access_token"], {"new_password": "brand-new-pass"})
+    assert res.status_code == 403
+    assert res.json()["code"] == "shared_account_readonly"
 
 
 def test_google_reuses_the_account_with_that_email(client: TestClient, supabase):

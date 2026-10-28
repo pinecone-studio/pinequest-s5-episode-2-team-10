@@ -30,7 +30,7 @@ export default function AccountAvatar({ fallback, className, previewUrl }: { fal
     api.profileAvatar()
       .then((blob) => {
         if (!active) return;
-        objectUrl = URL.createObjectURL(blob);
+        objectUrl = blob ? URL.createObjectURL(blob) : null;
         setImageUrl(objectUrl);
         setImageAccountId(account.id);
       })
