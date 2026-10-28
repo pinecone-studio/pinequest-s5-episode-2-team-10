@@ -5315,6 +5315,24 @@ a.profile-secondary-button {
   font-size: 13px;
 }
 
+.landing-version {
+  position: fixed;
+  z-index: 10;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  left: max(18px, env(safe-area-inset-left));
+  padding: 6px 9px;
+  border: 1px solid var(--landing-line);
+  border-radius: 999px;
+  background: rgba(12, 12, 12, 0.68);
+  color: var(--landing-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
 .landing-actions {
   display: flex;
   flex-wrap: wrap;
