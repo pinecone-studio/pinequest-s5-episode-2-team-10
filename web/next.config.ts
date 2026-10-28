@@ -27,6 +27,9 @@ const nextConfig: NextConfig = {
     return [{ source: "/api/v1/:path*", destination: `${backend}/api/v1/:path*` }];
   },
   experimental: {
+    // Slides are proxied through Next to FastAPI; the default 10 MiB limit rejects valid uploads
+    // before the backend's 20 MiB slide limit can be applied.
+    proxyClientMaxBodySize: "25mb",
     // Don't reuse `next dev` output across restarts (.next/dev/cache). CSS through the Tailwind
     // loader could stay stale after a git pull or branch switch, and restarting kept serving it.
     turbopackFileSystemCacheForDev: false,
