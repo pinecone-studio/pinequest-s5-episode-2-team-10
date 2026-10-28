@@ -49,11 +49,19 @@ def predict_backend(backend: str, pitch_rows: list[dict]) -> dict[tuple[str, int
 
 
 def predict_file(path: Path, rows: list[dict]) -> dict[tuple[str, int], set[int]]:
+    """Rows {pitch, sentence_id, word}; an exact "token_idx" (classifier output) is used as given."""
     occ: dict[str, list[dict]] = {}
+    exact: dict[tuple[str, int], set[int]] = {}
     for p in labels.read(path):
-        occ.setdefault(p["pitch"], []).append(p)
-    return {k: v for pitch, pitch_rows in labels.by_pitch(rows).items()
-            for k, v in from_occurrences(pitch_rows, occ.get(pitch, [])).items()}
+        if "token_idx" in p:
+            exact.setdefault((p["pitch"], p["sentence_id"]), set()).add(p["token_idx"])
+        else:
+            occ.setdefault(p["pitch"], []).append(p)
+    out = {k: v for pitch, pitch_rows in labels.by_pitch(rows).items()
+           for k, v in from_occurrences(pitch_rows, occ.get(pitch, [])).items()}
+    for key, idx in exact.items():
+        out[key] = out.get(key, set()) | idx
+    return out
 
 
 def fmt(x: float | None) -> str:

@@ -19,6 +19,31 @@ python -m training.fillers.evaluate --labels data/fillers/labels.jsonl --backend
 
 `evaluate` scores per token: a missed "ээ" is one false negative, a flagged "тэгээд" that meant "and then" is one false positive. It prints precision, recall and F1 per method, and the words with the most errors. Any other method (e.g. a trained classifier) can be compared by writing JSONL rows `{"pitch", "sentence_id", "word"}` and passing `--predictions`.
 
+## Fine-tuning a filler classifier
+
+A small token classifier (XLM-RoBERTa base, Mongolian Cyrillic included) marks each word as filler or not, in context. It answers in milliseconds, so it can replace or pre-filter the LLM's filler check.
+
+```bash
+pip install torch transformers accelerate sentencepiece
+
+# 1. Silver labels: Gemma (or Claude) marks fillers on transcripts and synthetic pitches. Takes as long as
+#    the app's analysis per pitch (~25 s on the 4060), so run it overnight on the GPU PC. Resumable.
+python -m training.fillers.silver --transcripts data/transcripts --synthetic 300 --out data/fillers/silver.jsonl
+
+# 2. Train (Kaggle T4 or the GPU PC, ~10-20 min). Hand-checked pitches are held out as the test set.
+python -m training.fillers.classifier train --data data/fillers/silver.jsonl --data data/fillers/labels.jsonl \
+    --out data/fillers/model
+
+# 3. Compare with the list and Gemma on the hand-checked rows
+python -m training.fillers.classifier predict --model data/fillers/model --labels data/fillers/labels.jsonl \
+    --out data/fillers/clf.jsonl
+python -m training.fillers.evaluate --predictions data/fillers/clf.jsonl --backend gemma4-base
+```
+
+Trained only on silver labels, the classifier learns to copy Gemma, mistakes included (distillation): it can be faster, not more accurate. Adding hand labels is what can make it better than Gemma. Report scores from hand-checked test pitches only; `train` prints how many test sentences were hand-checked.
+
+On Kaggle, upload `silver.jsonl` and `labels.jsonl` as a **private** dataset (they contain transcripts) and follow the notebook setup in `training/speed/KAGGLE.md`.
+
 ## Labelling rules
 
 - Mark a word when removing it keeps the meaning: hesitations (ээ, аан, мм), padding (нөгөө, яахав), repeated "тэгээд тэгээд".

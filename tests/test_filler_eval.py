@@ -2,7 +2,7 @@
 
 import pytest
 
-from training.fillers import evaluate, labels, sheet
+from training.fillers import classifier, evaluate, labels, sheet, silver
 
 
 # ---- Positions --------------------------------------------------------------
@@ -69,6 +69,27 @@ def test_list_prediction_matches_its_own_premarks():
     rows = sheet.rows_for("p1", "Ээ, бид нөгөө апп хийсэн. Тэгээд тэгээд дэмжсэн.")
     s = labels.score(rows, evaluate.predict_list(rows))
     assert (s["fp"], s["fn"]) == (0, 0)
+
+
+def test_predictions_file_uses_exact_token_positions(tmp_path):
+    rows = [row("p", 0, ["ээ", "бид", "ээ"], [2])]
+    path = tmp_path / "clf.jsonl"
+    labels.write(path, [{"pitch": "p", "sentence_id": 0, "word": "ээ", "token_idx": 2}])
+    s = labels.score(rows, evaluate.predict_file(path, rows))
+    assert (s["tp"], s["fp"], s["fn"]) == (1, 0, 0)  # by word alone it would land on position 0
+
+
+def test_silver_rows_take_the_backend_marks():
+    rows = silver.label_pitch("rules", "p1", "Ээ, бид апп хийсэн. Нөгөө оюутнууд ашиглана. Аан, баярлалаа.")
+    assert [r["source"] for r in rows] == ["rules"] * 3
+    assert [r["filler_idx"] for r in rows] == [[0], [0], [0]]
+
+
+def test_classifier_split_keeps_pitches_whole_and_prefers_checked():
+    rows = [dict(row(p, s, ["бид"], []), checked=(p == "gold")) for p in ("a", "b", "c", "gold") for s in (0, 1)]
+    train_rows, test_rows = classifier.split_pitches(rows, 0.25, seed=1)
+    assert {r["pitch"] for r in test_rows} == {"gold"}
+    assert len(train_rows) == 6
 
 
 def test_rules_backend_runs_end_to_end():
