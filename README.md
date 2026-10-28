@@ -61,6 +61,26 @@ repository-root `.env`; shell environment variables take precedence. The backend
 example selects Gemma through local Ollama; keep Ollama running and ensure the
 configured model is available. Do not overwrite existing `.env` files.
 
+## Subscription and QPay
+
+New accounts get a 7-day free trial; each QPay payment then adds 30 days. Nobody is blocked
+until `PITCH_BILLING_ENFORCED=true`, so leave it unset for local work. Rules and endpoints are in
+`API.md` ("Subscription"); variables are listed in `DATABASE.md` ("Environment files").
+
+To try payments with the QPay sandbox:
+
+1. Get sandbox credentials from QPay and put them in `backend/.env.local`:
+   `QPAY_CLIENT_ID`, `QPAY_CLIENT_SECRET`, `QPAY_INVOICE_CODE` (`QPAY_BASE_URL` defaults to the sandbox).
+2. Set a price, e.g. `PITCH_SUBSCRIPTION_PRICE_MNT=9900`, and restart the API.
+3. Open **Billing** from the account menu, choose **Renew plan**, and pay the sandbox QR code.
+   The page checks QPay every 3 seconds. QPay's callback also reaches the API when
+   `PITCH_PUBLIC_API_URL` is a public address (for example a tunnel to port 8000); without it the
+   page's checks are enough.
+4. For production, use `QPAY_BASE_URL=https://merchant.qpay.mn`, the live credentials, the real
+   public API address, and turn on `PITCH_BILLING_ENFORCED=true` only after a sandbox payment works.
+
+An admin can add days by hand with `PATCH /admin/users/{id}` and `{"grant_days": 30}`.
+
 ## Project documents
 
 - `PRD.md`: product scope and user stories

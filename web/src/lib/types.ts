@@ -23,6 +23,51 @@ export interface AdminUser {
   role: AppRole;
   is_active: boolean;
   created_at: string;
+  trial_ends_at?: string | null;
+  paid_until?: string | null;
+}
+
+/** "admin" covers administrators and the shared demo account, which are never charged. */
+export type BillingState = "admin" | "trial" | "active" | "expired";
+
+export interface BillingStatus {
+  state: BillingState;
+  /** False only when the trial or paid period is over and billing is enforced. */
+  allowed: boolean;
+  trial_ends_at: string | null;
+  paid_until: string | null;
+  ends_at: string | null;
+  days_left: number;
+  price_mnt: number;
+  period_days: number;
+  enforced: boolean;
+  payments_enabled: boolean;
+}
+
+export interface BankLink {
+  name: string;
+  logo: string;
+  link: string;
+}
+
+export interface BillingPayment {
+  id: string;
+  status: "pending" | "paid" | "expired" | "cancelled";
+  amount_mnt: number;
+  period_days: number;
+  created_at: string;
+  paid_at: string | null;
+  /** After this the dialog offers a fresh invoice; a late payment on this one still counts. */
+  expires_at: string | null;
+  qr_image: string | null;
+  qr_text: string | null;
+  short_url: string | null;
+  bank_links: BankLink[];
+}
+
+export interface BillingPaymentCheck {
+  payment: BillingPayment;
+  billing: BillingStatus;
 }
 
 export type PitchType = "startup" | "academic";

@@ -1,5 +1,6 @@
 import { connection, NextResponse } from "next/server";
 import { langOf, t } from "@/lib/i18n";
+import { denyWithoutAccess } from "@/lib/server/entitlement";
 import { transcribe, VoiceError, voiceHealth } from "@/lib/server/voice";
 
 // Vercel stops a function after this many seconds (60 is the most every plan allows).
@@ -16,6 +17,8 @@ export async function GET(request: Request) {
 /** Multipart `file` → {text, words, durationS, elapsedS}. The token stays on the server. */
 export async function POST(request: Request) {
   const lang = langOf(request);
+  const denied = await denyWithoutAccess(request, lang);
+  if (denied) return denied;
   let form: FormData;
   try {
     form = await request.formData();

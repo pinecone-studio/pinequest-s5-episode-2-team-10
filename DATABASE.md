@@ -15,6 +15,21 @@ An account. The browser keeps the access token.
 - `role`: `member` (default) or `admin`; assigned and enforced by the backend
 - `is_active`: whether the account can authenticate (default `true`)
 - `created_at`
+- `trial_ends_at`: end of the free trial (`created_at` + `PITCH_TRIAL_DAYS`); accounts from before subscriptions get theirs from the first startup with this code
+- `paid_until`: end of the last paid period; `NULL` until the first payment
+
+### `payment`
+One attempt to buy a subscription period through QPay.
+- `id`: UUID primary key
+- `user_id` → `app_user.id` (indexed)
+- `provider`: `qpay`
+- `sender_invoice_no`: our invoice number sent to QPay (unique)
+- `invoice_id`: QPay's invoice id (unique)
+- `amount_mnt`, `period_days`: price and length at the time of the invoice
+- `status`: `pending`, `paid`, `expired`, or `cancelled`; only `pending` → `paid` grants access, once
+- `provider_payment_id`: QPay's payment id once paid
+- `invoice_data`: JSON with the QR image, QR text, short URL, and bank app links, so the same invoice can be shown again
+- `created_at`, `paid_at`
 
 ### `access_token`
 An additional authorized sign-in token for an account, including imported device tokens. Created on startup for existing databases; no need to drop tables.
@@ -78,7 +93,7 @@ One attempt inside a project. Project details are copied in when it is analyzed,
 
 ### Added columns
 
-`project.idea`, `project.key_points`, `project.point_slides`, `project.figma_url`, `project.script`, `project.selected_audio_id`, `session.idea`, `session.key_points`, `session.audio_filename`, `app_user.email`, `app_user.password_hash`, `app_user.role`, and `app_user.is_active` are added when missing by `backend/db.py` (`ADDED_COLUMNS`), on SQLite and Postgres alike. Existing databases keep their data; no table recreation is needed. Existing users receive the safe defaults `member` and active. A unique index is added on `app_user.email` when the table does not already have one. Add later columns there too. Older rows keep a null email until someone registers.
+`project.idea`, `project.key_points`, `project.point_slides`, `project.figma_url`, `project.script`, `project.selected_audio_id`, `session.idea`, `session.key_points`, `session.audio_filename`, `app_user.email`, `app_user.password_hash`, `app_user.role`, `app_user.is_active`, `app_user.trial_ends_at`, and `app_user.paid_until` are added when missing by `backend/db.py` (`ADDED_COLUMNS`), on SQLite and Postgres alike. Existing databases keep their data; no table recreation is needed. Existing users receive the safe defaults `member` and active. A unique index is added on `app_user.email` when the table does not already have one. Add later columns there too. Older rows keep a null email until someone registers.
 
 ## Relationships
 
@@ -167,6 +182,11 @@ Edit only `backend/.env.local` for machine-specific values. Uncomment `PITCH_DB_
 | `SUPABASE_STORAGE_BUCKET` | Private bucket name; default setup uses `saylo-session-files`. |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only Supabase key for private Storage requests. Never expose or commit it. |
 | `PITCH_ADMIN_EMAILS` | Comma-separated, server-only list of verified Google emails bootstrapped as admins. |
+| `PITCH_BILLING_ENFORCED` | `true` blocks new work after the trial or paid period ends (`402`). Default `false`, so local development is never blocked. |
+| `PITCH_TRIAL_DAYS`, `PITCH_SUBSCRIPTION_DAYS` | Free trial length (default 7) and the days one payment adds (default 30). |
+| `PITCH_SUBSCRIPTION_PRICE_MNT` | Price of one period in tögrög; unset turns payments off. |
+| `QPAY_BASE_URL`, `QPAY_CLIENT_ID`, `QPAY_CLIENT_SECRET`, `QPAY_INVOICE_CODE` | QPay merchant API (sandbox `https://merchant-sandbox.qpay.mn` by default; production `https://merchant.qpay.mn`). Server-only secrets. |
+| `PITCH_PUBLIC_API_URL` | Public address of this API, used in QPay's payment callback URL. |
 | `PITCH_CORS_ORIGINS` | Comma-separated web origins allowed by FastAPI. |
 | `PITCH_RETENTION_DAYS` | Delete projects untouched for this many days; `0` keeps them. |
 | `PITCH_DEFAULT_BACKEND` | Default feedback backend: `claude`, `gemma4-ft`, `gemma4-base`, or `rules`. |

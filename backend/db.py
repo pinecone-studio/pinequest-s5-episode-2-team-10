@@ -34,6 +34,31 @@ class AppUser(SQLModel, table=True):
     role: str = "member"
     is_active: bool = True
     created_at: datetime = Field(default_factory=utcnow)
+    # Free use until this moment; set when the account is created.
+    trial_ends_at: Optional[datetime] = Field(default_factory=lambda: utcnow() + timedelta(days=config.TRIAL_DAYS))
+    # End of the last paid period, if any.
+    paid_until: Optional[datetime] = None
+
+
+class Payment(SQLModel, table=True):
+    """One attempt to buy a subscription period: a QPay invoice and, once paid, its payment."""
+
+    __tablename__ = "payment"
+
+    id: str = Field(default_factory=new_id, primary_key=True)
+    user_id: str = Field(index=True, foreign_key="app_user.id")
+    provider: str = "qpay"
+    # Our own invoice number, sent to QPay and echoed back in its callback.
+    sender_invoice_no: str = Field(index=True, unique=True)
+    invoice_id: Optional[str] = Field(default=None, index=True, unique=True)
+    amount_mnt: int
+    period_days: int
+    status: str = "pending"  # pending | paid | expired | cancelled
+    provider_payment_id: Optional[str] = None
+    # QR image, QR text, short URL, and bank app links, kept so a reload can show the same invoice.
+    invoice_data: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utcnow)
+    paid_at: Optional[datetime] = None
 
 
 class AccessToken(SQLModel, table=True):
@@ -172,6 +197,8 @@ ADDED_COLUMNS = {
         "password_hash": "TEXT",
         "role": "TEXT NOT NULL DEFAULT 'member'",
         "is_active": "BOOLEAN NOT NULL DEFAULT TRUE",
+        "trial_ends_at": "TIMESTAMP",
+        "paid_until": "TIMESTAMP",
     },
     "project": {
         "idea": "TEXT NOT NULL DEFAULT ''",
@@ -213,6 +240,21 @@ def _ensure_unique(column: str) -> None:
         conn.exec_driver_sql(f'CREATE UNIQUE INDEX IF NOT EXISTS "ix_app_user_{column}" ON "app_user" ("{column}")')
 
 
+def _start_missing_trials() -> None:
+    """Accounts from before subscriptions get their free trial from the day this code first runs."""
+    if not inspect(engine).has_table("app_user"):
+        return
+    with Session(engine) as db:
+        missing = db.exec(select(AppUser).where(AppUser.trial_ends_at.is_(None))).all()  # type: ignore[union-attr]
+        if not missing:
+            return
+        ends = utcnow() + timedelta(days=config.TRIAL_DAYS)
+        for user in missing:
+            user.trial_ends_at = ends
+            db.add(user)
+        db.commit()
+
+
 def init() -> None:
     config.SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     from . import storage
@@ -224,6 +266,7 @@ def init() -> None:
     _add_missing_columns()
     _ensure_unique("email")
     _ensure_unique("username")
+    _start_missing_trials()
     if engine.dialect.name == "postgresql":
         # Supabase exposes the public schema through its REST API. With row-level security on
         # and no policies, the anon key can't read these tables; the server's own role owns

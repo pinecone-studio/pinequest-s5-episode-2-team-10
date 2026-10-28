@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { langOf, t } from "@/lib/i18n";
+import { denyWithoutAccess } from "@/lib/server/entitlement";
 import { speak, ttsEngines, TTS_ENGINES, type TtsEngine } from "@/lib/server/tts";
 import { VoiceError } from "@/lib/server/voice";
 
@@ -13,6 +14,8 @@ export async function GET(request: Request) {
 /** JSON `{text, engine?}` → the coach voice reading it (MP3 from Azure or ElevenLabs, WAV from the voice server). */
 export async function POST(request: Request) {
   const lang = langOf(request);
+  const denied = await denyWithoutAccess(request, lang);
+  if (denied) return denied;
   const body = (await request.json().catch(() => null)) as { text?: unknown; engine?: unknown } | null;
   if (typeof body?.text !== "string") {
     return NextResponse.json({ error: t(lang, "ttsEmpty") }, { status: 400 });

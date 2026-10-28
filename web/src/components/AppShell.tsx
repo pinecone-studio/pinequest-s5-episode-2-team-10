@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useLang } from "@/lib/i18nClient";
 import { clearSession, useAccount } from "@/lib/session";
+import { BillingBanner, RenewDialog } from "./BillingNotices";
 import IntroTour from "./IntroTour";
 import LangToggle from "./LangToggle";
 import RingBackdrop from "./RingBackdrop";
@@ -187,7 +188,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </header>
-        <div className="app-content">{children}</div>
+        <div className="app-content">
+          <BillingBanner />
+          {children}
+        </div>
       </div>
       {accountOpen && panelBox && (
         <>
@@ -216,6 +220,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <ChevronRight />
               </Link>
             </div>
+            <Link
+              href="/billing"
+              className="account-panel-link"
+              aria-current={pathname === "/billing" ? "page" : undefined}
+              onClick={() => setAccountOpen(false)}
+            >
+              <CardIcon />
+              <span>{tr("billing")}</span>
+            </Link>
             <button
               type="button"
               className="account-panel-link"
@@ -259,7 +272,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </Modal>
       )}
       {showIntro && <IntroTour onClose={closeIntro} />}
+      <RenewDialog />
     </div>
+  );
+}
+
+function CardIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 16 16" aria-hidden>
+      <rect x="1.75" y="3.25" width="12.5" height="9.5" rx="1.75" fill="none" stroke="currentColor" strokeWidth="1.35" />
+      <path d="M1.75 6.5h12.5M4.5 10h2.5" fill="none" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+    </svg>
   );
 }
 

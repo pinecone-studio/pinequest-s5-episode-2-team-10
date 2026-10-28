@@ -1,7 +1,8 @@
 // Which slide files the folder page takes, and turning decks into something it can show.
 
 import { t } from "./i18n";
-import { currentLang, langHeaders } from "./i18nClient";
+import { currentLang } from "./i18nClient";
+import { checkSubscription, routeHeaders } from "./routeAccess";
 
 // Every type listed explicitly. A bare "image/*" makes some Windows file dialogs open in an
 // images-only filter, which hides PDFs.
@@ -45,10 +46,11 @@ export async function prepareSlide(file: File): Promise<File> {
   form.set("file", file, file.name);
   let res: Response;
   try {
-    res = await fetch("/api/slides/convert", { method: "POST", body: form, headers: langHeaders() });
+    res = await fetch("/api/slides/convert", { method: "POST", body: form, headers: routeHeaders() });
   } catch {
     throw new Error(t(lang, "serverUnreachable"));
   }
+  checkSubscription(res);
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error || t(lang, "deckConvertFailed"));
