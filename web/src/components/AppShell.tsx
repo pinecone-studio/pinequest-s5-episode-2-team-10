@@ -193,6 +193,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </div>
+      <span className="app-version" aria-label={`Saylo version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "V1.0"}`}>
+        {process.env.NEXT_PUBLIC_APP_VERSION ?? "V1.0"}
+      </span>
       {accountOpen && panelBox && (
         <>
           <button type="button" className="account-panel-backdrop" aria-label={tr("close")} onClick={() => setAccountOpen(false)} />
