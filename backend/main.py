@@ -356,6 +356,14 @@ class UserProfileUpdate(BaseModel):
     username: str = Field(min_length=1, max_length=64)
 
 
+class PasswordChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Required when the account already has a password; Google-only accounts set their first one without it.
+    current_password: Optional[str] = Field(default=None, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 class AdminUserView(BaseModel):
     id: str
     email: Optional[str]
@@ -523,9 +531,19 @@ def google_login(body: GoogleAuthBody, database: DB):
     return _replace_user_token(database, user)
 
 
+def _profile(user: AppUser) -> dict:
+    return {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "role": user.role,
+        "has_password": bool(user.password_hash),
+    }
+
+
 @api.get("/auth/me")
 def auth_me(user: User):
-    return {"id": user.id, "email": user.email, "username": user.username, "role": user.role}
+    return _profile(user)
 
 
 @api.patch("/auth/me")
@@ -544,7 +562,35 @@ def update_auth_me(body: UserProfileUpdate, user: User, database: DB):
     database.add(user)
     database.commit()
     database.refresh(user)
-    return {"id": user.id, "email": user.email, "username": user.username, "role": user.role}
+    return _profile(user)
+
+
+@api.post("/auth/me/password", status_code=204)
+def change_password(
+    body: PasswordChange,
+    user: User,
+    database: DB,
+    x_access_token: Annotated[str, Header()],
+):
+    if user.email == "demo@pitchcoach.local":
+        raise ApiError(403, "shared_account_readonly", "The shared demo account profile cannot be changed.")
+    # 400, not 401: the web app signs the user out on any 401.
+    if user.password_hash and not verify_password(body.current_password or "", user.password_hash):
+        raise ApiError(400, "wrong_password", "The current password is incorrect.")
+    if user.password_hash and verify_password(body.new_password, user.password_hash):
+        raise ApiError(422, "same_password", "Choose a password different from the current one.")
+
+    user.password_hash = hash_password(body.new_password)
+    # Sign out every other device; the token that made this request keeps working.
+    current = _hash(x_access_token)
+    for extra in database.exec(select(AccessToken).where(AccessToken.user_id == user.id)).all():
+        if extra.token_hash != current:
+            database.delete(extra)
+    if user.token_hash != current:
+        user.token_hash = _hash(secrets.token_urlsafe(32))
+    database.add(user)
+    database.commit()
+    return Response(status_code=204)
 
 
 @api.put("/auth/me/avatar", status_code=204)
@@ -592,7 +638,8 @@ def get_profile_avatar(user: User):
         )
 
     if not user.avatar_key:
-        raise ApiError(404, "avatar_not_found", "No profile image has been uploaded.")
+        # No photo yet is the normal case, not an error: answer empty so browsers don't log a failed request.
+        return Response(status_code=204, headers={"Cache-Control": "private, no-store"})
 
     object_key = storage.key_from_uri(user.avatar_key)
     if object_key:

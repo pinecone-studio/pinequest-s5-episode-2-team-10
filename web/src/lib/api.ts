@@ -119,7 +119,11 @@ const realApi = {
     send<AuthSession>("/auth/google", json("POST", { access_token: accessToken }), null),
   me: () => request<AccountProfile>("/auth/me"),
   updateProfile: (username: string) => request<AccountProfile>("/auth/me", json("PATCH", { username })),
-  profileAvatar: () => request<Blob>("/auth/me/avatar", {}, "blob"),
+  /** `current` is null for an account without a password yet (Google only). */
+  changePassword: (current: string | null, next: string) =>
+    request<void>("/auth/me/password", json("POST", current === null ? { new_password: next } : { current_password: current, new_password: next })),
+  /** Undefined when the account has no photo (204). */
+  profileAvatar: () => request<Blob | undefined>("/auth/me/avatar", {}, "blob"),
   uploadProfileAvatar,
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   adminUsers: () => request<AdminUser[]>("/admin/users"),

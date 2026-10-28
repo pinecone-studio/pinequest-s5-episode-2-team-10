@@ -280,7 +280,30 @@ export const mockApi = {
   async me(): Promise<AccountProfile> {
     await wait(50);
     const user = currentMockUser();
-    return { id: user.id, email: user.email, username: user.username ?? null, role: "member" as const };
+    return { id: user.id, email: user.email, username: user.username ?? null, role: "member" as const, has_password: !!user.password_hash };
+  },
+
+  async changePassword(current: string | null, next: string): Promise<void> {
+    await wait();
+    const signedIn = currentMockUser();
+    if (signedIn.email === "demo@pitchcoach.local") {
+      throw { code: "shared_account_readonly", message: "The shared demo account profile cannot be changed." };
+    }
+    if (next.length < 8 || next.length > 128) throw { code: "invalid_request", message: "Invalid password." };
+    const users = loadUsers();
+    const user = users.find((row) => row.id === signedIn.id);
+    if (!user) throw { code: "unauthorized", message: "Sign in required." };
+    if (user.password_hash) {
+      if ((await mockDigest(current ?? "", user.salt)) !== user.password_hash) {
+        throw { code: "wrong_password", message: "The current password is incorrect." };
+      }
+      if ((await mockDigest(next, user.salt)) === user.password_hash) {
+        throw { code: "same_password", message: "Choose a password different from the current one." };
+      }
+    }
+    user.salt = user.salt || crypto.randomUUID();
+    user.password_hash = await mockDigest(next, user.salt);
+    saveUsers(users);
   },
 
   async updateProfile(username: string): Promise<AccountProfile> {
@@ -298,10 +321,10 @@ export const mockApi = {
     }
     user.username = cleaned;
     saveUsers(users);
-    return { id: user.id, email: user.email, username: user.username, role: "member" };
+    return { id: user.id, email: user.email, username: user.username, role: "member", has_password: !!user.password_hash };
   },
 
-  async profileAvatar(): Promise<Blob> {
+  async profileAvatar(): Promise<Blob | undefined> {
     await wait(50);
     const user = currentMockUser();
     if (user.email === "demo@pitchcoach.local") {
@@ -309,9 +332,7 @@ export const mockApi = {
       if (response.ok) return response.blob();
       throw { code: "avatar_not_found", message: "Demo profile image was not found." };
     }
-    const avatar = mockProfileAvatars.get(user.id);
-    if (!avatar) throw { code: "avatar_not_found", message: "No profile image has been uploaded." };
-    return avatar;
+    return mockProfileAvatars.get(user.id);
   },
 
   async uploadProfileAvatar(file: File): Promise<void> {

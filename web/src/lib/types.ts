@@ -9,6 +9,8 @@ export interface AccountProfile {
   /** Null for Google, demo, and older accounts. */
   username: string | null;
   role: AppRole;
+  /** False for accounts that only sign in with Google. Sent by /auth/me, not by sign-in. */
+  has_password?: boolean;
 }
 
 export interface AuthSession extends AccountProfile {
