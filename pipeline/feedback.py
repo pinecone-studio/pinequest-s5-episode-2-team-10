@@ -255,10 +255,28 @@ def _ollama(model: str, data: dict) -> dict:
 
 
 def _parse_json(text: str) -> dict:
+    text = text.strip().lstrip("\ufeff")
+    decoder = json.JSONDecoder()
     try:
-        return json.loads(text)
-    except json.JSONDecodeError as e:
-        raise FeedbackError("The feedback model did not return valid JSON.") from e
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    # Some local models wrap an otherwise valid schema response in a short preamble or
+    # Markdown fence. Recover the complete feedback object without modifying its contents.
+    for start, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            parsed, _ = decoder.raw_decode(text[start:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict) and "summary" in parsed and "recommendations" in parsed:
+            return parsed
+
+    raise FeedbackError("The feedback model did not return valid JSON.")
 
 
 def _rules(data: dict) -> dict:
