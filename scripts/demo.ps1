@@ -54,6 +54,12 @@ foreach ($line in Get-Content $envFile) {
 }
 $python = Join-Path $env:VOICE_VENV "Scripts\python.exe"
 if (-not (Test-Path $python)) { throw "No Python env at $env:VOICE_VENV (VOICE_VENV in .env.voice)." }
+$backendPython = Join-Path $root ".venv\Scripts\python.exe"
+if (-not (Test-Path $backendPython)) { $backendPython = $python }
+& $backendPython -c "import fastapi, sqlmodel, PIL"
+if ($LASTEXITCODE -ne 0) {
+    throw "Backend Python is missing dependencies. Install them with: .venv\Scripts\python.exe -m pip install -r requirements.txt"
+}
 
 # Ollama runs as its own app; start it if it isn't up.
 try { Invoke-WebRequest "http://localhost:11434/api/version" -UseBasicParsing -TimeoutSec 3 | Out-Null }
@@ -73,7 +79,7 @@ $env:PITCH_VOICE_TOKEN = $env:VOICE_SERVER_TOKEN
 $env:PITCH_EMBEDDINGS = "none"
 $env:PITCH_DEFAULT_BACKEND = $FeedbackModel
 $env:PITCH_CORS_ORIGINS = "http://localhost:3000"
-Start-Process -FilePath $python -WorkingDirectory $root -WindowStyle Hidden `
+Start-Process -FilePath $backendPython -WorkingDirectory $root -WindowStyle Hidden `
     -ArgumentList "-m", "uvicorn", "backend.main:app", "--port", "8000" `
     -RedirectStandardOutput (Join-Path $logs "api.log") -RedirectStandardError (Join-Path $logs "api.err.log")
 
