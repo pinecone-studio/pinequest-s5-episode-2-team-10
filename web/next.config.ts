@@ -27,6 +27,10 @@ const nextConfig: NextConfig = {
     return [{ source: "/api/v1/:path*", destination: `${backend}/api/v1/:path*` }];
   },
   experimental: {
+    // Uploads reach the backend through the /api/v1 rewrite, and Next cuts proxied bodies at 10 MB
+    // by default (the request dies with "socket hang up"). The backend takes slides up to 20 MB and
+    // audio up to 25 MB, so allow that plus multipart overhead.
+    proxyClientMaxBodySize: "26mb",
     // Don't reuse `next dev` output across restarts (.next/dev/cache). CSS through the Tailwind
     // loader could stay stale after a git pull or branch switch, and restarting kept serving it.
     turbopackFileSystemCacheForDev: false,

@@ -44,12 +44,22 @@ import { api, ApiRequestError, USING_MOCK } from "@/lib/api";
 import { usesRemoteFolderStore } from "@/lib/folderStore";
 import type { FeedbackBackend, Project } from "@/lib/types";
 import Modal from "./Modal";
-import ImprovementList, { ListenButton, type Improvement, type OffTopic, type Strength } from "./ImprovementList";
-import { PitchPointsEditor, PitchPointsResult, pointsToSend, type MainPointsResult } from "./PitchPoints";
+import type { Improvement, OffTopic, Strength } from "./ImprovementList";
+import FeedbackResult from "./FeedbackResult";
+import { PitchPointsEditor, pointsToSend, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
-import TtsEngineSelect from "./TtsEngineSelect";
 import PoseCoach, { type CoachState } from "./PoseCoach";
 import type { Side } from "@/lib/poseCoach";
+
+// The backend's recommendation categories, as shown on a fix.
+const AREA_LABELS: Record<string, MessageKey> = {
+  structure: "areaStructure",
+  content: "areaContent",
+  delivery: "areaDelivery",
+  slides: "areaSlides",
+  accuracy: "areaAccuracy",
+  timing: "areaTiming",
+};
 
 type Live = { stream: MediaStream; ctx: AudioContext };
 
@@ -1093,10 +1103,24 @@ function FolderRoom({
       if (status.status !== "completed") throw new Error(status.error || (lang === "mn" ? "Backend шинжилгээ хийж чадсангүй." : "The backend could not analyze this recording."));
       const report = await api.report(attempt.id);
       const points = report.feedback.main_points?.points ?? [];
+      // The backend says when each problem happens (snapped to a sentence start); show that sentence
+      // as "you said", so the speaker sees and can hear their own words.
+      const sentences = report.transcript.sentences ?? [];
+      const sentenceAt = (t: number | null) =>
+        t == null ? "" : (sentences.find((s) => t >= s.start - 0.05 && t < s.end + 0.05)?.text ?? "");
       setProbeResult({
         summary: report.feedback.summary,
         strengths: report.feedback.strengths.map((text) => ({ text, quote: "" })),
-        improvements: report.feedback.recommendations.map((item) => ({ source: "model", title: item.area, why: item.why, action: item.action, example: item.example_sentence, quote: "" })),
+        improvements: report.feedback.recommendations.map((item) => ({
+          source: "model",
+          // `problem` says what's wrong; `area` is only its category, shown as a tag.
+          title: item.problem || tr(AREA_LABELS[item.area] ?? "areaContent"),
+          category: tr(AREA_LABELS[item.area] ?? "areaContent"),
+          why: item.why,
+          action: item.action,
+          example: item.example_sentence,
+          quote: sentenceAt(item.start_s),
+        })),
         offTopic: (report.feedback.main_points?.off_topic ?? []).map((item) => ({ sentenceId: item.sentence_id, text: item.text, reason: item.reason })),
         model: report.backend,
         mainPoints: report.feedback.main_points ? {
@@ -1518,22 +1542,19 @@ function FolderRoom({
                         </>
                       )}
                     </p>
-                    <h3 className={reading === "summary" ? "desk-reading" : undefined}>{probeResult.summary}</h3>
-                    {!probeResult.writing && (probeResult.summary || probeResult.improvements.length > 0) && (
-                      <div className="desk-listen-bar">
-                        <ListenButton label={tr("listenAll")} play={readResult} primary />
-                        <TtsEngineSelect />
-                      </div>
-                    )}
-                    <ImprovementList
+                    <FeedbackResult
+                      summary={probeResult.summary}
                       strengths={probeResult.strengths}
                       improvements={probeResult.improvements}
                       offTopic={probeResult.offTopic}
+                      mainPoints={probeResult.mainPoints}
+                      pointSlides={probeResult.pointSlides}
+                      writing={probeResult.writing}
                       speak={probeResult.writing ? undefined : speakText}
                       hearOwn={hearOwn}
+                      readAll={readResult}
                       reading={reading}
                     />
-                    {probeResult.mainPoints && <PitchPointsResult result={probeResult.mainPoints} slides={probeResult.pointSlides} />}
                   </div>
                 </Modal>,
                 document.body,

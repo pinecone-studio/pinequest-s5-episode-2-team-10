@@ -230,16 +230,32 @@ def _claude(data: dict) -> dict:
     return _parse_json(text)
 
 
+# Measured on a 23-slide Mongolian pitch: about 2.8 characters per token, and answers of up to
+# ~5,200 tokens. Estimate a little high so the answer always has room.
+_CHARS_PER_TOKEN = 2.5
+_ANSWER_TOKENS = 6144
+_MIN_CTX = 8192
+
+
+def num_ctx_for(prompt_chars: int, limit: int | None = None) -> int:
+    """Context window for a prompt of this many characters: room for the answer, rounded up to 2048."""
+    limit = limit or config.OLLAMA_NUM_CTX_MAX
+    need = int(prompt_chars / _CHARS_PER_TOKEN) + _ANSWER_TOKENS
+    rounded = -(-need // 2048) * 2048
+    return max(_MIN_CTX, min(rounded, limit))
+
+
 def _ollama(model: str, data: dict) -> dict:
+    user = _user_message(data)
     payload = {
         "model": model,
         "stream": False,
         "format": SCHEMA,
         "keep_alive": config.OLLAMA_KEEP_ALIVE,
-        "options": {"temperature": 0, "num_ctx": 8192},
+        "options": {"temperature": 0, "num_ctx": num_ctx_for(len(PROMPT) + len(user))},
         "messages": [
             {"role": "system", "content": PROMPT},
-            {"role": "user", "content": _user_message(data)},
+            {"role": "user", "content": user},
         ],
     }
     try:
@@ -251,7 +267,14 @@ def _ollama(model: str, data: dict) -> dict:
         raise FeedbackError(f"Ollama does not have the model '{model}'. Pull or create it first.")
     if r.status_code != 200:
         raise FeedbackError(f"Ollama error ({r.status_code}).")
-    return _parse_json(r.json().get("message", {}).get("content", ""))
+    body = r.json()
+    if body.get("done_reason") == "length":
+        # The prompt and answer didn't fit the context window, so the JSON was cut off.
+        raise FeedbackError(
+            "The feedback model ran out of room: the recording and slides are too long for it. "
+            "Try fewer slides or a shorter recording."
+        )
+    return _parse_json(body.get("message", {}).get("content", ""))
 
 
 def _parse_json(text: str) -> dict:
