@@ -12,6 +12,7 @@ import RingBackdrop from "./RingBackdrop";
 import SayloMark from "./SayloMark";
 import SidebarPitches from "./SidebarPitches";
 import AccountAvatar from "./AccountAvatar";
+import Modal from "./Modal";
 
 const PANEL_WIDTH = 260;
 const INTRO_KEY = "saylo:intro:";
@@ -48,6 +49,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [panelBox, setPanelBox] = useState<{ top: number; left: number; width: number } | null>(null);
   const [narrow, setNarrow] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const home = pathname === "/" || pathname === "/figma";
   const openFolder = useSearchParams().get("folder");
   const email = account?.email ?? "";
@@ -108,7 +110,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setAccountOpen(true);
   }
 
-  async function logout() {
+  function logout() {
+    setAccountOpen(false);
+    setLogoutConfirmOpen(true);
+  }
+
+  async function confirmLogout() {
     setBusy(true);
     try {
       await api.logout();
@@ -237,6 +244,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </>
+      )}
+      {logoutConfirmOpen && (
+        <Modal title={tr("logoutConfirmTitle")} onClose={() => { if (!busy) setLogoutConfirmOpen(false); }}>
+          <p className="folder-delete-text">{tr("logoutConfirmDescription")}</p>
+          <div className="app-modal-actions folder-delete-actions">
+            <button type="button" className="ui-btn" onClick={() => setLogoutConfirmOpen(false)} disabled={busy} autoFocus>
+              {tr("cancel")}
+            </button>
+            <button type="button" className="folder-delete-btn is-confirm" onClick={() => void confirmLogout()} disabled={busy}>
+              {busy ? tr("authWorking") : tr("logoutConfirmAction")}
+            </button>
+          </div>
+        </Modal>
       )}
       {showIntro && <IntroTour onClose={closeIntro} />}
     </div>

@@ -368,6 +368,9 @@ const mn = {
   authLegal:
     "Үргэлжлүүлснээр та үйлчилгээний нөхцөл, нууцлалын бодлогыг зөвшөөрч байна.",
   logOut: "Гарах",
+  logoutConfirmTitle: "Бүртгэлээс гарах уу?",
+  logoutConfirmDescription: "Та бүртгэлээс гарахад нэвтрэх дэлгэц рүү шилжинэ.",
+  logoutConfirmAction: "Гарах",
   currentAccount: "Одоогийн бүртгэл",
   profile: "Профайл",
   profileTitle: "Профайл",
@@ -862,6 +865,9 @@ const en: Record<MessageKey, string> = {
   authLegal:
     "By continuing you agree to our Terms of Service and Privacy Policy.",
   logOut: "Log out",
+  logoutConfirmTitle: "Log out of your account?",
+  logoutConfirmDescription: "You'll need to sign in again to access your account.",
+  logoutConfirmAction: "Log out",
   currentAccount: "Current account",
   profile: "Profile",
   profileTitle: "Profile",
