@@ -52,6 +52,8 @@ if (-not (Test-Path $envFile)) { throw "Missing .env.voice. Run scripts\voice.ps
 foreach ($line in Get-Content $envFile) {
     if ($line -match '^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$') { Set-Item -Path "env:$($Matches[1])" -Value $Matches[2].Trim() }
 }
+# This demo uses Ollama installed on this PC; do not inherit a remote/tailnet URL.
+$env:OLLAMA_URL = "http://127.0.0.1:11434"
 $python = Join-Path $env:VOICE_VENV "Scripts\python.exe"
 if (-not (Test-Path $python)) { throw "No Python env at $env:VOICE_VENV (VOICE_VENV in .env.voice)." }
 $backendPython = Join-Path $root ".venv\Scripts\python.exe"
