@@ -134,6 +134,9 @@ export default function Landing({ onStart }: { onStart: (mode: Mode) => void }) 
         <span>{tr("landingFooter")}</span>
         <span>© {new Date().getFullYear()} Saylo</span>
       </footer>
+      <span className="landing-version" aria-label={`Saylo version ${process.env.NEXT_PUBLIC_APP_VERSION ?? "V1.0"}`}>
+        {process.env.NEXT_PUBLIC_APP_VERSION ?? "V1.0"}
+      </span>
     </main>
   );
 }
