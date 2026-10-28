@@ -30,17 +30,19 @@ import {
   type FolderMeta,
 } from "@/lib/folderStore";
 import { figmaEmbedUrl } from "@/lib/figmaEmbed";
-import { openPdf, paintPage, pickSlides, readSlideText } from "@/lib/slidePdf";
-import { streamModelReply } from "@/lib/modelStream";
+import { openPdf, paintPage, pickSlides } from "@/lib/slidePdf";
 import { prepareSlide, SLIDE_ACCEPT, slideKind } from "@/lib/slideFiles";
 import { feedbackSteps, findQuote, loadTimings, playSpan, readAloud, saveTimings, speakText, type Clip } from "@/lib/coachVoice";
 import { PieceRecorder, transcribeBlob } from "@/lib/voiceRecorder";
-import { langHeaders, useLang } from "@/lib/i18nClient";
+import { useLang } from "@/lib/i18nClient";
 import type { MessageKey } from "@/lib/i18n";
 import { openPresentWindow, postPresent, postPresentState, subscribePresentAll, type PresentMode } from "@/lib/presentSync";
 import { useAccount } from "@/lib/session";
 import { useBillingLocked } from "@/lib/billingClient";
 import { notifySubscriptionRequired } from "@/lib/routeAccess";
+import { api, ApiRequestError, USING_MOCK } from "@/lib/api";
+import { usesRemoteFolderStore } from "@/lib/folderStore";
+import type { FeedbackBackend, Project } from "@/lib/types";
 import Modal from "./Modal";
 import ImprovementList, { ListenButton, type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, pointsToSend, type MainPointsResult } from "./PitchPoints";
@@ -428,11 +430,12 @@ function FolderRoom({
   onDelete: () => void;
 }) {
   const { tr, lang } = useLang();
+  const account = useAccount();
   // Trial or plan over: recording, new audio, and analysis open the renew dialog instead.
   const locked = useBillingLocked();
   /** The model's id ("ollama") as people know it ("Gemma"). */
   const modelLabel = (id: string) =>
-    ({ ollama: "Gemma", "ollama-think": tr("modelGemmaCareful"), claude: "Claude", rules: tr("rulesName") })[id] ?? id;
+    ({ ollama: "Gemma", "ollama-think": tr("modelGemmaCareful"), "gemma4-base": "Gemma", "gemma4-ft": "Gemma", claude: "Claude", rules: tr("rulesName") })[id] ?? id;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const recRef = useRef<PieceRecorder | null>(null);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
@@ -1026,73 +1029,84 @@ function FolderRoom({
 
   async function sendToModel() {
     if (locked) return notifySubscriptionRequired();
-    const speech = textRef.current.trim();
+    const saved = selectedAudio(folder);
+    if (!saved) {
+      setProbeNote(lang === "mn" ? "Эхлээд аудио бичлэгээ оруулна уу." : "Upload or record audio before analyzing.");
+      return;
+    }
+    if (!account) {
+      setProbeNote(lang === "mn" ? "Шинжилгээ хадгалахын тулд нэвтэрнэ үү." : "Sign in to save your analysis.");
+      return;
+    }
+    if (USING_MOCK) {
+      setProbeNote(lang === "mn" ? "Backend тохируулагдаагүй байна. Backend URL-ээ тохируулна уу." : "The backend is not configured. Set the backend URL and try again.");
+      return;
+    }
     setProbing(true);
     setProbeNote(null);
     setProbeResult(null);
     setResultOpen(false);
     resultShownRef.current = false;
-    const sent = pointsToSend(folder.keyPoints, folder.pointSlides);
     try {
-      const saved = selectedAudio(folder);
       const [audio, slide] = await Promise.all([
-        saved ? getFolderBlob(saved.storageKey) : Promise.resolve(null),
+        getFolderBlob(saved.storageKey),
         getFolderBlob(folder.slide?.storageKey ?? slideKey(folder.id)),
       ]);
-      const slideText = pdfRef.current ? await readSlideText(pdfRef.current, 8, shownPages) : "";
-      const slideImage = await new Promise<Blob | null>((resolve) => {
-        const canvas = canvasRef.current;
-        if (!canvas) {
-          resolve(null);
-          return;
+      if (!audio) throw new Error(lang === "mn" ? "Аудио файлыг уншиж чадсангүй. Дахин сонгоно уу." : "Could not read the audio file. Select it again.");
+
+      let project: Project;
+      if (usesRemoteFolderStore()) {
+        project = await api.getProject(folder.id);
+      } else {
+        const mapKey = `saylo:analysis-project:${account.id}:${folder.id}`;
+        const mappedId = localStorage.getItem(mapKey);
+        try {
+          project = mappedId ? await api.getProject(mappedId) : await api.createProject({ name: folder.name });
+        } catch (err) {
+          if (!mappedId || !(err instanceof ApiRequestError) || err.status !== 404) throw err;
+          project = await api.createProject({ name: folder.name });
         }
-        canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.72);
-      });
-      const body = new FormData();
-      body.set("text", speech);
-      body.set("slideText", slideText);
-      body.set("model", model);
-      body.set("idea", folder.idea ?? "");
-      body.set("keyPoints", JSON.stringify(sent.texts));
-      body.set("pointSlides", JSON.stringify(sent.slides));
-      // Names only: the route needs the text, and hosts like Vercel reject bodies over 4.5 MB.
-      if (audio) body.set("audioName", folder.audioName ?? "audio");
-      if (slide) body.set("slideName", folder.slideName ?? "slide");
-      if (slideImage) body.set("slideImage", slideImage, "current-slide.jpg");
-      // Streamed: the summary and list fill in while the model writes; the checked reply replaces them.
-      const payload = await streamModelReply(
-        body,
-        langHeaders(),
-        (partial) => {
-          showResultOnce(); // opens when the model starts writing
-          setProbeResult({
-            summary: partial.summary ?? "",
-            strengths: partial.strengths ?? [],
-            improvements: partial.improvements ?? [],
-            offTopic: [],
-            model,
-            mainPoints: null,
-            pointSlides: sent.slides,
-            received: null,
-            writing: true,
-          });
-        },
-        tr("sendFail"),
-      );
-      if (!payload.summary || !payload.improvements || !payload.received) {
-        setProbeResult(null);
-        setProbeNote(tr("sendFail"));
-        return;
+        localStorage.setItem(mapKey, project.id);
       }
+      project = await api.updateProject(project.id, {
+        name: folder.name,
+        idea: folder.idea ?? "",
+        key_points: folder.keyPoints ?? [],
+        point_slides: folder.pointSlides ?? [],
+        figma_url: folder.figmaUrl ?? null,
+      });
+      const attempt = await api.createAttempt(project.id, false);
+      if (slide && folder.slide) {
+        await api.uploadSlides(attempt.id, new File([slide], folder.slide.filename, { type: slide.type || folder.slide.fileType }));
+      }
+      await api.uploadAudio(attempt.id, audio, saved.filename);
+      const backend: FeedbackBackend = model === "claude" ? "claude" : model === "rules" ? "rules" : "gemma4-base";
+      await api.analyze(attempt.id, backend);
+      showResultOnce();
+      const deadline = Date.now() + 10 * 60_000;
+      let status = await api.status(attempt.id);
+      while (status.status === "processing" || status.status === "created" || status.status === "uploaded") {
+        if (Date.now() > deadline) throw new Error(lang === "mn" ? "Шинжилгээ удаж байна. Дараа нь үр дүнгээ дахин нээнэ үү." : "Analysis is taking longer than expected. Check the result again shortly.");
+        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        status = await api.status(attempt.id);
+      }
+      if (status.status !== "completed") throw new Error(status.error || (lang === "mn" ? "Backend шинжилгээ хийж чадсангүй." : "The backend could not analyze this recording."));
+      const report = await api.report(attempt.id);
+      const points = report.feedback.main_points?.points ?? [];
       setProbeResult({
-        summary: payload.summary,
-        strengths: payload.strengths ?? [],
-        improvements: payload.improvements,
-        offTopic: payload.offTopic ?? [],
-        model: payload.model ?? model,
-        mainPoints: (payload.mainPoints as MainPointsResult | null) ?? null,
-        pointSlides: sent.slides,
-        received: payload.received,
+        summary: report.feedback.summary,
+        strengths: report.feedback.strengths.map((text) => ({ text, quote: "" })),
+        improvements: report.feedback.recommendations.map((item) => ({ source: "model", title: item.area, why: item.why, action: item.action, example: item.example_sentence, quote: "" })),
+        offTopic: (report.feedback.main_points?.off_topic ?? []).map((item) => ({ sentenceId: item.sentence_id, text: item.text, reason: item.reason })),
+        model: report.backend,
+        mainPoints: report.feedback.main_points ? {
+          method: report.feedback.main_points.method,
+          points: points.map(({ point, text, status, verified, evidence, note }) => ({ point, text, status, verified, evidence, note })),
+          coverage: report.feedback.main_points.coverage,
+          ideaComment: report.feedback.main_points.idea_comment,
+        } : null,
+        pointSlides: pointsToSend(folder.keyPoints, folder.pointSlides).slides,
+        received: { text: !!report.transcript.text, audio: saved.filename, slide: slide && folder.slide ? folder.slide.filename : null },
         writing: false,
       });
       showResultOnce();
@@ -1473,7 +1487,7 @@ function FolderRoom({
               <button
                 type="button"
                 className="room-analyze-btn"
-                disabled={probing || !spoken}
+                disabled={probing || !folder.audioName}
                 onClick={() => void sendToModel()}
               >
                 {locked ? <LockGlyph /> : <SparkGlyph />}
