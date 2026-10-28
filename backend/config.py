@@ -25,6 +25,33 @@ ADMIN_EMAILS = {
     if email.strip()
 }
 
+
+def _flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    return default if not value else value in {"1", "true", "yes", "on"}
+
+
+def _int(name: str, default: int) -> int:
+    try:
+        return int(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+
+
+# Subscription: a free trial, then paid periods bought through QPay. While BILLING_ENFORCED is off
+# (the default) nobody is blocked, so local development and tests keep working.
+BILLING_ENFORCED = _flag("PITCH_BILLING_ENFORCED")
+TRIAL_DAYS = max(0, _int("PITCH_TRIAL_DAYS", 7))
+SUBSCRIPTION_DAYS = max(1, _int("PITCH_SUBSCRIPTION_DAYS", 30))
+# Price of one period in tögrög; 0 (unset) turns payments off.
+SUBSCRIPTION_PRICE_MNT = max(0, _int("PITCH_SUBSCRIPTION_PRICE_MNT", 0))
+QPAY_BASE_URL = os.environ.get("QPAY_BASE_URL", "https://merchant-sandbox.qpay.mn").strip().rstrip("/")
+QPAY_CLIENT_ID = os.environ.get("QPAY_CLIENT_ID", "").strip()
+QPAY_CLIENT_SECRET = os.environ.get("QPAY_CLIENT_SECRET", "").strip()
+QPAY_INVOICE_CODE = os.environ.get("QPAY_INVOICE_CODE", "").strip()
+# Public address of this API, for QPay's payment callback (e.g. https://api.example.com).
+PUBLIC_API_URL = os.environ.get("PITCH_PUBLIC_API_URL", "").strip().rstrip("/")
+
 # Upload limits (TDD API table)
 AUDIO_MAX_BYTES = 25 * 1024 * 1024
 AUDIO_MAX_S = 5 * 60

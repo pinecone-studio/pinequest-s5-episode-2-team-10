@@ -39,6 +39,8 @@ import { langHeaders, useLang } from "@/lib/i18nClient";
 import type { MessageKey } from "@/lib/i18n";
 import { openPresentWindow, postPresent, postPresentState, subscribePresentAll, type PresentMode } from "@/lib/presentSync";
 import { useAccount } from "@/lib/session";
+import { useBillingLocked } from "@/lib/billingClient";
+import { notifySubscriptionRequired } from "@/lib/routeAccess";
 import Modal from "./Modal";
 import ImprovementList, { ListenButton, type Improvement, type OffTopic, type Strength } from "./ImprovementList";
 import { PitchPointsEditor, PitchPointsResult, pointsToSend, type MainPointsResult } from "./PitchPoints";
@@ -131,6 +133,12 @@ export default function FolderDesk() {
     router.push(id ? `${pathname}?folder=${encodeURIComponent(id)}` : pathname);
   }
   const [naming, setNaming] = useState(false);
+  // Trial or plan over: existing pitches stay readable, new ones open the renew dialog instead.
+  const locked = useBillingLocked();
+  function startNewPitch() {
+    if (locked) notifySubscriptionRequired();
+    else setNaming(true);
+  }
   // The pitch whose delete confirmation is open, from the × on its card.
   const [deleting, setDeleting] = useState<FolderMeta | null>(null);
   const [draft, setDraft] = useState("");
@@ -341,18 +349,16 @@ export default function FolderDesk() {
               <span className="folder-ring" aria-hidden />
               <h2>{tr("foldersNone")}</h2>
               <p>{tr("foldersEmpty")}</p>
-              <button type="button" className="desk-primary" onClick={() => setNaming(true)}>
-                <PlusGlyph />
+              <button type="button" className="desk-primary" onClick={startNewPitch}>
+                {locked ? <LockGlyph /> : <PlusGlyph />}
                 {tr("addFolder")}
               </button>
             </div>
           ) : (
             <ul className="folder-grid">
               <li>
-                <button type="button" className="folder-card folder-card-add" onClick={() => setNaming(true)}>
-                  <span className="folder-card-add-icon">
-                    <PlusGlyph size={18} />
-                  </span>
+                <button type="button" className="folder-card folder-card-add" onClick={startNewPitch}>
+                  <span className="folder-card-add-icon">{locked ? <LockGlyph size={18} /> : <PlusGlyph size={18} />}</span>
                   {tr("addFolder")}
                 </button>
               </li>
@@ -422,6 +428,8 @@ function FolderRoom({
   onDelete: () => void;
 }) {
   const { tr, lang } = useLang();
+  // Trial or plan over: recording, new audio, and analysis open the renew dialog instead.
+  const locked = useBillingLocked();
   /** The model's id ("ollama") as people know it ("Gemma"). */
   const modelLabel = (id: string) =>
     ({ ollama: "Gemma", "ollama-think": tr("modelGemmaCareful"), claude: "Claude", rules: tr("rulesName") })[id] ?? id;
@@ -936,6 +944,7 @@ function FolderRoom({
 
   async function chooseAudio(file: File | undefined) {
     if (!file) return;
+    if (locked) return notifySubscriptionRequired();
     await storeAudio(file, file.name, file.type);
   }
 
@@ -952,6 +961,7 @@ function FolderRoom({
 
   function toggleSpeak() {
     if (playingRef.current) stopStt();
+    else if (locked) notifySubscriptionRequired();
     else void beginStt();
   }
 
@@ -1006,6 +1016,7 @@ function FolderRoom({
   }
 
   async function sendToModel() {
+    if (locked) return notifySubscriptionRequired();
     const speech = textRef.current.trim();
     setProbing(true);
     setProbeNote(null);
@@ -1118,7 +1129,7 @@ function FolderRoom({
   function speakButton() {
     return (
       <button type="button" className={listening ? "room-speak-btn is-recording" : "room-speak-btn"} onClick={toggleSpeak}>
-        {listening ? <span className="desk-rec" aria-hidden /> : <MicGlyph />}
+        {listening ? <span className="desk-rec" aria-hidden /> : locked ? <LockGlyph /> : <MicGlyph />}
         {listening ? tr("stop") : tr("speak")}
       </button>
     );
@@ -1456,7 +1467,7 @@ function FolderRoom({
                 disabled={probing || !spoken}
                 onClick={() => void sendToModel()}
               >
-                <SparkGlyph />
+                {locked ? <LockGlyph /> : <SparkGlyph />}
                 {probing ? tr("sending") : tr("sendToModel")}
               </button>
               {probeNote && <p className="desk-note">{probeNote}</p>}
@@ -1520,8 +1531,15 @@ function FolderRoom({
             <section className="folder-audios room-card" aria-labelledby={`${folder.id}-audios`}>
               <div className="folder-audios-bar">
                 <h2 id={`${folder.id}-audios`}>{tr("audio")}</h2>
-                <label className="room-glass-btn">
-                  <PlusGlyph />
+                <label
+                  className="room-glass-btn"
+                  onClick={(event) => {
+                    if (!locked) return;
+                    event.preventDefault();
+                    notifySubscriptionRequired();
+                  }}
+                >
+                  {locked ? <LockGlyph /> : <PlusGlyph />}
                   {tr("addAudio")}
                   <input
                     type="file"
@@ -1828,6 +1846,15 @@ function SparkGlyph() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
       <path d="M8 1.5 9.4 6.6 14.5 8l-5.1 1.4L8 14.5 6.6 9.4 1.5 8l5.1-1.4L8 1.5Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function LockGlyph({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden>
+      <rect x="2.75" y="6.25" width="8.5" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M4.75 6.25V4.5a2.25 2.25 0 0 1 4.5 0v1.75" fill="none" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }

@@ -3,7 +3,8 @@
 
 import type { WordTime } from "./coachVoice";
 import { t } from "./i18n";
-import { currentLang, langHeaders } from "./i18nClient";
+import { currentLang } from "./i18nClient";
+import { checkSubscription, routeHeaders } from "./routeAccess";
 
 export interface TranscribeReply {
   text: string;
@@ -36,10 +37,11 @@ export async function transcribeBlob(blob: Blob, name: string): Promise<Transcri
   form.set("file", blob, name);
   let res: Response;
   try {
-    res = await fetch("/api/transcribe", { method: "POST", body: form, headers: langHeaders() });
+    res = await fetch("/api/transcribe", { method: "POST", body: form, headers: routeHeaders() });
   } catch {
     throw new Error(t(currentLang(), "serverUnreachable"));
   }
+  checkSubscription(res);
   const body = (await res.json().catch(() => null)) as {
     text?: unknown;
     words?: unknown;

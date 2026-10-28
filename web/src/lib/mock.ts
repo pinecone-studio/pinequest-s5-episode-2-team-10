@@ -7,6 +7,9 @@ import type {
   AdminUser,
   AccountProfile,
   AuthSession,
+  BillingPayment,
+  BillingPaymentCheck,
+  BillingStatus,
   FeedbackBackend,
   Project,
   ProjectDetails,
@@ -356,6 +359,37 @@ export const mockApi = {
 
   async adminUsers(): Promise<AdminUser[]> {
     throw { code: "admin_required", message: "Admin controls need the live backend." };
+  },
+
+  /** Demo mode has no payments: every account stays in a trial that never blocks anything. */
+  async billingStatus(): Promise<BillingStatus> {
+    await wait(50);
+    currentMockUser();
+    const ends = new Date(Date.now() + 7 * 86400_000).toISOString();
+    return {
+      state: "trial",
+      allowed: true,
+      trial_ends_at: ends,
+      paid_until: null,
+      ends_at: ends,
+      days_left: 7,
+      price_mnt: 0,
+      period_days: 30,
+      enforced: false,
+      payments_enabled: false,
+    };
+  },
+
+  async createInvoice(): Promise<BillingPayment> {
+    throw { code: "payments_disabled", message: "Payments need the live backend." };
+  },
+
+  async billingPayments(): Promise<BillingPayment[]> {
+    return [];
+  },
+
+  async billingPayment(): Promise<BillingPaymentCheck> {
+    throw { code: "not_found", message: "Payment not found." };
   },
 
   async updateAdminUser(): Promise<AdminUser> {

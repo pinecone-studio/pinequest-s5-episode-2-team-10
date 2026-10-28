@@ -29,14 +29,30 @@ Implemented by the FastAPI server in `backend/main.py`. All paths are under `/ap
 | `PUT /auth/me/avatar` | Upload a JPG, PNG, or WebP profile image (max 5 MB); the server validates and resizes it | `204`; `401 unauthorized`; `403 shared_account_readonly`; `413 avatar_too_large`; `415 invalid_avatar`; `503 storage_unavailable` |
 | `GET /auth/me/avatar` | Read the signed-in user's private profile image; the shared demo account receives the built-in demo avatar | WebP image; `204` (empty) when no photo has been uploaded; `404 avatar_not_found` when a saved photo is missing; `503 storage_unavailable` |
 | `POST /auth/logout` | Forget the current token | `204` |
-| `GET /admin/users` | List accounts (admin only) | `[{id, email, role, is_active, created_at}]`; `403 admin_required` |
-| `PATCH /admin/users/{user_id}` | Set `{role?: "member" \| "admin", is_active?: boolean}` (admin only). Disabling an account revokes its app tokens; it must sign in again after reactivation. An admin cannot change their own account, remove a configured admin, or deactivate/demote the last active admin | updated user; `404` unknown account; `409` protected admin update; `403 admin_required` |
+| `GET /admin/users` | List accounts (admin only) | `[{id, email, role, is_active, created_at, trial_ends_at, paid_until}]`; `403 admin_required` |
+| `PATCH /admin/users/{user_id}` | Set `{role?: "member" \| "admin", is_active?: boolean, grant_days?: 1–365}` (admin only). `grant_days` adds paid days the same way a payment does (for example after a bank transfer). Disabling an account revokes its app tokens; it must sign in again after reactivation. An admin cannot change their own account, remove a configured admin, or deactivate/demote the last active admin | updated user; `404` unknown account; `409` protected admin update; `403 admin_required` |
 | `GET /projects` | A member's own projects, or all projects for admins, most recently used first | `[{id, name, goal, audience, idea, key_points, planned_s, pitch_type, created_at, updated_at, attempt_count, latest_overall, processing}]`; admin results also include `owner_id, owner_email` |
 | `POST /projects` | Create a project; every field optional (`name, goal, audience, idea`, `key_points`, `point_slides`, `figma_url`, `script`, `planned_s`, `pitch_type`) | `201` project with `attempts` and `current` |
 | `GET /projects/{id}` | Project, all `attempts` (newest first, including saved uploads not yet analyzed), and `current` = latest session inputs | project; admin responses also include `owner_id, owner_email` |
 | `PATCH /projects/{id}` | Update project details, saved script, and selected audio take | project |
 | `DELETE /projects/{id}` | Delete the project, attempts, and files | `204`; `409` while an attempt is running; `503` storage unavailable |
 | `POST /projects/{id}/sessions` | New attempt; copies slides and script from the latest attempt unless `{"copy_inputs": false}` | `201` attempt; `503` storage unavailable |
+
+## Subscription (free trial, then QPay)
+
+A new account gets a free trial (`PITCH_TRIAL_DAYS`, 7). After that, each QPay payment adds one period (`PITCH_SUBSCRIPTION_DAYS`, 30) after whichever is later: now, the trial's end, or the paid period's end. Admins and the shared demo account are never charged.
+
+When the trial and paid period are over **and** `PITCH_BILLING_ENFORCED=true`, these return `402 subscription_required`: `POST /projects`, `POST /projects/{id}/sessions`, `POST /sessions/{id}/audio`, `POST /sessions/{id}/slides`, `PUT /sessions/{id}/script`, `POST /sessions/{id}/analyze`. Reading, renaming (`PATCH /projects/{id}`), and deleting stay open. The web app's AI routes (`/api/prototype`, `/api/transcribe`, `/api/tts`, `/api/slides/convert`) check the same state through `GET /billing/status` and answer `402` too.
+
+| Method and path | Does | Response |
+| --- | --- | --- |
+| `GET /billing/status` | The signed-in account's state: `admin`, `trial`, `active`, or `expired` | `{state, allowed, trial_ends_at, paid_until, ends_at, days_left, price_mnt, period_days, enforced, payments_enabled}` |
+| `POST /billing/invoice` | Creates a QPay invoice for one period. A pending invoice younger than 10 minutes is returned again instead of a new one | `201 {id, status, amount_mnt, period_days, created_at, paid_at, expires_at, qr_image, qr_text, short_url, bank_links: [{name, logo, link}]}`; `409 billing_not_needed` for admin/demo; `502 payment_unavailable`; `503 payments_disabled` when the price or QPay credentials are unset |
+| `GET /billing/payments` | The account's last 20 payments, newest first | `[payment]` |
+| `GET /billing/payments/{id}` | Asks QPay whether this invoice is paid; if so, marks it paid and extends access exactly once. The browser polls this every 3 s while the QR code is open. A QPay outage leaves it pending rather than failing | `{payment, billing}`; `404` another user's payment |
+| `GET` or `POST /billing/qpay/callback?payment_id=` | QPay's notification after a payment. No token; nothing in the request is trusted: the server asks QPay directly before granting anything. An invoice older than 10 minutes that is paid late is still credited here | `200 {ok: true}` always |
+
+A payment is credited only when QPay reports `PAID` for at least the invoice amount. Moving the row from `pending` to `paid` is a conditional update, so the callback and a poll arriving together extend access once.
 
 ## Attempt inputs and uploads
 

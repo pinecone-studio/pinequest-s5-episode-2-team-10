@@ -6,20 +6,22 @@ import logging
 import mimetypes
 import re
 import secrets
+import threading
 import shutil
 import unicodedata
 import warnings
 from contextlib import asynccontextmanager
-from datetime import timezone
+from datetime import timedelta, timezone
 from pathlib import Path
 from typing import Annotated, Literal, Optional
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, FastAPI, Header, Query, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy import update as sql_update
 from sqlmodel import Session, func, select
 
 from pipeline import audio as audio_tools
@@ -28,8 +30,8 @@ from pipeline import slides as slide_tools
 from pipeline.feedback import BACKENDS
 from pipeline.points import clean_points
 
-from . import config, db, errors, storage
-from .db import AccessToken, AnalysisReport, AppUser, AudioAsset, PitchSession, Project, Slide, Transcript, utcnow
+from . import billing, config, db, errors, qpay, storage
+from .db import AccessToken, AnalysisReport, AppUser, AudioAsset, Payment, PitchSession, Project, Slide, Transcript, utcnow
 from .errors import ApiError, not_found
 from .passwords import hash_password, verify_password
 from . import supabase_auth
@@ -115,6 +117,15 @@ def admin_user(user: User) -> AppUser:
 
 
 AdminUser = Annotated[AppUser, Depends(admin_user)]
+
+
+def paid_user(user: User) -> AppUser:
+    """Signed in and within the trial or a paid period (always true while billing isn't enforced)."""
+    billing.check_access(user, utcnow())
+    return user
+
+
+Paid = Annotated[AppUser, Depends(paid_user)]
 
 
 def owned_project(project_id: str, user: User, database: DB) -> Project:
@@ -338,6 +349,8 @@ class AdminUserUpdate(BaseModel):
 
     role: Optional[Literal["member", "admin"]] = None
     is_active: Optional[bool] = None
+    # Adds paid days by hand, e.g. after a bank transfer outside QPay.
+    grant_days: Optional[int] = Field(default=None, ge=1, le=365)
 
     @model_validator(mode="after")
     def require_update(self):
@@ -345,8 +358,9 @@ class AdminUserUpdate(BaseModel):
             not self.model_fields_set
             or ("role" in self.model_fields_set and self.role is None)
             or ("is_active" in self.model_fields_set and self.is_active is None)
+            or ("grant_days" in self.model_fields_set and self.grant_days is None)
         ):
-            raise ValueError("Provide a role or is_active value.")
+            raise ValueError("Provide a role, is_active, or grant_days value.")
         return self
 
 
@@ -370,6 +384,8 @@ class AdminUserView(BaseModel):
     role: Literal["member", "admin"]
     is_active: bool
     created_at: str
+    trial_ends_at: Optional[str] = None
+    paid_until: Optional[str] = None
 
 
 # ---- Users and projects ----------------------------------------------------
@@ -685,6 +701,167 @@ def logout(
     return Response(status_code=204)
 
 
+# ---- Subscription (QPay) ---------------------------------------------------
+
+# A pending invoice younger than this is shown again instead of creating a new one. Older pending
+# invoices stay pending, so a late payment is still credited when QPay's callback arrives.
+INVOICE_REUSE = timedelta(minutes=10)
+# One invoice at a time per account, so a double click (or React running an effect twice) reuses
+# the first invoice instead of creating two.
+_invoice_locks: dict[str, threading.Lock] = {}
+_invoice_locks_guard = threading.Lock()
+
+
+def _invoice_lock(user_id: str) -> threading.Lock:
+    with _invoice_locks_guard:
+        return _invoice_locks.setdefault(user_id, threading.Lock())
+
+
+def _payment_view(payment: Payment) -> dict:
+    data = payment.invoice_data or {}
+    created = billing.aware(payment.created_at)
+    return {
+        "id": payment.id,
+        "status": payment.status,
+        "amount_mnt": payment.amount_mnt,
+        "period_days": payment.period_days,
+        "created_at": _iso(payment.created_at),
+        "paid_at": _iso(payment.paid_at) if payment.paid_at else None,
+        "expires_at": (created + INVOICE_REUSE).isoformat() if created else None,
+        "qr_image": data.get("qr_image"),
+        "qr_text": data.get("qr_text"),
+        "short_url": data.get("short_url"),
+        "bank_links": data.get("bank_links") or [],
+    }
+
+
+def _settle(database: Session, payment: Payment) -> Payment:
+    """Asks QPay whether the invoice is paid and, if so, grants the period exactly once."""
+    if payment.status != "pending" or not payment.invoice_id:
+        return payment
+    result = qpay.check_payment(payment.invoice_id)
+    if not result.paid:
+        return payment
+    if result.paid_amount < payment.amount_mnt:
+        log.warning("Payment %s underpaid: %d of %d", payment.id, result.paid_amount, payment.amount_mnt)
+        return payment
+    now = utcnow()
+    # Only the request that moves the row out of "pending" extends the subscription, even when the
+    # callback and the browser's poll arrive together.
+    moved = database.execute(
+        sql_update(Payment)
+        .where(Payment.id == payment.id, Payment.status == "pending")
+        .values(status="paid", paid_at=now, provider_payment_id=result.payment_id)
+    )
+    if moved.rowcount != 1:
+        database.rollback()
+        database.refresh(payment)
+        return payment
+    user = database.get(AppUser, payment.user_id)
+    if user:
+        billing.extend(user, now, payment.period_days)
+        database.add(user)
+    database.commit()
+    database.refresh(payment)
+    log.info("Payment %s paid; subscription extended for user %s", payment.id, payment.user_id)
+    return payment
+
+
+@api.get("/billing/status")
+def billing_status(user: User):
+    return billing.status(user, utcnow())
+
+
+@api.post("/billing/invoice", status_code=201)
+def create_billing_invoice(request: Request, user: User, database: DB):
+    if billing.exempt(user):
+        raise ApiError(409, "billing_not_needed", "This account already has full access.")
+    if not billing.payments_enabled():
+        raise ApiError(503, "payments_disabled", "Payments aren't set up yet. Try again later.")
+    with _invoice_lock(user.id):
+        return _reuse_or_create_invoice(request, user, database)
+
+
+def _reuse_or_create_invoice(request: Request, user: AppUser, database: Session) -> dict:
+    # Start a fresh transaction so an invoice another request just committed is visible.
+    database.commit()
+    latest = database.exec(
+        select(Payment)
+        .where(Payment.user_id == user.id, Payment.status == "pending")
+        .order_by(Payment.created_at.desc())  # type: ignore[union-attr]
+    ).first()
+    created = billing.aware(latest.created_at) if latest else None
+    if (
+        latest
+        and created
+        and utcnow() - created < INVOICE_REUSE
+        and latest.amount_mnt == config.SUBSCRIPTION_PRICE_MNT
+        and latest.invoice_data
+    ):
+        return _payment_view(latest)
+
+    payment = Payment(
+        user_id=user.id,
+        sender_invoice_no=f"SAYLO-{secrets.token_hex(8).upper()}",
+        amount_mnt=config.SUBSCRIPTION_PRICE_MNT,
+        period_days=config.SUBSCRIPTION_DAYS,
+    )
+    base = config.PUBLIC_API_URL or str(request.base_url).rstrip("/")
+    invoice = qpay.create_invoice(
+        payment.sender_invoice_no,
+        payment.amount_mnt,
+        f"Saylo: {payment.period_days} days",
+        user.id,
+        f"{base}/api/v1/billing/qpay/callback?payment_id={quote(payment.id)}",
+    )
+    payment.invoice_id = invoice.invoice_id
+    payment.invoice_data = {
+        "qr_image": invoice.qr_image,
+        "qr_text": invoice.qr_text,
+        "short_url": invoice.short_url,
+        "bank_links": invoice.bank_links,
+    }
+    database.add(payment)
+    database.commit()
+    database.refresh(payment)
+    return _payment_view(payment)
+
+
+@api.get("/billing/payments")
+def list_billing_payments(user: User, database: DB):
+    payments = database.exec(
+        select(Payment).where(Payment.user_id == user.id).order_by(Payment.created_at.desc()).limit(20)  # type: ignore[union-attr]
+    ).all()
+    return [_payment_view(p) for p in payments]
+
+
+@api.get("/billing/payments/{payment_id}")
+def get_billing_payment(payment_id: str, user: User, database: DB):
+    payment = database.get(Payment, payment_id)
+    if not payment or payment.user_id != user.id:
+        raise not_found("Payment")
+    if payment.status == "pending" and billing.payments_enabled():
+        try:
+            payment = _settle(database, payment)
+        except ApiError as exc:
+            # The browser polls; a QPay hiccup shouldn't show as an error, the next poll retries.
+            log.warning("Payment %s check failed: %s", payment.id, exc.code)
+    database.refresh(user)
+    return {"payment": _payment_view(payment), "billing": billing.status(user, utcnow())}
+
+
+@api.api_route("/billing/qpay/callback", methods=["GET", "POST"])
+def qpay_callback(database: DB, payment_id: Optional[str] = Query(default=None, max_length=64)):
+    """QPay calls this after a payment. Nothing in the request is trusted: QPay is asked directly."""
+    payment = database.get(Payment, payment_id) if payment_id else None
+    if payment and payment.status == "pending" and billing.payments_enabled():
+        try:
+            _settle(database, payment)
+        except ApiError as exc:
+            log.warning("QPay callback for payment %s could not be checked: %s", payment.id, exc.code)
+    return {"ok": True}
+
+
 def _admin_user_view(user: AppUser) -> dict:
     return {
         "id": user.id,
@@ -692,6 +869,8 @@ def _admin_user_view(user: AppUser) -> dict:
         "role": user.role,
         "is_active": user.is_active,
         "created_at": _iso(user.created_at),
+        "trial_ends_at": _iso(user.trial_ends_at) if user.trial_ends_at else None,
+        "paid_until": _iso(user.paid_until) if user.paid_until else None,
     }
 
 
@@ -726,6 +905,9 @@ def update_user_role(user_id: str, body: AdminUserUpdate, admin: AdminUser, data
     was_active = target.is_active
     target.role = next_role
     target.is_active = next_active
+    if changes.get("grant_days"):
+        billing.extend(target, utcnow(), changes["grant_days"])
+        log.info("Admin %s granted %d days to user %s", admin.id, changes["grant_days"], target.id)
     if was_active and not target.is_active:
         target.token_hash = _hash(secrets.token_urlsafe(32))
         for token in database.exec(select(AccessToken).where(AccessToken.user_id == target.id)).all():
@@ -746,7 +928,7 @@ def list_projects(user: User, database: DB):
 
 
 @api.post("/projects", status_code=201)
-def create_project(body: ProjectBody, user: User, database: DB):
+def create_project(body: ProjectBody, user: Paid, database: DB):
     p = Project(user_id=user.id, **body.model_dump())
     p.name = p.name.strip() or "Untitled project"
     database.add(p)
@@ -797,7 +979,7 @@ def delete_project(p: OwnedProject, database: DB):
 
 
 @api.post("/projects/{project_id}/sessions", status_code=201)
-def create_attempt(p: OwnedProject, database: DB, body: Optional[NewAttempt] = None):
+def create_attempt(_: Paid, p: OwnedProject, database: DB, body: Optional[NewAttempt] = None):
     s = PitchSession(
         project_id=p.id, title=p.name, goal=p.goal, audience=p.audience,
         idea=p.idea, key_points=list(p.key_points or []),
@@ -848,7 +1030,7 @@ def create_attempt(p: OwnedProject, database: DB, body: Optional[NewAttempt] = N
 
 
 @api.post("/sessions/{session_id}/audio")
-def upload_audio(s: Owned, database: DB, file: UploadFile):
+def upload_audio(_: Paid, s: Owned, database: DB, file: UploadFile):
     _not_running(s)
     suffix = _suffix(file, config.AUDIO_FORMATS, "Audio must be WAV, MP3, M4A, WebM or OGG.")
     s.audio_filename = Path(file.filename or f"audio{suffix}").name
@@ -954,7 +1136,7 @@ def delete_audio(s: Owned, database: DB):
 
 
 @api.post("/sessions/{session_id}/slides")
-def upload_slides(s: Owned, database: DB, file: UploadFile):
+def upload_slides(_: Paid, s: Owned, database: DB, file: UploadFile):
     _not_running(s)
     suffix = _suffix(file, config.SLIDES_FORMATS, "Slides must be a PDF or PPTX file.")
     folder = db.session_dir(s.id)
@@ -1030,7 +1212,7 @@ def remove_slides(s: Owned, database: DB):
 
 
 @api.put("/sessions/{session_id}/script")
-def set_script(body: ScriptBody, s: Owned, database: DB):
+def set_script(_: Paid, body: ScriptBody, s: Owned, database: DB):
     _not_running(s)
     s.script = body.text.strip()
     database.add(s)
@@ -1105,7 +1287,7 @@ def get_script(s: Owned):
 
 
 @api.post("/sessions/{session_id}/analyze", status_code=202)
-def analyze(s: Owned, database: DB, body: Optional[AnalyzeBody] = None):
+def analyze(_: Paid, s: Owned, database: DB, body: Optional[AnalyzeBody] = None):
     _not_running(s)
     if not database.get(AudioAsset, s.id):
         raise ApiError(409, "no_audio", "Upload or record audio first.")

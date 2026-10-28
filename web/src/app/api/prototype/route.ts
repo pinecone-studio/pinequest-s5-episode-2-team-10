@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { langOf, t } from "@/lib/i18n";
+import { denyWithoutAccess } from "@/lib/server/entitlement";
 import {
   askClaude,
   askOllama,
@@ -88,6 +89,8 @@ function pointSlidesOf(value: FormDataEntryValue | null, count: number): (number
 
 export async function POST(request: Request) {
   const lang = langOf(request);
+  const denied = await denyWithoutAccess(request, lang);
+  if (denied) return denied;
   let form: FormData;
   try {
     form = await request.formData();

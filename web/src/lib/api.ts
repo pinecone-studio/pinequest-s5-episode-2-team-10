@@ -5,6 +5,9 @@ import type {
   Attempt,
   AudioUploadResult,
   AuthSession,
+  BillingPayment,
+  BillingPaymentCheck,
+  BillingStatus,
   FeedbackBackend,
   Project,
   ProjectDetails,
@@ -14,7 +17,10 @@ import type {
   SlidesUploadResult,
   StatusResponse,
 } from "./types";
+import { t } from "./i18n";
+import { currentLang } from "./i18nClient";
 import { mockApi } from "./mock";
+import { notifySubscriptionRequired } from "./routeAccess";
 import { clearSession, readToken } from "./session";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
@@ -75,6 +81,10 @@ async function request<T>(path: string, init: RequestInit = {}, as: "json" | "bl
     return await send<T>(path, init, requireToken(), as);
   } catch (e) {
     if (e instanceof ApiRequestError && e.status === 401) clearSession();
+    if (e instanceof ApiRequestError && e.status === 402) {
+      notifySubscriptionRequired();
+      throw new ApiRequestError({ code: e.code, message: t(currentLang(), "subscriptionRequired") }, 402);
+    }
     throw e;
   }
 }
@@ -127,8 +137,14 @@ const realApi = {
   uploadProfileAvatar,
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   adminUsers: () => request<AdminUser[]>("/admin/users"),
-  updateAdminUser: (id: string, changes: { role?: "member" | "admin"; is_active?: boolean }) =>
+  updateAdminUser: (id: string, changes: { role?: "member" | "admin"; is_active?: boolean; grant_days?: number }) =>
     request<AdminUser>(`/admin/users/${encodeURIComponent(id)}`, json("PATCH", changes)),
+
+  billingStatus: () => request<BillingStatus>("/billing/status"),
+  createInvoice: () => request<BillingPayment>("/billing/invoice", { method: "POST" }),
+  billingPayments: () => request<BillingPayment[]>("/billing/payments"),
+  /** Asks the server to check with QPay; poll this while the QR code is open. */
+  billingPayment: (id: string) => request<BillingPaymentCheck>(`/billing/payments/${encodeURIComponent(id)}`),
 
   listProjects: () => request<ProjectSummary[]>("/projects"),
   createProject: (details: Partial<ProjectDetails> = {}) => request<Project>("/projects", json("POST", details)),

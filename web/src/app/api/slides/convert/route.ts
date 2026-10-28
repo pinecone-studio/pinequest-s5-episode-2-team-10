@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { langOf, t, type MessageKey } from "@/lib/i18n";
+import { denyWithoutAccess } from "@/lib/server/entitlement";
 import { convertDeckToPdf, deckKind, MAX_DECK_BYTES, SlideError } from "@/lib/server/slides";
 
 const MESSAGES: Record<SlideError["code"], MessageKey> = {
@@ -13,6 +14,8 @@ const MESSAGES: Record<SlideError["code"], MessageKey> = {
 export async function POST(request: Request) {
   const lang = langOf(request);
   const fail = (err: SlideError) => NextResponse.json({ error: t(lang, MESSAGES[err.code]) }, { status: err.status });
+  const denied = await denyWithoutAccess(request, lang);
+  if (denied) return denied;
 
   let form: FormData;
   try {

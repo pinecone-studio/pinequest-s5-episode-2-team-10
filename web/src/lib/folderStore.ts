@@ -1,7 +1,7 @@
 import { SHARED_BLOBS, SHARED_FOLDER, SHARED_SPEECH } from "./defaultFolder";
 import { DEMO_BLOBS, DEMO_FOLDERS, DEMO_SPEECHES } from "./demoPitches";
 import { attachAudio, attachSlide, normalizeFolder, selectedAudio, type FolderAudio, type FolderSlide } from "./folderFiles";
-import { USING_MOCK } from "./api";
+import { ApiRequestError, USING_MOCK } from "./api";
 import {
   createServerFolder,
   deleteServerAudio,
@@ -159,6 +159,8 @@ async function hydrateRemoteFolders(accountId: string) {
       })
       .catch((error: unknown) => {
         if (!isCurrentAccount()) return;
+        // Expired trial: the local copies stay and the move is tried again after the plan is renewed.
+        if (error instanceof ApiRequestError && error.status === 402) return;
         migrationError = error instanceof Error ? error.message : "Could not migrate saved pitches to the backend.";
       })
       .finally(() => {

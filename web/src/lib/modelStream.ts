@@ -2,6 +2,8 @@
 // "partial" lines show what the model has written so far (not checked yet);
 // the "done" line is the checked reply; an "error" line ends with a message.
 
+import { checkSubscription, routeHeaders } from "./routeAccess";
+
 export interface StreamedReply {
   summary?: string;
   strengths?: { text: string; quote: string }[];
@@ -21,8 +23,9 @@ export async function streamModelReply(
   const res = await fetch("/api/prototype", {
     method: "POST",
     body,
-    headers: { ...headers, accept: "application/x-ndjson" },
+    headers: { ...routeHeaders(), ...headers, accept: "application/x-ndjson" },
   });
+  checkSubscription(res);
   // Errors found before the model runs (bad input, too large) come back as plain JSON.
   if (!res.ok || !res.body || !res.headers.get("content-type")?.includes("ndjson")) {
     const payload = (await res.json().catch(() => null)) as { error?: string } | null;

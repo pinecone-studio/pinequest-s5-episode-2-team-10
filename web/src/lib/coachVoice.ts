@@ -1,7 +1,8 @@
 // Browser side of "hear it": the coach voice reading a sentence (/api/tts), and the speaker's
 // own words played back from their recording using the word timings of the transcription.
 import { t, type Lang } from "./i18n";
-import { currentLang, langHeaders } from "./i18nClient";
+import { currentLang } from "./i18nClient";
+import { checkSubscription, routeHeaders } from "./routeAccess";
 import { timingsKey } from "./folderStore";
 
 export interface WordTime {
@@ -127,9 +128,10 @@ function fetchSpeech(text: string): Promise<string> {
     url = (async () => {
       const res = await fetch("/api/tts", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...langHeaders() },
+        headers: { "Content-Type": "application/json", ...routeHeaders() },
         body: JSON.stringify({ text, engine }),
       }).catch(() => null);
+      checkSubscription(res);
       if (!res?.ok) {
         const body = (await res?.json().catch(() => null)) as { error?: unknown } | null;
         throw new Error(typeof body?.error === "string" ? body.error : t(currentLang(), "ttsFail"));
