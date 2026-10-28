@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Third-party minified PDF.js worker; linting its bundled output produces false positives.
+    "public/pdf.worker.min.mjs",
   ]),
 ]);
 
