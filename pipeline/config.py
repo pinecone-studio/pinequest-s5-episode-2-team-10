@@ -34,6 +34,9 @@ OLLAMA_TOKEN = _env("OLLAMA_TOKEN", "")
 OLLAMA_MODEL_FT = _env("PITCH_OLLAMA_MODEL_FT", "pitchcoach-gemma4")
 OLLAMA_MODEL_BASE = _env("PITCH_OLLAMA_MODEL_BASE", "gemma4:e4b")
 OLLAMA_TIMEOUT_S = float(_env("PITCH_OLLAMA_TIMEOUT_S", "240"))
+# Gemma's context window (prompt + answer, in tokens) is sized per request up to this limit.
+# Mongolian text takes many tokens, and a long deck plus transcript can fill 8192 by itself.
+OLLAMA_NUM_CTX_MAX = int(_env("PITCH_OLLAMA_NUM_CTX_MAX", "24576"))
 # How long Ollama keeps the model loaded after a request: -1 = until Ollama stops, or e.g. "10m".
 _keep = _env("PITCH_OLLAMA_KEEP_ALIVE", "-1")
 OLLAMA_KEEP_ALIVE = int(_keep) if _keep.lstrip("-").isdigit() else _keep
