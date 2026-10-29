@@ -47,6 +47,7 @@ import Modal from "./Modal";
 import type { Improvement, OffTopic, Strength } from "./ImprovementList";
 import FeedbackResult from "./FeedbackResult";
 import TakeHistory from "./TakeHistory";
+import AnalysisProgress, { type AnalysisStep } from "./AnalysisProgress";
 import SectionToggle, { useHidden } from "./SectionToggle";
 import { PitchPointsEditor, pointsToSend, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
@@ -518,7 +519,10 @@ function FolderRoom({
     pointSlides: (number | null)[]; // the slide of each point sent, in the reply's order
     received: { text: boolean; audio: string | null; slide: string | null } | null;
     writing: boolean; // true while the model is still writing (shown as it arrives, not checked yet)
+    fallbacks?: { part: "speech_to_text" | "feedback"; used: string }[]; // what stood in for the GPU PC
   } | null>(null);
+  // Where a running analysis is, for the step list under the Analyze button.
+  const [analysisStep, setAnalysisStep] = useState<{ step: AnalysisStep; queue: number | null } | null>(null);
 
   function rememberUrl(next: string | null) {
     if (slideUrlRef.current) URL.revokeObjectURL(slideUrlRef.current);
@@ -1057,6 +1061,7 @@ function FolderRoom({
       return;
     }
     setProbing(true);
+    setAnalysisStep({ step: "upload", queue: null });
     setProbeNote(null);
     setProbeResult(null);
     setResultOpen(false);
@@ -1100,8 +1105,10 @@ function FolderRoom({
       const deadline = Date.now() + 10 * 60_000;
       let status = await api.status(attempt.id);
       while (status.status === "processing" || status.status === "created" || status.status === "uploaded") {
+        // No stage yet means it's waiting for its turn.
+        setAnalysisStep({ step: status.stage ?? "queued", queue: status.queue_position });
         if (Date.now() > deadline) throw new Error(lang === "mn" ? "Шинжилгээ удаж байна. Дараа нь үр дүнгээ дахин нээнэ үү." : "Analysis is taking longer than expected. Check the result again shortly.");
-        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
         status = await api.status(attempt.id);
       }
       if (status.status !== "completed") throw new Error(status.error || (lang === "mn" ? "Backend шинжилгээ хийж чадсангүй." : "The backend could not analyze this recording."));
@@ -1136,6 +1143,7 @@ function FolderRoom({
         pointSlides: pointsToSend(folder.keyPoints, folder.pointSlides).slides,
         received: { text: !!report.transcript.text, audio: saved.filename, slide: slide && folder.slide ? folder.slide.filename : null },
         writing: false,
+        fallbacks: report.fallbacks ?? [],
       });
       showResultOnce();
       setTakesVersion((v) => v + 1);
@@ -1144,6 +1152,7 @@ function FolderRoom({
       setProbeNote(err instanceof Error && err.message ? err.message : tr("sendFail"));
     } finally {
       setProbing(false);
+      setAnalysisStep(null);
     }
   }
 
@@ -1522,6 +1531,7 @@ function FolderRoom({
                 {locked ? <LockGlyph /> : <SparkGlyph />}
                 {probing ? tr("sending") : tr("sendToModel")}
               </button>
+              {probing && analysisStep && <AnalysisProgress step={analysisStep.step} queuePosition={analysisStep.queue} />}
               {probeNote && <p className="desk-note">{probeNote}</p>}
               {probeResult && !resultOpen && (
                 <button type="button" className="room-result-btn" onClick={() => setResultOpen(true)}>
@@ -1547,6 +1557,14 @@ function FolderRoom({
                         </>
                       )}
                     </p>
+                    {/* The GPU PC couldn't be used for part of this analysis: say what stood in. */}
+                    {(probeResult.fallbacks ?? []).map((f) => (
+                      <p key={f.part} className="desk-fallback-note" role="note">
+                        {f.part === "speech_to_text"
+                          ? tr("fallbackSpeech", { used: f.used === "duudlaga" ? "Duudlaga" : f.used })
+                          : tr("fallbackFeedback", { used: modelLabel(f.used) })}
+                      </p>
+                    ))}
                     <FeedbackResult
                       summary={probeResult.summary}
                       strengths={probeResult.strengths}

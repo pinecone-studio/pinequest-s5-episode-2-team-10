@@ -1360,6 +1360,8 @@ def _report(database: Session, s: PitchSession) -> dict:
         "backend": r.backend,
         "asr_backend": r.extra.get("asr_backend"),
         "notes": r.extra.get("notes", []),
+        # Parts that fell back because the GPU PC couldn't be used: [{part, used, asked?}].
+        "fallbacks": r.extra.get("fallbacks", []),
         "created_at": _iso(r.created_at),
     }
 

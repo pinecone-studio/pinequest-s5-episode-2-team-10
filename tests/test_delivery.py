@@ -95,6 +95,7 @@ class Delivery(unittest.TestCase):
         self.assertTrue(recs)
         starts = {round(s["start"], 2) for s in sentences}
         for r in recs:
+            assert r.pop("source") == "measured"  # added after the model's schema check
             Recommendation.model_validate(r)
             self.assertEqual(r["area"], "delivery")
             # The page shows the sentence said at start_s, so it must fall inside one.

@@ -12,6 +12,7 @@ set to null, and scores are clamped to 0..100.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -37,6 +38,10 @@ CRITERIA = {
 
 class FeedbackError(Exception):
     pass
+
+
+class ModelUnavailable(FeedbackError):
+    """The feedback model can't be used right now (Ollama down, unreachable, or missing the model)."""
 
 
 # ---- Schema v2 -------------------------------------------------------------
@@ -166,6 +171,29 @@ def build_input(session: dict, sentences: list[dict], metrics: dict, wording: di
     }
 
 
+def fallback_for(backend: str) -> str | None:
+    """The model to use when `backend` (a Gemma model) can't be reached, or None."""
+    if not backend.startswith("gemma4") and not backend.startswith("ollama:"):
+        return None
+    choice = config.FEEDBACK_FALLBACK
+    if choice == "auto":
+        return "claude" if os.environ.get("ANTHROPIC_API_KEY", "").strip() else "rules"  # the SDK reads this key
+    return choice if choice in ("claude", "rules") else None
+
+
+def generate_with_fallback(backend: str, data: dict) -> tuple[dict, str, str | None]:
+    """Like generate(), but if Gemma can't be reached, another model writes the feedback
+    (PITCH_FEEDBACK_FALLBACK). Returns (feedback, backend used, note shown with the report)."""
+    try:
+        return generate(backend, data), backend, None
+    except ModelUnavailable as e:
+        other = fallback_for(backend)
+        if other is None:
+            raise
+        name = "Claude" if other == "claude" else "the check without a model"
+        return generate(other, data), other, f"Gemma couldn't be used ({e}), so {name} wrote this feedback."
+
+
 def generate(backend: str, data: dict) -> dict:
     if backend == "claude":
         raw = _claude(data)
@@ -268,9 +296,11 @@ def _ollama(model: str, data: dict) -> dict:
         headers = {"Authorization": f"Bearer {config.OLLAMA_TOKEN}"} if config.OLLAMA_TOKEN else None
         r = httpx.post(f"{config.OLLAMA_URL}/api/chat", json=payload, headers=headers, timeout=config.OLLAMA_TIMEOUT_S)
     except httpx.HTTPError as e:
-        raise FeedbackError("Could not reach Ollama. Is it running on this machine?") from e
+        raise ModelUnavailable("Could not reach Ollama. Is it running on this machine?") from e
     if r.status_code == 404:
-        raise FeedbackError(f"Ollama does not have the model '{model}'. Pull or create it first.")
+        raise ModelUnavailable(f"Ollama does not have the model '{model}'. Pull or create it first.")
+    if r.status_code in (401, 403, 502, 503, 504):
+        raise ModelUnavailable(f"Ollama isn't reachable through the voice server (HTTP {r.status_code}).")
     if r.status_code != 200:
         raise FeedbackError(f"Ollama error ({r.status_code}).")
     body = r.json()

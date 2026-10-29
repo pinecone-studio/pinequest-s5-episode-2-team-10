@@ -8184,3 +8184,105 @@ button.admin-service:focus-visible {
     padding: 16px;
   }
 }
+
+/* Analysis progress under the Analyze button (AnalysisProgress) */
+.analysis-progress {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--room-line, var(--line));
+  border-radius: 12px;
+  background: rgba(8, 8, 10, 0.5);
+}
+
+.analysis-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.analysis-progress-time {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-progress ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.analysis-progress li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.analysis-progress li.is-done {
+  color: var(--text-secondary, var(--muted));
+}
+
+.analysis-progress li.is-current {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.analysis-progress-dot {
+  display: inline-grid;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 1px solid var(--room-line, var(--line));
+  border-radius: 50%;
+  font-size: 10px;
+}
+
+.analysis-progress li.is-done .analysis-progress-dot {
+  border-color: color-mix(in srgb, var(--positive) 60%, transparent);
+  background: color-mix(in srgb, var(--positive) 20%, transparent);
+  color: var(--positive);
+}
+
+.analysis-progress li.is-current .analysis-progress-dot {
+  border-color: var(--brand);
+  background: var(--brand);
+  animation: analysis-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes analysis-pulse {
+  50% { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analysis-progress li.is-current .analysis-progress-dot { animation: none; }
+}
+
+.analysis-progress-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* A part of the analysis fell back (the GPU PC couldn't be used) */
+.desk-fallback-note {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
+  font-size: 13px;
+}
+
+.take-badge.is-example {
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+}

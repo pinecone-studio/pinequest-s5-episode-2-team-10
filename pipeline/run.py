@@ -22,12 +22,17 @@ def analyze(
     notes: list[str] = []
 
     on_stage("transcribing")
-    words, asr_backend = asr.transcribe(wav)
+    # What stood in for a part that couldn't be used, for the page to explain: [{part, used}].
+    fallbacks: list[dict] = []
+    words, asr_backend, asr_note = asr.transcribe_with_fallback(wav)
     asr.unload()  # free the GPU before the feedback model runs
+    if asr_note:
+        notes.append(asr_note)
+        fallbacks.append({"part": "speech_to_text", "used": asr_backend})
     if asr_backend == "stub":
         notes.append("Transcript is sample text (PITCH_ASR=stub), not your speech.")
     elif asr_backend == "duudlaga":
-        notes.append("Word timings are estimated; Duudlaga batch STT returns text only.")
+        notes.append("Word timings are estimated from where the audio has sound; Duudlaga returns text only.")
     elif asr_backend in ("whisper", "remote"):
         notes.append("Word timings are estimated from where the audio has sound; the speech model returns text only.")
     if not words:
@@ -45,7 +50,10 @@ def analyze(
 
     on_stage("feedback")
     data = feedback.build_input(session, sentences, measured, wording, slides, aligned)
-    fb = feedback.generate(backend, data)
+    fb, used_backend, model_note = feedback.generate_with_fallback(backend, data)
+    if model_note:
+        notes.append(model_note)
+        fallbacks.append({"part": "feedback", "used": used_backend, "asked": backend})
 
     # Delivery checks by code (pace over time, long silences, filler bursts, fading voice), added
     # after the model's advice. They never fail the analysis: on an error they are skipped.
@@ -86,6 +94,8 @@ def analyze(
         "sentences": sentences,
         "asr_backend": asr_backend,
         "notes": notes,
+        "feedback_backend": used_backend,  # differs from the one asked for when it fell back
+        "fallbacks": fallbacks,
         "delivery": delivery_facts,
         "prompt_version": feedback.PROMPT_VERSION,
     }

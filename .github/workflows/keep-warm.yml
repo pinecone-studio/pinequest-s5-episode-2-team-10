@@ -1,0 +1,22 @@
+# Keeps the deployed backend awake. Render's free plan sleeps after 15 minutes without requests,
+# and waking it takes ~40 s, which looks like a frozen page. A request every 10 minutes keeps it up.
+# GitHub may run scheduled jobs a few minutes late; Render's free hours (750/month) cover one
+# service that never sleeps. Turn it off between events from the Actions tab ("Disable workflow").
+name: Keep the deployed backend awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Backend health (waits up to 90 s while it wakes)
+        run: curl -fsS --max-time 90 --retry 2 https://saylo-backend-el5e.onrender.com/api/v1/health
+      - name: Web app
+        run: curl -fsS --max-time 30 -o /dev/null https://saylo-rose.vercel.app/

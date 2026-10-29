@@ -32,9 +32,14 @@ The worker runs these steps for each attempt (`pipeline/run.py`):
    - The JSON schema is enforced by the provider and checked again with Pydantic; failures become a readable error.
    - Code then checks the content: timestamps must match a transcript sentence, slide numbers must exist, filler occurrences must be in the named sentence, main-point quotes must be in the transcript, and number checks must match the candidates. Anything else is dropped.
 
+6a. **Fallbacks when the GPU PC can't be used** (`asr.transcribe_with_fallback`, `feedback.generate_with_fallback`)
+   - If the voice server is down, unreachable, too slow or refuses the token, Duudlaga transcribes instead (`PITCH_ASR_FALLBACK`, needs `DUUDLAGA_API_KEY`). Its text is placed over the parts of the audio with sound, like the voice server's, so pauses and the delivery checks still work.
+   - If Gemma (Ollama) can't be reached or lacks the model, Claude writes the feedback when `ANTHROPIC_API_KEY` is set, otherwise the no-model check (`PITCH_FEEDBACK_FALLBACK`). A bad answer from a working Gemma does not fall back.
+   - The report's `backend` is the model actually used, and `fallbacks` lists what stood in; the pitch page says so above the result. Tests: `tests/test_fallbacks.py`.
+
 6b. **Delivery checks** (`delivery.py`, `loudness.py`), by code after the model's advice
-   - Added to `recommendations` as `area: "delivery"` items, after the model's (up to 5), each with `start_s` at the moment it happened so the page shows the sentence said there. Messages are in Mongolian, like the rest of the backend's feedback.
-   - Rushed 30 s stretch (30% and 25 words/min above the speaker's usual pace); speeding up in the last quarter (25% faster, pitches of 60 s or more); silences of 3 s or more; 4+ fillers within 20 s (the fillers confirmed in context); sentences whose last two words are both 6 dB quieter than the rest (in at least 2 sentences and a quarter of them).
+   - Added to `recommendations` as `area: "delivery"` items with `source: "measured"`, after the model's (up to 5), each with `start_s` at the moment it happened so the page shows the sentence said there. Messages are in Mongolian, like the rest of the backend's feedback.
+   - Rushed 30 s stretch (30% and 25 words/min above the speaker's usual pace); speeding up in the last quarter (25% faster, pitches of 40 s or more); silences of 3 s or more; 4+ fillers within 20 s (the fillers confirmed in context); sentences whose last two words are both 6 dB quieter than the rest (in at least 2 sentences and a quarter of them).
    - Word times are estimates (pauses are real silences; times inside speech are spread evenly), so pace is never judged per word. Loudness per word is read from the recording (90th percentile of its frames, so silence next to a short last word doesn't count) and only compared within one recording. Mongolian sentence endings are naturally softer, so one quiet last word isn't a fade. The limits are first guesses; tune them on real recordings.
    - The numbers behind them are stored in the report's `extra.delivery_checks` (not in the API). A failure here is logged and skipped; it never fails the analysis. Tests: `tests/test_delivery.py`, `tests/test_loudness.py`.
 

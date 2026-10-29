@@ -10,7 +10,9 @@ import { useAccount } from "@/lib/session";
 import PracticeGoal from "./PracticeGoal";
 import SectionToggle, { useHidden } from "./SectionToggle";
 import { workOn, type Focus } from "@/lib/practiceGoal";
-import { cellTrend, compareTakes, MAX_TAKES, orderTakes, takeFrom, type Take, type Trend } from "@/lib/takes";
+import { cellTrend, compareTakes, loadExampleTakes, MAX_TAKES, orderTakes, takeFrom, type Take, type Trend } from "@/lib/takes";
+
+const DEMO_EMAIL = "demo@pitchcoach.local";
 
 type Metric = "points" | "fillers" | "wpm" | "pauses" | "volume";
 
@@ -51,25 +53,29 @@ export default function TakeHistory({ folderId, version }: { folderId: string; v
       if (!cancelled) setResult({ request, value });
     };
     const projectId = account && !USING_MOCK ? analysisProjectId(account.id, folderId) : null;
-    if (!projectId) {
-      queueMicrotask(() => finish({ kind: "idle" }));
-    } else {
-      (async () => {
-        try {
-          const project = await api.getProject(projectId);
-          // Re-analysing a recording adds an attempt, so look at a few more than are shown.
-          const done = project.attempts
-            .filter((a) => a.status === "completed" && a.has_audio !== false)
-            .sort((a, b) => a.created_at.localeCompare(b.created_at))
-            .slice(-MAX_TAKES * 2);
-          const takes = await Promise.all(done.map(async (a) => takeFrom(a, await api.report(a.id))));
-          finish({ kind: "ready", takes: orderTakes(takes) });
-        } catch (err) {
-          // The project is gone (deleted, or remembered from another database): nothing to show yet.
-          finish(err instanceof ApiRequestError && err.status === 404 ? { kind: "idle" } : { kind: "error" });
-        }
-      })();
-    }
+    (async () => {
+      // The demo account's demo pitches start with example takes; the visitor's own come after them.
+      const examples = account?.email === DEMO_EMAIL ? await loadExampleTakes(folderId) : [];
+      const withExamples = (own: Take[]): Result =>
+        own.length || examples.length ? { kind: "ready", takes: orderTakes([...examples, ...own]) } : { kind: "idle" };
+      if (!projectId) {
+        finish(withExamples([]));
+        return;
+      }
+      try {
+        const project = await api.getProject(projectId);
+        // Re-analysing a recording adds an attempt, so look at a few more than are shown.
+        const done = project.attempts
+          .filter((a) => a.status === "completed" && a.has_audio !== false)
+          .sort((a, b) => a.created_at.localeCompare(b.created_at))
+          .slice(-MAX_TAKES * 2);
+        const takes = await Promise.all(done.map(async (a) => takeFrom(a, await api.report(a.id))));
+        finish(withExamples(takes));
+      } catch (err) {
+        // The project is gone (deleted, or remembered from another database): nothing of their own yet.
+        finish(err instanceof ApiRequestError && err.status === 404 ? withExamples([]) : { kind: "error" });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -124,6 +130,7 @@ export default function TakeHistory({ folderId, version }: { folderId: string; v
         {takes.length === 1 && <p className="take-note">{tr("takesOne")}</p>}
 
         {/* 3. Each take, newest first, with what to work on in it. */}
+        {takes.some((t) => t.example) && <p className="take-note">{tr("takesExampleNote")}</p>}
         {takes.length > 0 && (
           <ol className="take-list" aria-label={tr("takesListLabel")}>
             {[...takes].reverse().map((take, j) => (
@@ -221,6 +228,7 @@ function TakeRow({ take, n, latest }: { take: Take; n: number; latest: boolean }
       <div className="take-row-head">
         <strong>{tr("takeLabel", { n })}</strong>
         {latest && <span className="take-badge">{tr("takeLatest")}</span>}
+        {take.example && <span className="take-badge is-example">{tr("takeExample")}</span>}
         <span className="take-row-date">{formatDate(take.createdAt)}</span>
         <span className="take-row-stats">
           {take.total > 0 && <span>{tr("takeChipPoints", { covered: take.covered, total: take.total })}</span>}

@@ -1,0 +1,343 @@
+[
+ {
+  "attempt": {
+   "id": "example-agaar-1",
+   "created_at": "2026-10-26T10:00:00+00:00",
+   "audio_filename": "example-take-1.wav",
+   "duration_s": 41.65
+  },
+  "report": {
+   "metrics": {
+    "duration_s": 41.65,
+    "speech_s": 40.44,
+    "wpm": 103.9,
+    "long_pauses": 1,
+    "long_pauses_per_min": 1.44,
+    "pitch_range_st": 13.4,
+    "end_volume_drop_db": 1.3,
+    "fillers_per_100": 2.86
+   },
+   "feedback": {
+    "main_points": {
+     "points": [
+      {
+       "point": 0,
+       "text": "Цэцэрлэгүүд агаарын чанараа хэмждэггүй",
+       "status": "covered",
+       "verified": true
+      },
+      {
+       "point": 1,
+       "text": "Мэдрэгч ба апп эцэг эхэд агаарын чанарыг харуулна",
+       "status": "covered",
+       "verified": true
+      },
+      {
+       "point": 2,
+       "text": "Туршилтад PM2.5 40%-иар буурсан",
+       "status": "missed",
+       "verified": true
+      },
+      {
+       "point": 3,
+       "text": "120 сая төгрөгийн хөрөнгө оруулалт хэрэгтэй",
+       "status": "missed",
+       "verified": true
+      }
+     ]
+    },
+    "number_checks": [
+     {
+      "slide": 4,
+      "on_slide": "12",
+      "said": null,
+      "inconsistent": false
+     },
+     {
+      "slide": 4,
+      "on_slide": "2.5",
+      "said": null,
+      "inconsistent": false
+     },
+     {
+      "slide": 4,
+      "on_slide": "40%",
+      "said": null,
+      "inconsistent": false
+     },
+     {
+      "slide": 5,
+      "on_slide": "50",
+      "said": null,
+      "inconsistent": false
+     },
+     {
+      "slide": 5,
+      "on_slide": "120 сая",
+      "said": null,
+      "inconsistent": false
+     }
+    ],
+    "fillers": {
+     "words": [
+      {
+       "word": "аа",
+       "count": 1
+      },
+      {
+       "word": "ээ",
+       "count": 1
+      }
+     ]
+    },
+    "recommendations": [
+     {
+      "area": "content",
+      "problem": "Туршилтын үр дүнг (PM2.5-ийн 40%-иар бууралт) танилцуулаагүй.",
+      "action": "Туршилтын үр дүнг тодорхой, тоон утгаар танилцуулах хэсгийг нэмнэ үү."
+     },
+     {
+      "area": "content",
+      "problem": "Хөрөнгө оруулалтын хэрэгцээг (120 сая төгрөг) дурдахгүй байна.",
+      "action": "Төгсгөлийн хэсэгт хөрөнгө оруулалтын тодорхой хэмжээг дурдах шаардлагатай."
+     },
+     {
+      "area": "structure",
+      "problem": "Төгсгөлийн дуудлага (CTA) сул байна.",
+      "action": "Төгсгөлийн хэсгийг хөрөнгө оруулалтын хүсэлт, дараагийн алхамтай холбож шинэчилнэ үү."
+     },
+     {
+      "area": "delivery",
+      "problem": "Үг хэлэх үеийн зуушилтууд (fillers) байна.",
+      "action": "Үг хэлэх үеийн зуушилтуудыг (ээ, аа) арилгах дасгал хийнэ үү."
+     },
+     {
+      "area": "delivery",
+      "problem": "Төгсгөлдөө яарсан: 0:31-с хойш минутад 148 үг, өмнө нь 89.",
+      "action": "Төгсгөлөө удаан, тодорхой хэл: үзэгчид хамгийн сүүлд сонссоноо санадаг.",
+      "source": "measured"
+     },
+     {
+      "area": "delivery",
+      "problem": "3 секундээс урт завсарлага: 0:14 (4.5 с).",
+      "action": "Төлөвлөсөн бол зүгээр. Бодол тасарсан бол дараагийн өгүүлбэрийг цээжил.",
+      "source": "measured"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "attempt": {
+   "id": "example-agaar-2",
+   "created_at": "2026-10-27T10:00:00+00:00",
+   "audio_filename": "example-take-2.wav",
+   "duration_s": 34.53
+  },
+  "report": {
+   "metrics": {
+    "duration_s": 34.53,
+    "speech_s": 33.26,
+    "wpm": 124.5,
+    "long_pauses": 0,
+    "long_pauses_per_min": 0.0,
+    "pitch_range_st": 13.9,
+    "end_volume_drop_db": 0.2,
+    "fillers_per_100": 2.9
+   },
+   "feedback": {
+    "main_points": {
+     "points": [
+      {
+       "point": 0,
+       "text": "Цэцэрлэгүүд агаарын чанараа хэмждэггүй",
+       "status": "covered",
+       "verified": true
+      },
+      {
+       "point": 1,
+       "text": "Мэдрэгч ба апп эцэг эхэд агаарын чанарыг харуулна",
+       "status": "covered",
+       "verified": true
+      },
+      {
+       "point": 2,
+       "text": "Туршилтад PM2.5 40%-иар буурсан",
+       "status": "covered",
+       "verified": true
+      },
+      {
+       "point": 3,
+       "text": "120 сая төгрөгийн хөрөнгө оруулалт хэрэгтэй",
+       "status": "covered",
+       "verified": true
+      }
+     ]
+    },
+    "number_checks": [
+     {
+      "slide": 4,
+      "on_slide": "12",
+      "said": "арван хоёр цэцэрлэгт",
+      "inconsistent": false
+     },
+     {
+      "slide": 4,
+      "on_slide": "2.5",
+      "said": null,
+      "inconsistent": false
+     },
+     {
+      "slide": 4,
+      "on_slide": "40%",
+      "said": "дөчөн хувиар",
+      "inconsistent": false
+     },
+     {
+      "slide": 5,
+      "on_slide": "50",
+      "said": null,
+      "inconsistent": false
+     },
+     {
+      "slide": 5,
+      "on_slide": "120 сая",
+      "said": "120 сая төгрөгийн хөрөнгө оруулалт хэрэгтэй байна",
+      "inconsistent": false
+     }
+    ],
+    "fillers": {
+     "words": [
+      {
+       "word": "аа",
+       "count": 1
+      },
+      {
+       "word": "ээ",
+       "count": 1
+      }
+     ]
+    },
+    "recommendations": [
+     {
+      "area": "content",
+      "problem": "Төгсгөлийн дуудлага (CTA) нь зөвхөн хөрөнгө оруулалт хэрэгтэй гэсэн хэллэгээр дуусч байна.",
+      "action": "Хөрөнгө оруулалтын шаардлагыг тавьсны дараа, энэ нь ямар том өөрчлөлт, зах зээлийн өсөлтөд хүргэх вэ гэдгийг тодорхой тайлбарла."
+     },
+     {
+      "area": "delivery",
+      "problem": "Ярианы явцад 'аа' болон 'ээ' гэсэн нөхцөл байдлын үгс гарсан.",
+      "action": "Үг хэлэхээсээ өмнө богино зогсоол авч, бодлоо тодорхойлох дасгал хийх."
+     },
+     {
+      "area": "content",
+      "problem": "Төгсгөлийн слайд дээрх 'Хүсэлт' хэсгийг бүрэн хамарсан нь дутуу байна.",
+      "action": "Дараагийн алхам болон зорилгыг (жишээлбэл, 50 цэцэрлэгт хүргэх) илүү хүчтэй, тодорхой дурдах."
+     },
+     {
+      "area": "delivery",
+      "problem": "7 өгүүлбэрээс 2-д нь төгсгөлд дуу суларсан (хамгийн их нь 0:19 орчим, 6 дБ).",
+      "action": "Өгүүлбэрийн сүүлийн үг хүртэл ижил чанга хэл.",
+      "source": "measured"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "attempt": {
+   "id": "example-agaar-3",
+   "created_at": "2026-10-28T10:00:00+00:00",
+   "audio_filename": "example-take-3.wav",
+   "duration_s": 44.44
+  },
+  "report": {
+   "metrics": {
+    "duration_s": 44.44,
+    "speech_s": 42.98,
+    "wpm": 120.1,
+    "long_pauses": 0,
+    "long_pauses_per_min": 0.0,
+    "pitch_range_st": 13.8,
+    "end_volume_drop_db": -0.1,
+    "fillers_per_100": 0.0
+   },
+   "feedback": {
+    "main_points": {
+     "points": [
+      {
+       "point": 0,
+       "text": "Цэцэрлэгүүд агаарын чанараа хэмждэггүй",
+       "status": "covered",
+       "verified": true
+      },
+      {
+       "point": 1,
+       "text": "Мэдрэгч ба апп эцэг эхэд агаарын чанарыг харуулна",
+       "status": "covered",
+       "verified": true
+      },
+      {
+       "point": 2,
+       "text": "Туршилтад PM2.5 40%-иар буурсан",
+       "status": "covered",
+       "verified": true
+      },
+      {
+       "point": 3,
+       "text": "120 сая төгрөгийн хөрөнгө оруулалт хэрэгтэй",
+       "status": "covered",
+       "verified": true
+      }
+     ]
+    },
+    "number_checks": [
+     {
+      "slide": 4,
+      "on_slide": "12",
+      "said": "арван хоёр цэцэрлэгт",
+      "inconsistent": false
+     },
+     {
+      "slide": 4,
+      "on_slide": "2.5",
+      "said": null,
+      "inconsistent": false
+     },
+     {
+      "slide": 4,
+      "on_slide": "40%",
+      "said": "дөчөн хувиар буурсан",
+      "inconsistent": false
+     },
+     {
+      "slide": 5,
+      "on_slide": "50",
+      "said": null,
+      "inconsistent": false
+     }
+    ],
+    "fillers": {
+     "words": []
+    },
+    "recommendations": [
+     {
+      "area": "delivery",
+      "problem": "Ярианы хурд хэт өндөр байна (44.44 секундэд 5 слайд).",
+      "action": "Үндсэн санаа болон тоон баримтуудыг хэлэх үедээ яриагаа удаашруулан, тодорхой зогсолттой ярихыг зорь."
+     },
+     {
+      "area": "content",
+      "problem": "Эхний pitch-ийн санаа болох 'утаанаас хамгаалах' гэдэг нь агаарын чанарын асуудалтай холбогдоогүй байна.",
+      "action": "Хэрэв бүтээгдэхүүн нь агаарын чанарыг хянах бол, эхнээсээ 'хүүхдүүдийг бохир агаар болон бусад аюултай зүйлсээс хамгаалах' гэж тодорхойлж, агаарын чанарыг гол асуудал болгох."
+     },
+     {
+      "area": "content",
+      "problem": "Хөрөнгө оруулалтын хүсэлт (120 сая төгрөг) дээрх дараагийн алхам (50 цэцэрлэг) нь хэрхэн логиктой холбогдсон нь тодорхойгүй.",
+      "action": "Хөрөнгө оруулалт хийхэд та ямар үр дүнд хүрэх вэ (жишээлбэл, 50 цэцэрлэгт хүрэх, эсвэл 1000 хүүхдийг хамгаалах) гэдгийг тодорхой тайлбарлах."
+     }
+    ]
+   }
+  }
+ }
+]
