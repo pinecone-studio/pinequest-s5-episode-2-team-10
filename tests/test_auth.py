@@ -633,3 +633,209 @@ def test_other_users_project_is_hidden(client: TestClient):
     assert hidden.status_code == 404
     assert client.get("/api/v1/projects").status_code == 401
     assert client.post("/api/v1/users").status_code == 404
+
+
+# ---- Admin status ------------------------------------------------------------------------------
+
+from backend import status as status_module  # noqa: E402
+
+
+def _admin_headers(client: TestClient, email: str) -> dict:
+    body = _register(client, email)
+    with Session(engine) as db:
+        user = db.get(AppUser, body["id"])
+        user.role = "admin"
+        db.add(user)
+        db.commit()
+    return {"X-Access-Token": body["access_token"]}
+
+
+class _FakeResponse:
+    def __init__(self, body: dict):
+        self._body = body
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._body
+
+
+def test_admin_status_is_admin_only(client: TestClient):
+    assert client.get("/api/v1/admin/status").status_code == 401
+    member = _register(client, "status-member@example.com")
+    assert client.get("/api/v1/admin/status", headers={"X-Access-Token": member["access_token"]}).status_code == 403
+
+
+def test_admin_status_reports_down_services_without_failing(client: TestClient, monkeypatch):
+    def unreachable(*_args, **_kwargs):
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(status_module.httpx, "get", unreachable)
+    headers = _admin_headers(client, "status-admin@example.com")
+    res = client.get("/api/v1/admin/status", headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["backend"]["ok"] is True
+    assert body["database"]["ok"] is True
+    assert body["voice"]["ok"] is False and body["voice"]["error"] == "Not reachable."
+    assert body["ollama"]["ok"] is False and body["ollama"]["error"] == "Not reachable."
+    assert body["gemma_test"] is None  # only on request
+    assert body["voice"]["where"] in ("local", "remote") and "url" not in body["voice"]  # no addresses or tokens
+
+
+def test_admin_status_reads_voice_and_gemma(client: TestClient, monkeypatch):
+    model = status_module.pipeline_config.OLLAMA_MODEL_BASE
+    replies = {
+        "/health": {"ok": True, "model_loaded": True, "model": "BuzzASR/mongolian", "device": "GPU", "cuda": True, "busy": False},
+        "/api/version": {"version": "0.40.11"},
+        "/api/tags": {"models": [{"name": model, "model": model}]},
+        "/api/ps": {"models": [{"name": model, "size": 1000, "size_vram": 1000}]},
+    }
+    monkeypatch.setattr(status_module.httpx, "get", lambda url, **_: _FakeResponse(next(v for k, v in replies.items() if url.endswith(k))))
+    monkeypatch.setattr(
+        status_module.httpx, "post",
+        lambda url, **_: _FakeResponse({"response": "OK", "eval_count": 2, "eval_duration": 20_000_000}),
+    )
+    headers = _admin_headers(client, "status-admin2@example.com")
+    body = client.get("/api/v1/admin/status?test_gemma=true", headers=headers).json()
+    assert body["voice"]["ok"] is True and body["voice"]["model_loaded"] is True and body["voice"]["cuda"] is True
+    assert body["ollama"] == {**body["ollama"], "ok": True, "installed": True, "loaded": True, "gpu_share": 1.0}
+    assert body["gemma_test"]["ok"] is True and body["gemma_test"]["tokens_per_s"] == 100.0
+
+
+def test_admin_status_flags_a_missing_model_and_an_unloaded_voice_model(client: TestClient, monkeypatch):
+    replies = {
+        "/health": {"ok": True, "model_loaded": False},
+        "/api/version": {"version": "0.40.11"},
+        "/api/tags": {"models": [{"name": "something-else:latest"}]},
+        "/api/ps": {"models": []},
+    }
+    monkeypatch.setattr(status_module.httpx, "get", lambda url, **_: _FakeResponse(next(v for k, v in replies.items() if url.endswith(k))))
+    headers = _admin_headers(client, "status-admin3@example.com")
+    body = client.get("/api/v1/admin/status", headers=headers).json()
+    assert body["voice"]["ok"] is False and "isn't loaded" in body["voice"]["error"]
+    assert body["ollama"]["ok"] is False and body["ollama"]["installed"] is False and "isn't installed" in body["ollama"]["error"]
+
+
+def test_deployed_status_is_admin_only_and_reports_each_part(client: TestClient, monkeypatch):
+    member = _register(client, "deployed-member@example.com")
+    assert client.get("/api/v1/admin/status/deployed", headers={"X-Access-Token": member["access_token"]}).status_code == 403
+
+    class Reply(_FakeResponse):
+        def __init__(self, body, code=200):
+            super().__init__(body)
+            self.status_code = code
+
+    seen_lang = []
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/api/transcribe"):
+            seen_lang.append(kwargs.get("headers", {}).get("x-pitch-lang"))
+            return Reply({"ok": False, "error": "The voice server isn't running."})
+        if url.endswith("/api/v1/health"):
+            return Reply({"ok": True, "queue_length": 2, "asr": "remote", "default_backend": "gemma4-base"})
+        if url.endswith("/api/v1/admin/status"):
+            return Reply({}, 404)
+        return Reply({}, 200)  # the site's front page
+
+    monkeypatch.setattr(status_module.httpx, "get", fake_get)
+    headers = _admin_headers(client, "deployed-admin@example.com")
+    body = client.get("/api/v1/admin/status/deployed?lang=en", headers=headers).json()
+    assert body["web"]["ok"] is True
+    assert body["web_voice"]["ok"] is False and body["web_voice"]["error"] == "The voice server isn't running."
+    assert body["web_voice"]["reachable"] is False
+    assert body["backend"]["ok"] is True and body["backend"]["queue_length"] == 2
+    assert body["backend"]["has_status_check"] is False  # an older deployed backend
+    assert seen_lang == ["en"]
+
+
+def test_deployed_status_reports_a_sleeping_or_dead_backend(client: TestClient, monkeypatch):
+    def fake_get(url, **_):
+        if "/api/v1/" in url:
+            raise httpx.ReadTimeout("slow")
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(status_module.httpx, "get", fake_get)
+    headers = _admin_headers(client, "deployed-admin2@example.com")
+    body = client.get("/api/v1/admin/status/deployed", headers=headers).json()
+    assert body["web"] == {**body["web"], "ok": False, "error": "Not reachable."}
+    assert body["backend"] == {**body["backend"], "ok": False, "error": "Timed out."}
+
+
+def test_health_reports_gemma_without_an_address_and_caches_it(client: TestClient, monkeypatch):
+    model = status_module.pipeline_config.OLLAMA_MODEL_BASE
+    calls = []
+
+    def fake_get(url, **_):
+        calls.append(url)
+        replies = {
+            "/api/version": {"version": "0.40.12"},
+            "/api/tags": {"models": [{"name": model}]},
+            "/api/ps": {"models": [{"name": model, "size": 100, "size_vram": 50}]},
+        }
+        return _FakeResponse(next(v for k, v in replies.items() if url.endswith(k)))
+
+    monkeypatch.setattr(status_module.httpx, "get", fake_get)
+    monkeypatch.setattr(status_module, "_gemma_summary", None)
+    first = client.get("/api/v1/health").json()["gemma"]
+    assert first == {"ok": True, "model": model, "installed": True, "loaded": True, "gpu_share": 0.5, "loaded_until": None}
+    assert "where" not in first and "url" not in first
+    n = len(calls)
+    assert client.get("/api/v1/health").json()["gemma"] == first
+    assert len(calls) == n  # the second health check used the cached answer
+
+
+def test_deployed_status_passes_on_the_deployed_gemma(client: TestClient, monkeypatch):
+    gemma = {"ok": False, "model": "gemma4:e4b", "installed": False, "error": "gemma4:e4b isn't installed in Ollama."}
+
+    def fake_get(url, **_):
+        class Reply(_FakeResponse):
+            status_code = 200
+        if url.endswith("/api/v1/health"):
+            return Reply({"ok": True, "queue_length": 0, "gemma": gemma})
+        if url.endswith("/api/transcribe"):
+            return Reply({"ok": True, "modelLoaded": True})
+        return Reply({})
+
+    monkeypatch.setattr(status_module.httpx, "get", fake_get)
+    headers = _admin_headers(client, "deployed-admin3@example.com")
+    body = client.get("/api/v1/admin/status/deployed", headers=headers).json()
+    assert body["backend"]["gemma"] == gemma
+
+    # An older deployed backend doesn't report it.
+    monkeypatch.setattr(status_module.httpx, "get", lambda url, **_: type("R", (_FakeResponse,), {"status_code": 200})(
+        {"ok": True, "queue_length": 0} if url.endswith("/api/v1/health") else {"ok": True, "modelLoaded": True}))
+    assert client.get("/api/v1/admin/status/deployed", headers=headers).json()["backend"]["gemma"] is None
+
+
+def test_tunnel_check_reads_voice_and_gemma_through_the_tunnel(monkeypatch):
+    model = status_module.pipeline_config.OLLAMA_MODEL_BASE
+    seen_auth = []
+
+    class Reply(_FakeResponse):
+        def __init__(self, body, code=200):
+            super().__init__(body)
+            self.status_code = code
+
+    def fake_get(url, headers=None, **_):
+        if url.endswith("/health"):
+            return Reply({"ok": True, "model_loaded": True, "device": "GPU", "cuda": True, "started_at": "2026-10-29T06:00:00Z"})
+        seen_auth.append((headers or {}).get("Authorization"))
+        if (headers or {}).get("Authorization") != "Bearer right":
+            return Reply({}, 401)
+        if url.endswith("/api/tags"):
+            return Reply({"models": [{"name": model}]})
+        return Reply({"models": [{"name": model, "size": 10, "size_vram": 10, "expires_at": "2026-10-29T07:00:00Z"}]})
+
+    monkeypatch.setattr(status_module.httpx, "get", fake_get)
+    voice, gemma = status_module.check_tunnel("https://pc.example.ts.net/voice", "right")
+    assert voice["ok"] is True and voice["started_at"] == "2026-10-29T06:00:00Z" and voice["host"] == "pc.example.ts.net"
+    assert gemma == {**gemma, "ok": True, "installed": True, "loaded": True, "gpu_share": 1.0}
+    assert seen_auth == ["Bearer right", "Bearer right"]
+
+    _, refused = status_module.check_tunnel("https://pc.example.ts.net/voice", "wrong")
+    assert refused["ok"] is False and "refused" in refused["error"]
+    _, no_token = status_module.check_tunnel("https://pc.example.ts.net/voice", "")
+    assert no_token["ok"] is False and "token" in no_token["error"]
+    assert "right" not in str(voice) + str(gemma)  # the token is never echoed back

@@ -7599,3 +7599,300 @@ img.present-slide {
   text-align: center;
   color: var(--muted);
 }
+
+/* Admin Status tab (AdminStatusPanel): the Overview tab's stat cards, tinted by health.
+   Green: working. Yellow: up but not working correctly. Red: down. Grey: still checking. */
+.admin-status .is-ok { --stat-color: #3fb37f; }
+.admin-status .is-warn { --stat-color: #e8c13a; }
+.admin-status .is-down { --stat-color: #e5636f; }
+.admin-status .is-checking { --stat-color: #8a8a93; }
+
+.admin-status-views {
+  display: inline-flex;
+  justify-self: start;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.admin-status-views button {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-status-views button.is-selected {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+
+.admin-status-views button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.admin-status-light {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--stat-color);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--stat-color) 22%, transparent), 0 0 12px color-mix(in srgb, var(--stat-color) 55%, transparent);
+}
+
+.admin-status .is-checking .admin-status-light {
+  animation: admin-status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes admin-status-pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-status .is-checking .admin-status-light { animation: none; }
+}
+
+.admin-status-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-color: color-mix(in srgb, var(--stat-color) 45%, var(--border));
+  background: linear-gradient(120deg, color-mix(in srgb, var(--stat-color) 16%, var(--surface)), var(--surface) 70%);
+}
+
+.admin-status-summary strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.admin-status-summary span:not(.admin-status-light) {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.admin-service {
+  border-color: color-mix(in srgb, var(--stat-color) 45%, var(--border));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--stat-color) 14%, var(--surface)), var(--surface) 75%);
+}
+
+.admin-service-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.admin-service-head .admin-status-light {
+  margin-top: 4px;
+}
+
+.admin-service > strong {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 4px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.admin-service-error {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 2px;
+  color: var(--stat-color);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.admin-service .admin-stat-foot {
+  position: relative;
+  z-index: 1;
+  margin-top: 4px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.admin-gemma-test.is-ok,
+.admin-gemma-test.is-down {
+  border-color: color-mix(in srgb, var(--stat-color) 45%, var(--border));
+}
+
+.admin-gemma-test .ui-section {
+  margin: 0;
+}
+
+.admin-gemma-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 0;
+  color: var(--stat-color);
+  font-size: 14px;
+}
+
+.admin-deployed-note {
+  margin: 0 0 12px;
+}
+
+/* Status cards open a dialog: they're buttons */
+button.admin-service {
+  display: block;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+button.admin-service:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--stat-color) 70%, var(--border));
+}
+
+button.admin-service:focus-visible {
+  outline: 2px solid var(--stat-color);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.admin-service { transition: none; }
+  button.admin-service:hover { transform: none; }
+}
+
+.admin-service > strong {
+  display: block;
+}
+
+.admin-service-more {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* The dialog */
+.admin-part-dialog {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-part-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.admin-part-state strong {
+  color: var(--stat-color);
+}
+
+.admin-part-dialog > .ui-help {
+  margin: 0;
+}
+
+.admin-part-section {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.admin-part-section h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admin-part-section p {
+  margin: 0;
+}
+
+.admin-part-error {
+  border-color: color-mix(in srgb, var(--stat-color) 50%, var(--border));
+  background: color-mix(in srgb, var(--stat-color) 8%, transparent);
+}
+
+.admin-part-error > p:first-of-type {
+  color: var(--stat-color);
+  overflow-wrap: anywhere;
+}
+
+.admin-part-facts {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.admin-part-facts > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 38%) 1fr;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.admin-part-facts dt {
+  color: var(--text-secondary);
+}
+
+.admin-part-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-part-changes {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.admin-part-changes li {
+  display: grid;
+  grid-template-columns: 12px auto 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-part-changes .admin-status-light {
+  width: 8px;
+  height: 8px;
+  box-shadow: none;
+}
+
+.admin-part-change-time {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .admin-part-facts > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .admin-part-changes li {
+    grid-template-columns: 12px 1fr;
+  }
+
+  .admin-part-changes li > span:last-child {
+    grid-column: 2;
+  }
+}

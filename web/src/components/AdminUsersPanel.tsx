@@ -5,14 +5,24 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/format";
 import { useLang } from "@/lib/i18nClient";
+import type { MessageKey } from "@/lib/i18n";
 import { useAccount } from "@/lib/session";
 import type { AdminUser, ProjectSummary } from "@/lib/types";
 import { DEMO_FOLDERS } from "@/lib/demoPitches";
 import Modal from "./Modal";
+import AdminStatusPanel from "./AdminStatusPanel";
 
 type Change = { role?: "member" | "admin"; is_active?: boolean };
 type PendingChange = { user: AdminUser; change: Change; title: string; description: string };
-type AdminTab = "overview" | "users" | "pitches";
+type AdminTab = "overview" | "users" | "pitches" | "status";
+
+const TAB_ICON: Record<AdminTab, string> = { overview: "◫", users: "◎", pitches: "▤", status: "◉" };
+const TAB_LABEL: Record<AdminTab, MessageKey> = {
+  overview: "adminMenuOverview",
+  users: "adminMenuUsers",
+  pitches: "adminMenuPitches",
+  status: "adminMenuStatus",
+};
 type PitchFilter = "all" | "processing" | "reviewed" | "new";
 
 const DEMO_EMAIL = "demo@pitchcoach.local";
@@ -234,7 +244,8 @@ export default function AdminUsersPanel() {
       {demoPreview && <p className="ui-card admin-demo-notice" role="status">{tr("adminDemoNotice")}</p>}
 
       <nav className="admin-menu" aria-label={tr("adminMenuLabel")}>
-        {(["overview", "users", "pitches"] as const).map((tab) => (
+        {/* Status needs a real admin: the demo preview has no access to the backend's checks. */}
+        {(demoPreview ? (["overview", "users", "pitches"] as const) : (["overview", "users", "pitches", "status"] as const)).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -242,8 +253,8 @@ export default function AdminUsersPanel() {
             aria-current={activeTab === tab ? "page" : undefined}
             onClick={() => setActiveTab(tab)}
           >
-            <span className="admin-menu-icon" aria-hidden="true">{tab === "overview" ? "◫" : tab === "users" ? "◎" : "▤"}</span>
-            <span>{tr(tab === "overview" ? "adminMenuOverview" : tab === "users" ? "adminMenuUsers" : "adminMenuPitches")}</span>
+            <span className="admin-menu-icon" aria-hidden="true">{TAB_ICON[tab]}</span>
+            <span>{tr(TAB_LABEL[tab])}</span>
             {tab === "users" && <span className="admin-menu-count">{displayUsers.length}</span>}
             {tab === "pitches" && <span className="admin-menu-count">{displayProjects.length}</span>}
           </button>
@@ -476,6 +487,8 @@ export default function AdminUsersPanel() {
           </form>
         </Modal>
       )}
+
+      {activeTab === "status" && !demoPreview && <AdminStatusPanel />}
     </main>
   );
 }

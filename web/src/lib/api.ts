@@ -1,5 +1,7 @@
 import type {
   ApiError,
+  AdminStatus,
+  DeployedStatus,
   AdminUser,
   AccountProfile,
   Attempt,
@@ -137,6 +139,8 @@ const realApi = {
   uploadProfileAvatar,
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   adminUsers: () => request<AdminUser[]>("/admin/users"),
+  adminStatus: (testGemma = false) => request<AdminStatus>(`/admin/status${testGemma ? "?test_gemma=true" : ""}`),
+  adminStatusDeployed: (lang: "mn" | "en") => request<DeployedStatus>(`/admin/status/deployed?lang=${lang}`),
   updateAdminUser: (id: string, changes: { role?: "member" | "admin"; is_active?: boolean; grant_days?: number }) =>
     request<AdminUser>(`/admin/users/${encodeURIComponent(id)}`, json("PATCH", changes)),
 

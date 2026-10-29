@@ -36,6 +36,7 @@ OLLAMA_PATHS = {"api/chat", "api/generate", "api/tags", "api/ps", "api/version"}
 
 # One GPU, one model: transcribe one file at a time.
 _gpu_lock = threading.Lock()
+STARTED_AT = time.time()  # for uptime in /health
 
 
 def _new_upload_dir() -> Path:
@@ -91,6 +92,7 @@ def health():
         "cuda": cuda,
         "device": device,
         "busy": _gpu_lock.locked(),
+        "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(STARTED_AT)),
     }
 
 
