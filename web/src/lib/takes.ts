@@ -22,6 +22,7 @@ export interface Take {
   // Delivery problems the analysis found by code (rushed ending, long silences, fading voice, …).
   delivery: { problem: string; action: string }[];
   example?: boolean; // a bundled example take (demo account), not the speaker's own
+  alsoIds?: string[]; // earlier analyses of the same recording, hidden behind this one (deleted with it)
 }
 
 /**
@@ -102,7 +103,9 @@ export function takeFrom(attempt: Attempt, report: Report): Take {
 export function orderTakes(takes: Take[]): Take[] {
   const latest = new Map<string, Take>();
   for (const take of [...takes].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
-    latest.set(take.audio ?? take.id, take);
+    const key = take.audio ?? take.id;
+    const before = latest.get(key);
+    latest.set(key, before ? { ...take, alsoIds: [...(before.alsoIds ?? []), before.id] } : take);
   }
   return [...latest.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-MAX_TAKES);
 }

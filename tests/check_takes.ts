@@ -53,6 +53,8 @@ const ordered = orderTakes([
   take({ id: "b", createdAt: "2026-10-27T11:00:00Z", audio: "Бичлэг.webm|61.23" }),
 ]);
 assert.deepEqual(ordered.map((t) => t.id), ["b", "c"]);
+assert.deepEqual(ordered[0].alsoIds, ["a"]); // the earlier analysis of the same recording, deleted with it
+assert.equal(ordered[1].alsoIds, undefined);
 const many = Array.from({ length: 8 }, (_, i) => take({ id: `t${i}`, createdAt: `2026-10-27T1${i}:00:00Z` }));
 assert.equal(orderTakes(many).length, MAX_TAKES);
 assert.equal(orderTakes(many).at(-1)?.id, "t7");
