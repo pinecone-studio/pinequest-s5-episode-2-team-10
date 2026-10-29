@@ -764,12 +764,16 @@ const mn = {
   // Camera coach
   cameraOpen: "Камер нээх",
   cameraClose: "Камер хаах",
+  bodyOpen: "Биеийн хэл",
+  bodyClose: "Биеийн хэл хаах",
   coachSide: "Слайд миний",
   coachSideLeft: "зүүн талд",
   coachSideRight: "баруун талд",
   coachSwipeHint:
     "Гараа биеийнхээ урдуур зүүн тийш шударвал дараагийн слайд, баруун тийш бол өмнөх слайд.",
   coachLoading: "Камер асааж байна…",
+  coachFaceFailed: "Нүүр танигчийг ачаалж чадсангүй: харцыг хэмжихгүй.",
+  coachBodyRecording: "Биеийн хэл хэмжиж байна",
   cameraBlocked: "Камер хаагдсан. Зөвшөөрсний дараа Камер нээх дээр дахин дар.",
   coachFailed: "Хөдөлгөөн танигчийг ачаалж чадсангүй.",
   coachPoints: "Слайд руу заасан: {n}",
@@ -1530,12 +1534,16 @@ const en: Record<MessageKey, string> = {
   confirm: "Confirm",
   cameraOpen: "Open camera",
   cameraClose: "Close camera",
+  bodyOpen: "Body language",
+  bodyClose: "Hide body language",
   coachSide: "The slide is on my",
   coachSideLeft: "left",
   coachSideRight: "right",
   coachSwipeHint:
     "Swipe a hand across your body to your left for the next slide, to your right for the previous one.",
   coachLoading: "Starting the camera…",
+  coachFaceFailed: "Couldn't load face tracking: eye contact isn't measured.",
+  coachBodyRecording: "Measuring body language",
   cameraBlocked:
     "The camera is blocked. Allow it, then press Open camera again.",
   coachFailed: "Could not load movement tracking.",
