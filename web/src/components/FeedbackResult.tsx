@@ -220,7 +220,7 @@ export default function FeedbackResult({
 
       {!writing && (summary || total > 0) && (
         <div className="fb-listen">
-          <ListenButton label={tr("listenAllShort")} play={readAll} primary />
+          <ListenButton label={tr("listenAllShort")} play={readAll} primary active={reading !== null} />
           <TtsEngineSelect />
         </div>
       )}
