@@ -633,3 +633,86 @@ def test_other_users_project_is_hidden(client: TestClient):
     assert hidden.status_code == 404
     assert client.get("/api/v1/projects").status_code == 401
     assert client.post("/api/v1/users").status_code == 404
+
+
+# ---- Admin status ------------------------------------------------------------------------------
+
+from backend import status as status_module  # noqa: E402
+
+
+def _admin_headers(client: TestClient, email: str) -> dict:
+    body = _register(client, email)
+    with Session(engine) as db:
+        user = db.get(AppUser, body["id"])
+        user.role = "admin"
+        db.add(user)
+        db.commit()
+    return {"X-Access-Token": body["access_token"]}
+
+
+class _FakeResponse:
+    def __init__(self, body: dict):
+        self._body = body
+
+    def raise_for_status(self):
+        return None
+
+    def json(self):
+        return self._body
+
+
+def test_admin_status_is_admin_only(client: TestClient):
+    assert client.get("/api/v1/admin/status").status_code == 401
+    member = _register(client, "status-member@example.com")
+    assert client.get("/api/v1/admin/status", headers={"X-Access-Token": member["access_token"]}).status_code == 403
+
+
+def test_admin_status_reports_down_services_without_failing(client: TestClient, monkeypatch):
+    def unreachable(*_args, **_kwargs):
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(status_module.httpx, "get", unreachable)
+    headers = _admin_headers(client, "status-admin@example.com")
+    res = client.get("/api/v1/admin/status", headers=headers)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["backend"]["ok"] is True
+    assert body["database"]["ok"] is True
+    assert body["voice"]["ok"] is False and body["voice"]["error"] == "Not reachable."
+    assert body["ollama"]["ok"] is False and body["ollama"]["error"] == "Not reachable."
+    assert body["gemma_test"] is None  # only on request
+    assert body["voice"]["where"] in ("local", "remote") and "url" not in body["voice"]  # no addresses or tokens
+
+
+def test_admin_status_reads_voice_and_gemma(client: TestClient, monkeypatch):
+    model = status_module.pipeline_config.OLLAMA_MODEL_BASE
+    replies = {
+        "/health": {"ok": True, "model_loaded": True, "model": "BuzzASR/mongolian", "device": "GPU", "cuda": True, "busy": False},
+        "/api/version": {"version": "0.40.11"},
+        "/api/tags": {"models": [{"name": model, "model": model}]},
+        "/api/ps": {"models": [{"name": model, "size": 1000, "size_vram": 1000}]},
+    }
+    monkeypatch.setattr(status_module.httpx, "get", lambda url, **_: _FakeResponse(next(v for k, v in replies.items() if url.endswith(k))))
+    monkeypatch.setattr(
+        status_module.httpx, "post",
+        lambda url, **_: _FakeResponse({"response": "OK", "eval_count": 2, "eval_duration": 20_000_000}),
+    )
+    headers = _admin_headers(client, "status-admin2@example.com")
+    body = client.get("/api/v1/admin/status?test_gemma=true", headers=headers).json()
+    assert body["voice"]["ok"] is True and body["voice"]["model_loaded"] is True and body["voice"]["cuda"] is True
+    assert body["ollama"] == {**body["ollama"], "ok": True, "installed": True, "loaded": True, "gpu_share": 1.0}
+    assert body["gemma_test"]["ok"] is True and body["gemma_test"]["tokens_per_s"] == 100.0
+
+
+def test_admin_status_flags_a_missing_model_and_an_unloaded_voice_model(client: TestClient, monkeypatch):
+    replies = {
+        "/health": {"ok": True, "model_loaded": False},
+        "/api/version": {"version": "0.40.11"},
+        "/api/tags": {"models": [{"name": "something-else:latest"}]},
+        "/api/ps": {"models": []},
+    }
+    monkeypatch.setattr(status_module.httpx, "get", lambda url, **_: _FakeResponse(next(v for k, v in replies.items() if url.endswith(k))))
+    headers = _admin_headers(client, "status-admin3@example.com")
+    body = client.get("/api/v1/admin/status", headers=headers).json()
+    assert body["voice"]["ok"] is False and "isn't loaded" in body["voice"]["error"]
+    assert body["ollama"]["ok"] is False and body["ollama"]["installed"] is False and "isn't installed" in body["ollama"]["error"]

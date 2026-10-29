@@ -265,3 +265,33 @@ export interface ApiError {
   code: string;
   message: string;
 }
+
+// GET /admin/status: whether each part the analysis needs is up (admin only).
+export interface ServiceCheck {
+  ok: boolean;
+  ms: number; // how long the check took
+  error?: string;
+}
+
+export interface AdminStatus {
+  backend: { ok: boolean; queue_length: number; analysing: boolean };
+  database: ServiceCheck;
+  voice: ServiceCheck & {
+    where: "local" | "remote";
+    used: boolean; // the analysis transcribes through it (PITCH_ASR=remote)
+    model_loaded?: boolean;
+    model?: string | null;
+    device?: string | null;
+    cuda?: boolean;
+    busy?: boolean;
+  };
+  ollama: ServiceCheck & {
+    where: "local" | "remote";
+    version?: string | null;
+    model?: string;
+    installed?: boolean;
+    loaded?: boolean;
+    gpu_share?: number | null; // below 1: part of the model runs on the CPU
+  };
+  gemma_test: (ServiceCheck & { tokens_per_s?: number | null }) | null; // only with test_gemma=true
+}

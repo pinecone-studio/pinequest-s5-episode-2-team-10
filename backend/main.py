@@ -31,6 +31,7 @@ from pipeline.feedback import BACKENDS
 from pipeline.points import clean_points
 
 from . import billing, config, db, errors, qpay, storage
+from . import status as service_status
 from .db import AccessToken, AnalysisReport, AppUser, AudioAsset, Payment, PitchSession, Project, Slide, Transcript, utcnow
 from .errors import ApiError, not_found
 from .passwords import hash_password, verify_password
@@ -878,6 +879,12 @@ def _admin_user_view(user: AppUser) -> dict:
 def list_users(_: AdminUser, database: DB):
     users = database.exec(select(AppUser).order_by(AppUser.created_at.desc())).all()
     return [_admin_user_view(user) for user in users]
+
+
+@api.get("/admin/status")
+def admin_status(_: AdminUser, database: DB, test_gemma: Annotated[bool, Query()] = False):
+    """Whether the backend, database, voice server and Gemma are up. `test_gemma=true` also asks Gemma for a reply."""
+    return service_status.collect(database, len(worker._queue), worker.current is not None, with_gemma_test=test_gemma)
 
 
 @api.patch("/admin/users/{user_id}", response_model=AdminUserView)

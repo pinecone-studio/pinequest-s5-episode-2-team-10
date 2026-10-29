@@ -4,6 +4,7 @@
 
 import type {
   Attempt,
+  AdminStatus,
   AdminUser,
   AccountProfile,
   AuthSession,
@@ -394,6 +395,10 @@ export const mockApi = {
 
   async updateAdminUser(): Promise<AdminUser> {
     throw { code: "admin_required", message: "Admin controls need the live backend." };
+  },
+
+  async adminStatus(): Promise<AdminStatus> {
+    throw { code: "admin_required", message: "Service status needs the live backend." };
   },
 
   async listProjects() {

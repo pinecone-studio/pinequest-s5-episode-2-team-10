@@ -7490,3 +7490,102 @@ img.present-slide {
     width: 100%;
   }
 }
+
+/* Admin Status tab (AdminStatusPanel) */
+.admin-status {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.admin-status-summary {
+  margin: 0;
+  font-size: 15px;
+}
+
+.admin-status-summary.is-ok {
+  color: var(--positive);
+}
+
+.admin-status-summary.is-down {
+  color: var(--negative);
+}
+
+.admin-status-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-status-row {
+  display: grid;
+  grid-template-columns: 12px minmax(140px, 220px) 110px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.admin-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.admin-status-row.is-ok .admin-status-dot { background: var(--positive); }
+.admin-status-row.is-warn .admin-status-dot { background: var(--warning); }
+.admin-status-row.is-down .admin-status-dot { background: var(--negative); }
+.admin-status-row.is-down { border-color: color-mix(in srgb, var(--negative) 45%, var(--border)); }
+
+.admin-status-name {
+  font-weight: 500;
+}
+
+.admin-status-state {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.admin-status-row.is-ok .admin-status-state { color: var(--positive); }
+.admin-status-row.is-warn .admin-status-state { color: var(--warning); }
+.admin-status-row.is-down .admin-status-state { color: var(--negative); }
+
+.admin-status-detail {
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-status-test {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.admin-status-test h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.admin-status-test p {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .admin-status-row {
+    grid-template-columns: 12px 1fr auto;
+  }
+
+  .admin-status-detail {
+    grid-column: 2 / -1;
+  }
+}
