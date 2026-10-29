@@ -7491,115 +7491,6 @@ img.present-slide {
   }
 }
 
-/* Progress by take (TakeHistory) */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.take-history {
-  margin-top: 16px;
-}
-
-.take-note {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.take-table-wrap {
-  overflow-x: auto;
-  margin: 0 -4px;
-  padding: 0 4px;
-}
-
-.take-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
-}
-
-.take-table th,
-.take-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--line);
-  text-align: right;
-  white-space: nowrap;
-}
-
-.take-table th[scope="row"],
-.take-table thead th:first-child {
-  text-align: left;
-  font-weight: 400;
-  color: var(--muted);
-}
-
-.take-table thead th {
-  font-weight: 500;
-}
-
-.take-table thead th small {
-  display: block;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.take-table thead th.is-latest {
-  color: var(--text-primary);
-}
-
-.take-table td.is-better .take-mark,
-.take-since li.is-better .take-mark {
-  color: var(--positive);
-}
-
-.take-table td.is-worse .take-mark,
-.take-since li.is-worse .take-mark {
-  color: var(--negative);
-}
-
-.take-since {
-  margin-top: 14px;
-}
-
-.take-since h3 {
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.take-since ul {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 14px;
-}
-
-.take-since li {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-}
-
-.take-since .take-mark {
-  flex: none;
-  width: 1em;
-  text-align: center;
-  color: var(--muted);
-}
-
 /* Admin Status tab (AdminStatusPanel): the Overview tab's stat cards, tinted by health.
    Green: working. Yellow: up but not working correctly. Red: down. Grey: still checking. */
 .admin-status .is-ok { --stat-color: #3fb37f; }
@@ -7894,5 +7785,402 @@ button.admin-service:focus-visible {
 
   .admin-part-changes li > span:last-child {
     grid-column: 2;
+  }
+}
+
+/* Hide / show buttons on the pitch page's sections (SectionToggle) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-head h2 {
+  margin: 0;
+}
+
+.section-head .desk-sub {
+  margin: 4px 0 0;
+  font-size: var(--font-size-helper);
+}
+
+.section-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--room-line, var(--line));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.section-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  color: var(--text-primary);
+}
+
+.section-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.desk-points > div[hidden],
+.folder-audios > div[hidden],
+.take-history > div[hidden] {
+  display: none;
+}
+
+.desk-points .section-head + div > .desk-sub {
+  margin-top: 4px;
+}
+
+/* Progress by take (TakeHistory): a coaching card that matches the idea and audio cards */
+.folder-room .take-history {
+  margin-top: 14px;
+  padding: 18px 20px 20px;
+}
+
+.folder-room .take-history h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.take-body {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.take-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* 1. Focus for the next take (PracticeGoal) */
+.take-goal {
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--brand) 45%, var(--room-line, var(--line)));
+  border-radius: 14px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--brand) 12%, transparent), rgba(8, 8, 10, 0.5) 70%);
+}
+
+.take-goal.is-ready {
+  border-color: color-mix(in srgb, var(--positive) 55%, var(--room-line, var(--line)));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--positive) 12%, transparent), rgba(8, 8, 10, 0.5) 70%);
+}
+
+.take-goal h3 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.take-goal-text {
+  margin: 0 0 4px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.take-drill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.take-drill .room-glass-btn.is-live {
+  border-color: var(--negative);
+}
+
+.take-drill-result {
+  margin: 0;
+  font-size: 14px;
+}
+
+.take-drill-result.is-pass { color: var(--positive); }
+.take-drill-result.is-almost,
+.take-drill-result.is-short { color: var(--warning); }
+.take-drill-result.is-fail { color: var(--negative); }
+
+.take-drill q {
+  color: var(--text-primary);
+}
+
+/* 2. Since the last take */
+.take-since h3,
+.take-change-group h4 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.take-since-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.take-change-group {
+  padding: 12px 14px;
+  border: 1px solid var(--room-line, var(--line));
+  border-radius: 12px;
+  background: rgba(8, 8, 10, 0.5);
+}
+
+.take-change-group h4 {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.take-change-group ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.take-change-group li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.take-mark {
+  flex: none;
+  width: 1em;
+  color: var(--muted);
+  text-align: center;
+}
+
+.is-better .take-mark { color: var(--positive); }
+.is-worse .take-mark { color: var(--negative); }
+
+/* 3. Each take with what to work on */
+.take-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.take-row {
+  padding: 12px 14px;
+  border: 1px solid var(--room-line, var(--line));
+  border-radius: 12px;
+  background: rgba(8, 8, 10, 0.5);
+}
+
+.take-row.is-latest {
+  border-color: color-mix(in srgb, var(--brand) 40%, transparent);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.take-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.take-row-head strong {
+  font-size: 14px;
+}
+
+.take-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--brand) 22%, transparent);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.take-row-date {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.take-row-stats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.take-row-stats span {
+  padding: 2px 8px;
+  border: 1px solid var(--room-line, var(--line));
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.take-row-good {
+  margin: 8px 0 0;
+  color: var(--positive);
+  font-size: 14px;
+}
+
+.take-row-work {
+  margin-top: 10px;
+}
+
+.take-row-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.take-row-work ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.take-focus {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 14px;
+}
+
+.take-focus small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.take-focus-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning);
+  transform: translateY(-1px);
+}
+
+.take-focus.is-point .take-focus-dot,
+.take-focus.is-number .take-focus-dot {
+  background: var(--negative);
+}
+
+.take-more {
+  margin-top: 6px;
+}
+
+.take-more summary,
+.take-numbers summary {
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.take-more summary:hover,
+.take-numbers summary:hover {
+  color: var(--text-primary);
+}
+
+.take-more ul {
+  margin-top: 6px;
+}
+
+/* 4. The numbers, folded away */
+.take-numbers[open] summary {
+  margin-bottom: 8px;
+}
+
+.take-table-wrap {
+  overflow-x: auto;
+}
+
+.take-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.take-table th,
+.take-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--room-line, var(--line));
+  text-align: right;
+  white-space: nowrap;
+}
+
+.take-table th[scope="row"],
+.take-table thead th:first-child {
+  color: var(--muted);
+  font-weight: 400;
+  text-align: left;
+}
+
+.take-table thead th {
+  font-weight: 500;
+}
+
+.take-table thead th small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.take-table thead th.is-latest {
+  color: var(--text-primary);
+}
+
+.take-table td.is-better .take-mark { color: var(--positive); }
+.take-table td.is-worse .take-mark { color: var(--negative); }
+
+@media (max-width: 640px) {
+  .take-row-stats {
+    margin-left: 0;
+  }
+
+  .folder-room .take-history {
+    padding: 16px;
   }
 }

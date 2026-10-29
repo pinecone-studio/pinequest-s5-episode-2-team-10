@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import { useLang } from "@/lib/i18nClient";
+import SectionToggle, { useHidden } from "./SectionToggle";
 
 export const MAX_POINTS = 6;
 
@@ -85,13 +86,19 @@ export function PitchPointsEditor({
     emit(rows.map((p, j) => (j === i ? value : p)), rowSlides);
   }
 
+  const [hidden, toggleHidden] = useHidden("pitch-setup");
+
   function setSlide(i: number, value: string) {
     emit(rows, rowSlides.map((n, j) => (j === i ? (value ? Number(value) : null) : n)));
   }
 
   return (
     <section className="desk-points" aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`}>{tr("pitchSetup")}</h2>
+      <div className="section-head">
+        <h2 id={`${id}-title`}>{tr("pitchSetup")}</h2>
+        <SectionToggle hidden={hidden} onToggle={toggleHidden} controls={`${id}-body`} label={tr("pitchSetup")} />
+      </div>
+      <div id={`${id}-body`} hidden={hidden}>
       <p className="desk-sub">{tr("pointsHint")}</p>
       <label className="desk-points-field">
         <span>{tr("pitchIdea")}</span>
@@ -151,6 +158,7 @@ export function PitchPointsEditor({
           </button>
         )}
       </fieldset>
+      </div>
     </section>
   );
 }

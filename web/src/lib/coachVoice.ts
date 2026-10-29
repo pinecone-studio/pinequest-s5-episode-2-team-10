@@ -288,6 +288,9 @@ const sentence = (text: string) => {
   return !s || /[.!?…:]$/.test(s) ? s : `${s}.`;
 };
 
+/** The language the coach voices speak (Azure's Yesui and ElevenLabs are both Mongolian). */
+export const SPEECH_LANG: Lang = "mn";
+
 /**
  * The analysis as a read-aloud: the summary, the strengths, then each thing to improve with what to
  * do, the speaker's own words (when their timing is known) and a better way to say it.
@@ -298,9 +301,11 @@ export function feedbackSteps(
     strengths: { text: string }[];
     improvements: { title: string; action: string; example: string; quote: string }[];
   },
-  lang: Lang,
   clipFor: (quote: string) => (() => Promise<Clip | null>) | null,
 ): ReadStep[] {
+  // Both coach voices speak Mongolian, so the words said between parts are Mongolian too,
+  // whatever language the page is in.
+  const lang: Lang = SPEECH_LANG;
   const steps: ReadStep[] = [];
   if (result.summary.trim()) steps.push({ key: "summary", say: sentence(result.summary) });
   result.strengths.forEach((s, i) => {

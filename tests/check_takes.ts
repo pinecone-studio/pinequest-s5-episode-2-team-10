@@ -16,6 +16,9 @@ function take(over: Partial<Take> & { id: string }): Take {
     wpm: 130,
     longPausesPerMin: 1,
     endVolumeDropDb: 3,
+    numberIssues: [],
+    fillerWords: [],
+    delivery: [],
     ...over,
   };
 }

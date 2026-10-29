@@ -216,6 +216,8 @@ export interface Feedback {
   practice_tasks?: PracticeTask[];
   // Missing on reports made before main points existed.
   main_points?: MainPoints;
+  // Filler words confirmed in context, with counts (see API.md). Missing on very old reports.
+  fillers?: { method: string; total: number; per_100: number | null; words: { word: string; count: number }[] };
 }
 
 // Did the speech make the project's main points? Quotes are checked and coverage computed in code.
