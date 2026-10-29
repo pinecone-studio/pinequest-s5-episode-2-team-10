@@ -140,3 +140,50 @@ def collect(session: Session, queue_length: int, analysing: bool, with_gemma_tes
             "ollama": ollama.result(),
             "gemma_test": gemma.result() if gemma else None,
         }
+
+
+# ---- The deployed site, checked from a local build -------------------------------------------
+
+DEPLOYED_TIMEOUT_S = 60.0  # the deployed backend's free host sleeps; waking it takes up to a minute
+
+
+def check_deployed(site_url: str, api_url: str, lang: str = "mn") -> dict:
+    """Public checks of the deployed site: is the web app up, does it reach its voice server, is
+    its backend up. The deployed backend's database and Gemma need an admin login there."""
+
+    def web():
+        r = httpx.get(site_url, timeout=CHECK_TIMEOUT_S * 3, follow_redirects=True)
+        return {"ok": r.status_code < 400, **({} if r.status_code < 400 else {"error": f"HTTP {r.status_code}"})}
+
+    def web_voice():
+        # The web app answers in the language asked for (its messages are user-facing).
+        r = httpx.get(f"{site_url}/api/transcribe", headers={"x-pitch-lang": lang}, timeout=CHECK_TIMEOUT_S * 3)
+        h = r.json()
+        loaded = h.get("modelLoaded") is True
+        return {
+            "ok": h.get("ok") is True and loaded,
+            "reachable": h.get("ok") is True,  # the deployed web app reaches its voice server at all
+            "model_loaded": loaded,
+            "device": h.get("device"),
+            "busy": h.get("busy") is True,
+            **({} if h.get("ok") else {"error": h.get("error") or "Not reachable."}),
+            **({} if not h.get("ok") or loaded else {"error": "The speech model isn't loaded yet."}),
+        }
+
+    def backend():
+        r = httpx.get(f"{api_url}/api/v1/health", timeout=DEPLOYED_TIMEOUT_S)
+        r.raise_for_status()
+        h = r.json()
+        # Without a login, 401 means the deployed backend has the status check; 404 means it's older.
+        has_status = httpx.get(f"{api_url}/api/v1/admin/status", timeout=CHECK_TIMEOUT_S * 3).status_code != 404
+        return {
+            "ok": h.get("ok") is True,
+            "queue_length": h.get("queue_length"),
+            "asr": h.get("asr"),
+            "default_backend": h.get("default_backend"),
+            "has_status_check": has_status,
+        }
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        w, v, b = pool.submit(_timed, web), pool.submit(_timed, web_voice), pool.submit(_timed, backend)
+        return {"site_url": site_url, "web": w.result(), "web_voice": v.result(), "backend": b.result()}

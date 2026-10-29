@@ -295,3 +295,11 @@ export interface AdminStatus {
   };
   gemma_test: (ServiceCheck & { tokens_per_s?: number | null }) | null; // only with test_gemma=true
 }
+
+// GET /admin/status/deployed: public checks of the deployed site, made by the backend the page uses.
+export interface DeployedStatus {
+  site_url: string;
+  web: ServiceCheck;
+  web_voice: ServiceCheck & { reachable?: boolean; model_loaded?: boolean; device?: string | null; busy?: boolean };
+  backend: ServiceCheck & { queue_length?: number | null; asr?: string; default_backend?: string; has_status_check?: boolean };
+}

@@ -887,6 +887,12 @@ def admin_status(_: AdminUser, database: DB, test_gemma: Annotated[bool, Query()
     return service_status.collect(database, len(worker._queue), worker.current is not None, with_gemma_test=test_gemma)
 
 
+@api.get("/admin/status/deployed")
+def admin_status_deployed(_: AdminUser, lang: Annotated[Literal["mn", "en"], Query()] = "mn"):
+    """Public checks of the deployed site (web app, its voice server link, its backend), from this backend."""
+    return service_status.check_deployed(config.DEPLOYED_SITE_URL, config.DEPLOYED_API_URL, lang)
+
+
 @api.patch("/admin/users/{user_id}", response_model=AdminUserView)
 def update_user_role(user_id: str, body: AdminUserUpdate, admin: AdminUser, database: DB):
     target = database.get(AppUser, user_id)

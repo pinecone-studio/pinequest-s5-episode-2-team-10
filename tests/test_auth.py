@@ -716,3 +716,48 @@ def test_admin_status_flags_a_missing_model_and_an_unloaded_voice_model(client: 
     body = client.get("/api/v1/admin/status", headers=headers).json()
     assert body["voice"]["ok"] is False and "isn't loaded" in body["voice"]["error"]
     assert body["ollama"]["ok"] is False and body["ollama"]["installed"] is False and "isn't installed" in body["ollama"]["error"]
+
+
+def test_deployed_status_is_admin_only_and_reports_each_part(client: TestClient, monkeypatch):
+    member = _register(client, "deployed-member@example.com")
+    assert client.get("/api/v1/admin/status/deployed", headers={"X-Access-Token": member["access_token"]}).status_code == 403
+
+    class Reply(_FakeResponse):
+        def __init__(self, body, code=200):
+            super().__init__(body)
+            self.status_code = code
+
+    seen_lang = []
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/api/transcribe"):
+            seen_lang.append(kwargs.get("headers", {}).get("x-pitch-lang"))
+            return Reply({"ok": False, "error": "The voice server isn't running."})
+        if url.endswith("/api/v1/health"):
+            return Reply({"ok": True, "queue_length": 2, "asr": "remote", "default_backend": "gemma4-base"})
+        if url.endswith("/api/v1/admin/status"):
+            return Reply({}, 404)
+        return Reply({}, 200)  # the site's front page
+
+    monkeypatch.setattr(status_module.httpx, "get", fake_get)
+    headers = _admin_headers(client, "deployed-admin@example.com")
+    body = client.get("/api/v1/admin/status/deployed?lang=en", headers=headers).json()
+    assert body["web"]["ok"] is True
+    assert body["web_voice"]["ok"] is False and body["web_voice"]["error"] == "The voice server isn't running."
+    assert body["web_voice"]["reachable"] is False
+    assert body["backend"]["ok"] is True and body["backend"]["queue_length"] == 2
+    assert body["backend"]["has_status_check"] is False  # an older deployed backend
+    assert seen_lang == ["en"]
+
+
+def test_deployed_status_reports_a_sleeping_or_dead_backend(client: TestClient, monkeypatch):
+    def fake_get(url, **_):
+        if "/api/v1/" in url:
+            raise httpx.ReadTimeout("slow")
+        raise httpx.ConnectError("refused")
+
+    monkeypatch.setattr(status_module.httpx, "get", fake_get)
+    headers = _admin_headers(client, "deployed-admin2@example.com")
+    body = client.get("/api/v1/admin/status/deployed", headers=headers).json()
+    assert body["web"] == {**body["web"], "ok": False, "error": "Not reachable."}
+    assert body["backend"] == {**body["backend"], "ok": False, "error": "Timed out."}

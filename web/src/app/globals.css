@@ -7491,19 +7491,67 @@ img.present-slide {
   }
 }
 
-/* Admin Status tab (AdminStatusPanel): the Overview tab's stat cards, tinted by health */
+/* Admin Status tab (AdminStatusPanel): the Overview tab's stat cards, tinted by health.
+   Green: working. Yellow: up but not working correctly. Red: down. Grey: still checking. */
 .admin-status .is-ok { --stat-color: #3fb37f; }
-.admin-status .is-warn { --stat-color: #e0a63a; }
+.admin-status .is-warn { --stat-color: #e8c13a; }
 .admin-status .is-down { --stat-color: #e5636f; }
-.admin-status .is-unknown { --stat-color: #8a8a93; }
+.admin-status .is-checking { --stat-color: #8a8a93; }
+
+.admin-status-build {
+  margin: 6px 0 0;
+}
+
+.admin-status-views {
+  display: inline-flex;
+  justify-self: start;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.admin-status-views button {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-status-views button.is-selected {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+
+.admin-status-views button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .admin-status-light {
   flex: none;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--stat-color);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--stat-color) 20%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--stat-color) 22%, transparent), 0 0 12px color-mix(in srgb, var(--stat-color) 55%, transparent);
+}
+
+.admin-status .is-checking .admin-status-light {
+  animation: admin-status-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes admin-status-pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-status .is-checking .admin-status-light { animation: none; }
 }
 
 .admin-status-summary {
@@ -7512,7 +7560,7 @@ img.present-slide {
   gap: 14px;
   padding: 16px 18px;
   border-color: color-mix(in srgb, var(--stat-color) 45%, var(--border));
-  background: linear-gradient(120deg, color-mix(in srgb, var(--stat-color) 14%, var(--surface)), var(--surface) 70%);
+  background: linear-gradient(120deg, color-mix(in srgb, var(--stat-color) 16%, var(--surface)), var(--surface) 70%);
 }
 
 .admin-status-summary strong {
@@ -7530,7 +7578,8 @@ img.present-slide {
 }
 
 .admin-service {
-  border-color: color-mix(in srgb, var(--stat-color) 40%, var(--border));
+  border-color: color-mix(in srgb, var(--stat-color) 45%, var(--border));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--stat-color) 14%, var(--surface)), var(--surface) 75%);
 }
 
 .admin-service-head {
@@ -7544,9 +7593,21 @@ img.present-slide {
 }
 
 .admin-service > strong {
-  margin-bottom: 2px;
+  position: relative;
+  z-index: 1;
+  margin-bottom: 4px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.admin-service-error {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 2px;
   color: var(--stat-color);
-  font-size: clamp(20px, 2.4vw, 26px);
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .admin-service .admin-stat-foot {
@@ -7573,4 +7634,8 @@ img.present-slide {
   margin: 6px 0 0;
   color: var(--stat-color);
   font-size: 14px;
+}
+
+.admin-deployed-note {
+  margin: 0 0 12px;
 }
