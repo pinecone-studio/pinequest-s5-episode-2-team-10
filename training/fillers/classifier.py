@@ -71,7 +71,7 @@ def predict_rows(model_dir: Path, rows: list[dict], batch: int = 32) -> dict[tup
             for pos, w in enumerate(enc.word_ids(b)):
                 if w is not None and w not in seen:
                     seen.add(w)
-                    if pred[b][pos] == 1:
+                    if pred[b][pos] == 1 and not row["tokens"][w].isdigit():  # a number is never a filler
                         marked.add(w)
             out[(row["pitch"], row["sentence_id"])] = marked
     return out

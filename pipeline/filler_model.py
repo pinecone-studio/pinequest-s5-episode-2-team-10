@@ -86,7 +86,7 @@ def mark(texts: list[str], path: str) -> list[list[int]]:
             for pos, w in enumerate(enc.word_ids(row)):
                 if w is not None and w not in seen:  # a word's label sits on its first piece
                     seen.add(w)
-                    if pred[row][pos] == 1:
+                    if pred[row][pos] == 1 and not words[i][w].isdigit():  # a number is never a filler
                         out[i].append(w)
     return out
 
