@@ -7491,101 +7491,86 @@ img.present-slide {
   }
 }
 
-/* Admin Status tab (AdminStatusPanel) */
-.admin-status {
-  display: grid;
-  gap: 14px;
-  margin-bottom: 22px;
-}
+/* Admin Status tab (AdminStatusPanel): the Overview tab's stat cards, tinted by health */
+.admin-status .is-ok { --stat-color: #3fb37f; }
+.admin-status .is-warn { --stat-color: #e0a63a; }
+.admin-status .is-down { --stat-color: #e5636f; }
+.admin-status .is-unknown { --stat-color: #8a8a93; }
 
-.admin-status-summary {
-  margin: 0;
-  font-size: 15px;
-}
-
-.admin-status-summary.is-ok {
-  color: var(--positive);
-}
-
-.admin-status-summary.is-down {
-  color: var(--negative);
-}
-
-.admin-status-list {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.admin-status-row {
-  display: grid;
-  grid-template-columns: 12px minmax(140px, 220px) 110px 1fr;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--surface);
-}
-
-.admin-status-dot {
+.admin-status-light {
+  flex: none;
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--muted);
+  background: var(--stat-color);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--stat-color) 20%, transparent);
 }
 
-.admin-status-row.is-ok .admin-status-dot { background: var(--positive); }
-.admin-status-row.is-warn .admin-status-dot { background: var(--warning); }
-.admin-status-row.is-down .admin-status-dot { background: var(--negative); }
-.admin-status-row.is-down { border-color: color-mix(in srgb, var(--negative) 45%, var(--border)); }
-
-.admin-status-name {
-  font-weight: 500;
+.admin-status-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-color: color-mix(in srgb, var(--stat-color) 45%, var(--border));
+  background: linear-gradient(120deg, color-mix(in srgb, var(--stat-color) 14%, var(--surface)), var(--surface) 70%);
 }
 
-.admin-status-state {
-  font-size: 13px;
-  color: var(--muted);
+.admin-status-summary strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
 }
 
-.admin-status-row.is-ok .admin-status-state { color: var(--positive); }
-.admin-status-row.is-warn .admin-status-state { color: var(--warning); }
-.admin-status-row.is-down .admin-status-state { color: var(--negative); }
+.admin-status-summary span:not(.admin-status-light) {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
 
-.admin-status-detail {
-  font-size: 13px;
-  color: var(--muted);
+.admin-service {
+  border-color: color-mix(in srgb, var(--stat-color) 40%, var(--border));
+}
+
+.admin-service-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.admin-service-head .admin-status-light {
+  margin-top: 4px;
+}
+
+.admin-service > strong {
+  margin-bottom: 2px;
+  color: var(--stat-color);
+  font-size: clamp(20px, 2.4vw, 26px);
+}
+
+.admin-service .admin-stat-foot {
+  position: relative;
+  z-index: 1;
+  margin-top: 4px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
-.admin-status-test {
-  display: grid;
-  gap: 10px;
-  justify-items: start;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
+.admin-gemma-test.is-ok,
+.admin-gemma-test.is-down {
+  border-color: color-mix(in srgb, var(--stat-color) 45%, var(--border));
 }
 
-.admin-status-test h3 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.admin-status-test p {
+.admin-gemma-test .ui-section {
   margin: 0;
 }
 
-@media (max-width: 640px) {
-  .admin-status-row {
-    grid-template-columns: 12px 1fr auto;
-  }
-
-  .admin-status-detail {
-    grid-column: 2 / -1;
-  }
+.admin-gemma-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 0;
+  color: var(--stat-color);
+  font-size: 14px;
 }

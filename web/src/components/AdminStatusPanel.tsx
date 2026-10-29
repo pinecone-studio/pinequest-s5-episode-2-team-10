@@ -12,11 +12,12 @@ const REFRESH_MS = 30_000;
 
 type Health = "ok" | "warn" | "down" | "unknown";
 
-interface Row {
+interface Part {
   key: string;
+  icon: string;
   name: MessageKey;
   health: Health;
-  detail: string;
+  lines: string[]; // details, one per line
 }
 
 /** The web server's own link to the voice server (GET /api/transcribe), used for live transcription. */
@@ -43,6 +44,8 @@ async function webVoice(): Promise<WebVoice | null> {
     return null;
   }
 }
+
+const lines = (...parts: (string | false | null | undefined)[]) => parts.filter((p): p is string => Boolean(p));
 
 /** Admin "Status" tab: is every part the app needs up and working. Refreshes every 30 s. */
 export default function AdminStatusPanel() {
@@ -89,73 +92,76 @@ export default function AdminStatusPanel() {
   }, [load]);
 
   const ms = (n: number) => tr("statusMs", { ms: n });
-  const unknown = (key: string, name: MessageKey): Row => ({ key, name, health: "unknown", detail: tr("statusNeedsBackend") });
-  const rows: Row[] = [
-    { key: "web", name: "statusWeb", health: "ok", detail: tr("statusWebDetail") },
-    voice
+  const where = (w: "local" | "remote") => tr(w === "local" ? "statusLocal" : "statusRemote");
+  const parts: Part[] = [
+    { key: "web", icon: "◫", name: "statusWeb", health: "ok", lines: [tr("statusWebDetail")] },
+    voice?.ok
       ? {
           key: "web-voice",
+          icon: "⇄",
           name: "statusWebVoice",
-          health: voice.ok && voice.modelLoaded ? (voice.busy ? "warn" : "ok") : "down",
-          detail: voice.ok
-            ? [voice.modelLoaded ? tr("statusModelLoaded") : tr("statusModelNotLoaded"), voice.device, voice.busy ? tr("statusBusy") : ""]
-                .filter(Boolean)
-                .join(" · ")
-            : (voice.error ?? tr("statusUnreachable")),
+          health: voice.modelLoaded ? (voice.busy ? "warn" : "ok") : "down",
+          lines: lines(voice.modelLoaded ? tr("statusModelLoaded") : tr("statusModelNotLoaded"), voice.device, voice.busy && tr("statusBusy")),
         }
-      : { key: "web-voice", name: "statusWebVoice", health: "down", detail: tr("statusUnreachable") },
+      : { key: "web-voice", icon: "⇄", name: "statusWebVoice", health: checkedAt ? "down" : "unknown", lines: [voice?.error ?? tr("statusUnreachable")] },
   ];
   if (!status) {
-    rows.push(
-      { key: "backend", name: "statusBackend", health: checkedAt ? "down" : "unknown", detail: backendError ?? tr("loading") },
-      unknown("database", "statusDatabase"),
-      unknown("voice", "statusVoice"),
-      unknown("gemma", "statusGemma"),
+    const needsBackend = (key: string, icon: string, name: MessageKey): Part => ({ key, icon, name, health: "unknown", lines: [tr("statusNeedsBackend")] });
+    parts.push(
+      { key: "backend", icon: "◎", name: "statusBackend", health: checkedAt ? "down" : "unknown", lines: [backendError ?? tr("statusChecking")] },
+      needsBackend("database", "▤", "statusDatabase"),
+      needsBackend("voice", "◉", "statusVoice"),
+      needsBackend("gemma", "✦", "statusGemma"),
     );
   } else {
     const { backend, database, voice: v, ollama: o } = status;
-    rows.push(
+    const partOnGpu = o.gpu_share != null && o.gpu_share < 1;
+    parts.push(
       {
         key: "backend",
+        icon: "◎",
         name: "statusBackend",
         health: "ok",
-        detail: [backend.analysing ? tr("statusAnalysing") : tr("statusIdle"), tr("statusQueue", { n: backend.queue_length })].join(" · "),
+        lines: [backend.analysing ? tr("statusAnalysing") : tr("statusIdle"), tr("statusQueue", { n: backend.queue_length })],
       },
-      { key: "database", name: "statusDatabase", health: database.ok ? "ok" : "down", detail: database.ok ? ms(database.ms) : (database.error ?? "") },
+      {
+        key: "database",
+        icon: "▤",
+        name: "statusDatabase",
+        health: database.ok ? "ok" : "down",
+        lines: lines(database.ok ? ms(database.ms) : database.error),
+      },
       {
         key: "voice",
+        icon: "◉",
         name: "statusVoice",
         health: !v.ok ? (v.used ? "down" : "warn") : v.busy || !v.cuda ? "warn" : "ok",
-        detail: [
-          v.ok ? [v.model, v.device, v.cuda ? "" : tr("statusCpu"), v.busy ? tr("statusBusy") : ""].filter(Boolean).join(" · ") : (v.error ?? ""),
-          tr(v.where === "local" ? "statusLocal" : "statusRemote"),
-          v.used ? "" : tr("statusVoiceUnused"),
-          ms(v.ms),
-        ].filter(Boolean).join(" · "),
+        lines: v.ok
+          ? lines(v.device, !v.cuda && tr("statusCpu"), v.busy && tr("statusBusy"), `${where(v.where)} · ${ms(v.ms)}`, !v.used && tr("statusVoiceUnused"))
+          : lines(v.error, where(v.where), !v.used && tr("statusVoiceUnused")),
       },
       {
         key: "gemma",
+        icon: "✦",
         name: "statusGemma",
-        health: !o.ok ? "down" : o.gpu_share != null && o.gpu_share < 1 ? "warn" : "ok",
-        detail: [
-          o.ok
-            ? [
-                o.model,
-                o.loaded ? tr("statusModelLoaded") : tr("statusModelNotLoadedGemma"),
-                o.gpu_share != null && o.gpu_share < 1 ? tr("statusGpuShare", { pct: Math.round(o.gpu_share * 100) }) : "",
-                o.version ? `Ollama ${o.version}` : "",
-              ].filter(Boolean).join(" · ")
-            : (o.error ?? ""),
-          tr(o.where === "local" ? "statusLocal" : "statusRemote"),
-          ms(o.ms),
-        ].filter(Boolean).join(" · "),
+        health: !o.ok ? "down" : partOnGpu ? "warn" : "ok",
+        lines: o.ok
+          ? lines(
+              o.model,
+              o.loaded ? tr("statusModelLoaded") : tr("statusModelNotLoadedGemma"),
+              partOnGpu && tr("statusGpuShare", { pct: Math.round((o.gpu_share ?? 0) * 100) }),
+              `${where(o.where)} · ${ms(o.ms)}`,
+            )
+          : lines(o.error, where(o.where)),
       },
     );
   }
 
-  const down = rows.filter((r) => r.health === "down").length;
+  const down = parts.filter((p) => p.health === "down").length;
+  const warn = parts.filter((p) => p.health === "warn").length;
+  const overall: Health = !checkedAt ? "unknown" : down ? "down" : warn ? "warn" : "ok";
   return (
-    <section className="admin-status" aria-labelledby="admin-status-heading" aria-busy={checking}>
+    <section className="admin-overview admin-status" aria-labelledby="admin-status-heading" aria-busy={checking}>
       <div className="admin-overview-heading">
         <div>
           <p className="admin-eyebrow">{tr("statusEyebrow")}</p>
@@ -166,38 +172,57 @@ export default function AdminStatusPanel() {
         </button>
       </div>
 
-      <p className={`admin-status-summary ${down ? "is-down" : "is-ok"}`} role="status">
-        {checkedAt ? (down ? tr("statusSomeDown", { n: down }) : tr("statusAllOk")) : tr("statusChecking")}
-        {checkedAt && <span className="ui-muted"> · {tr("statusCheckedAt", { time: formatDate(checkedAt) })}</span>}
-      </p>
-
-      <ul className="admin-status-list">
-        {rows.map((row) => (
-          <li key={row.key} className={`admin-status-row is-${row.health}`}>
-            <span className="admin-status-dot" aria-hidden="true" />
-            <span className="admin-status-name">{tr(row.name)}</span>
-            <span className="admin-status-state">{tr(HEALTH_LABEL[row.health])}</span>
-            <span className="admin-status-detail">{row.detail}</span>
-          </li>
-        ))}
-      </ul>
-
-      <div className="admin-status-test">
+      <div className={`ui-card admin-status-summary is-${overall}`} role="status">
+        <span className="admin-status-light" aria-hidden="true" />
         <div>
-          <h3>{tr("statusGemmaTestTitle")}</h3>
-          <p className="ui-muted">{tr("statusGemmaTestHint")}</p>
+          <strong>
+            {!checkedAt
+              ? tr("statusChecking")
+              : down
+                ? tr("statusSomeDown", { n: down })
+                : warn
+                  ? tr("statusSomeWarn", { n: warn })
+                  : tr("statusAllOk")}
+          </strong>
+          {checkedAt && <span>{tr("statusCheckedAt", { time: formatDate(checkedAt) })} · {tr("statusAutoRefresh")}</span>}
         </div>
-        <button type="button" className="ui-btn" onClick={() => void load(true)} disabled={testing || checking || !status?.ollama.ok}>
-          {testing ? tr("statusGemmaTesting") : tr("statusGemmaTest")}
-        </button>
+      </div>
+
+      <div className="admin-stat-grid">
+        {parts.map((part) => (
+          <article key={part.key} className={`ui-card admin-stat-card admin-service is-${part.health}`}>
+            <div className="admin-service-head">
+              <span className="admin-stat-icon" aria-hidden="true">{part.icon}</span>
+              <span className="admin-status-light" aria-hidden="true" />
+            </div>
+            <p>{tr(part.name)}</p>
+            <strong>{tr(HEALTH_LABEL[part.health])}</strong>
+            {part.lines.map((line, i) => (
+              <span key={i} className="admin-stat-foot">{line}</span>
+            ))}
+          </article>
+        ))}
+      </div>
+
+      <article className={`ui-card admin-activity-card admin-gemma-test${gemmaTest ? ` is-${gemmaTest.ok ? "ok" : "down"}` : ""}`}>
+        <div className="admin-activity-heading">
+          <div>
+            <h3 className="ui-section">{tr("statusGemmaTestTitle")}</h3>
+            <p className="ui-help">{tr("statusGemmaTestHint")}</p>
+          </div>
+          <button type="button" className="ui-btn" onClick={() => void load(true)} disabled={testing || checking || !status?.ollama.ok}>
+            {testing ? tr("statusGemmaTesting") : tr("statusGemmaTest")}
+          </button>
+        </div>
         {gemmaTest && (
-          <p className={`admin-status-summary ${gemmaTest.ok ? "is-ok" : "is-down"}`} role="status">
+          <p className="admin-gemma-result" role="status">
+            <span className="admin-status-light" aria-hidden="true" />
             {gemmaTest.ok
               ? tr("statusGemmaAnswered", { s: (gemmaTest.ms / 1000).toFixed(1), rate: gemmaTest.tokens_per_s ?? "–" })
               : tr("statusGemmaFailed", { error: gemmaTest.error ?? "" })}
           </p>
         )}
-      </div>
+      </article>
     </section>
   );
 }
