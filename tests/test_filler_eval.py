@@ -2,7 +2,7 @@
 
 import pytest
 
-from training.fillers import classifier, evaluate, labels, sheet, silver
+from training.fillers import classifier, evaluate, labels, seed, sheet, silver
 
 
 # ---- Positions --------------------------------------------------------------
@@ -83,6 +83,33 @@ def test_silver_rows_take_the_backend_marks():
     rows = silver.label_pitch("rules", "p1", "Ээ, бид апп хийсэн. Нөгөө оюутнууд ашиглана. Аан, баярлалаа.")
     assert [r["source"] for r in rows] == ["rules"] * 3
     assert [r["filler_idx"] for r in rows] == [[0], [0], [0]]
+
+
+def test_silver_drops_nogoo_tal_meaning_the_other_side():
+    assert silver.not_filler(["нөгөө", "талаас", "бид"], 0)
+    assert not silver.not_filler(["нөгөө", "бид", "явна"], 0)
+    assert not silver.not_filler(["бид", "нөгөө"], 1)
+
+
+def test_seed_brackets_mark_fillers_and_real_words_stay_unmarked():
+    words, marked = seed.parse_line("[Ээ] бид эхлээд, тэгээд [юу гэдэг юм] явна.")
+    assert words == ["ээ", "бид", "эхлээд", "тэгээд", "юу", "гэдэг", "юм", "явна"]
+    assert marked == [0, 4, 5, 6]  # the real "тэгээд" (and then) is not marked
+
+
+def test_seed_variants_keep_real_words_and_mark_only_inserted_fillers():
+    import random
+    words, marked = seed.parse_line("Бид эхлээд, тэгээд [ээ] явна.")
+    out, out_marked = seed.variant(words, marked, random.Random(1))
+    assert [w for i, w in enumerate(out) if i not in out_marked] == ["бид", "эхлээд", "тэгээд", "явна"]
+    assert out_marked
+
+
+def test_seed_file_parses_and_pitches_stay_whole():
+    rows = seed.build(variants=2, seed=1)
+    assert rows and all(r["pitch"].startswith("seed-") for r in rows)
+    for r in rows:
+        assert all(0 <= i < len(r["tokens"]) for i in r["filler_idx"])
 
 
 def test_classifier_split_keeps_pitches_whole_and_prefers_checked():

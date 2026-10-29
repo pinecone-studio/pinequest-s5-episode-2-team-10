@@ -101,7 +101,7 @@ def summarize(occurrences: list[dict], sentences: list[dict], word_count: int, m
 
     total = len(occurrences)
     return {
-        "method": method,  # "llm": confirmed in context by the model; "list": word list only
+        "method": method,  # "llm": confirmed by the feedback model; "model": the filler classifier; "list": word list only
         "total": total,
         "per_100": round(total / word_count * 100, 2) if word_count else None,
         "words": words,

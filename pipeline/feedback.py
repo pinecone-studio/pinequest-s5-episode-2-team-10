@@ -18,7 +18,7 @@ from typing import Literal, Optional
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
-from . import config, fillers, points
+from . import config, filler_model, fillers, points
 
 Backend = Literal["claude", "gemma4-ft", "gemma4-base", "rules"]
 BACKENDS: tuple[str, ...] = ("claude", "gemma4-ft", "gemma4-base", "rules")
@@ -185,7 +185,13 @@ def generate(backend: str, data: dict) -> dict:
         fb = Feedback.model_validate(raw)
     except Exception as e:
         raise FeedbackError("The feedback model returned output that does not match the schema.") from e
-    return _sanitize(fb.model_dump(), data, filler_method="list" if backend == "rules" else "llm")
+    fb = fb.model_dump()
+    filler_method = "list" if backend == "rules" else "llm"
+    # The fine-tuned filler classifier, when configured, decides the fillers; otherwise the model's list stands.
+    found = filler_model.find(data["transcript"])
+    if found is not None:
+        fb["filler_occurrences"], filler_method = found, "model"
+    return _sanitize(fb, data, filler_method=filler_method, points_method="words" if backend == "rules" else "llm")
 
 
 # ---- Backends --------------------------------------------------------------
@@ -384,7 +390,7 @@ def _rules_practice_tasks(recommendations: list[dict]) -> list[dict]:
 # ---- Checks on model output ------------------------------------------------
 
 
-def _sanitize(fb: dict, data: dict, filler_method: str = "llm") -> dict:
+def _sanitize(fb: dict, data: dict, filler_method: str = "llm", points_method: str = "llm") -> dict:
     starts = [s["start"] for s in data["transcript"]]
     slide_numbers = {s["number"] for s in data["slides"]}
     criteria = data["criteria"]
@@ -430,7 +436,7 @@ def _sanitize(fb: dict, data: dict, filler_method: str = "llm") -> dict:
     # Main points: quotes are checked against the transcript and coverage is computed in code.
     fb["main_points"] = points.verify(
         fb["point_checks"], [p["text"] for p in data["pitch"]["key_points"]], sentences,
-        fb["off_topic"], fb["idea_comment"], "words" if filler_method == "list" else "llm",
+        fb["off_topic"], fb["idea_comment"], points_method,
         idea=data["pitch"]["idea"] or "",
     )
     return fb
