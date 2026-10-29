@@ -1,9 +1,12 @@
 """Run the whole analysis for one session: transcribe, measure, align slides, feedback, score."""
 
+import logging
 from pathlib import Path
 from typing import Callable
 
-from . import alignment, asr, feedback, metrics, scoring, segments, text_checks
+from . import alignment, asr, delivery, feedback, metrics, scoring, segments, text_checks
+
+log = logging.getLogger("pitchcoach")
 
 Stage = Callable[[str], None]
 
@@ -44,6 +47,17 @@ def analyze(
     data = feedback.build_input(session, sentences, measured, wording, slides, aligned)
     fb = feedback.generate(backend, data)
 
+    # Delivery checks by code (pace over time, long silences, filler bursts, fading voice), added
+    # after the model's advice. They never fail the analysis: on an error they are skipped.
+    delivery_facts: dict = {}
+    try:
+        delivery_recs, delivery_facts = delivery.check(
+            words, sentences, delivery.word_levels(wav, words), fb["filler_occurrences"]
+        )
+        fb["recommendations"] = fb["recommendations"] + delivery_recs
+    except Exception as e:  # noqa: BLE001
+        log.warning("Delivery checks skipped: %s", type(e).__name__)
+
     on_stage("scoring")
     # Score fillers on the occurrences confirmed in context, not the raw word-list matches.
     # The list numbers stay alongside for evaluation.
@@ -72,5 +86,6 @@ def analyze(
         "sentences": sentences,
         "asr_backend": asr_backend,
         "notes": notes,
+        "delivery": delivery_facts,
         "prompt_version": feedback.PROMPT_VERSION,
     }
