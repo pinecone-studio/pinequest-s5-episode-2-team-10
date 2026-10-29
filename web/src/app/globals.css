@@ -7490,3 +7490,112 @@ img.present-slide {
     width: 100%;
   }
 }
+
+/* Progress by take (TakeHistory) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.take-history {
+  margin-top: 16px;
+}
+
+.take-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.take-table-wrap {
+  overflow-x: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.take-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.take-table th,
+.take-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.take-table th[scope="row"],
+.take-table thead th:first-child {
+  text-align: left;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.take-table thead th {
+  font-weight: 500;
+}
+
+.take-table thead th small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.take-table thead th.is-latest {
+  color: var(--text-primary);
+}
+
+.take-table td.is-better .take-mark,
+.take-since li.is-better .take-mark {
+  color: var(--positive);
+}
+
+.take-table td.is-worse .take-mark,
+.take-since li.is-worse .take-mark {
+  color: var(--negative);
+}
+
+.take-since {
+  margin-top: 14px;
+}
+
+.take-since h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.take-since ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.take-since li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.take-since .take-mark {
+  flex: none;
+  width: 1em;
+  text-align: center;
+  color: var(--muted);
+}
