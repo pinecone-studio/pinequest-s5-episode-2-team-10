@@ -34,7 +34,7 @@ export default function AnalysisProgress({ step }: { step: AnalysisStep }) {
   return (
     <div className="analysis-progress" role="status" aria-live="polite">
       <div className="analysis-progress-head">
-        <span className="analysis-progress-dot" aria-hidden="true" />
+        <span className="analysis-spinner" aria-hidden="true" />
         <span className="analysis-progress-label">
           {tr(STEPS[current].label)}
           <span className="sr-only"> ({tr("stageCount", { n: current + 1, total: STEPS.length })})</span>

@@ -8214,13 +8214,19 @@ button.admin-service:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-.analysis-progress-dot {
+/* A small spinning ring next to the current step */
+.analysis-spinner {
   flex: none;
-  width: 8px;
-  height: 8px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, var(--brand) 25%, transparent);
+  border-top-color: var(--brand);
   border-radius: 50%;
-  background: var(--brand);
-  animation: analysis-pulse 1.2s ease-in-out infinite;
+  animation: analysis-spin 0.8s linear infinite;
+}
+
+@keyframes analysis-spin {
+  to { transform: rotate(360deg); }
 }
 
 .analysis-progress-bar {
@@ -8249,8 +8255,9 @@ button.admin-service:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .analysis-progress-dot,
   .analysis-progress-bar span.is-current { animation: none; }
+  /* No spinning: a slow fade still shows it's working. */
+  .analysis-spinner { animation: analysis-pulse 2s ease-in-out infinite; }
 }
 
 /* A part of the analysis fell back (the GPU PC couldn't be used) */
