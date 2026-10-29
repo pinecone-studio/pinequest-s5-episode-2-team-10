@@ -7,6 +7,7 @@ import { useLang } from "@/lib/i18nClient";
 import type { MessageKey } from "@/lib/i18n";
 import { analysisProjectId } from "@/lib/folderStore";
 import { useAccount } from "@/lib/session";
+import PracticeGoal from "./PracticeGoal";
 import { cellTrend, compareTakes, MAX_TAKES, orderTakes, takeFrom, type Take, type Trend } from "@/lib/takes";
 
 type Metric = "points" | "fillers" | "wpm" | "pauses" | "volume";
@@ -153,6 +154,8 @@ export default function TakeHistory({ folderId, version }: { folderId: string; v
           )}
         </div>
       )}
+
+      {last && <PracticeGoal take={last} />}
     </section>
   );
 }

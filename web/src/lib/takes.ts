@@ -17,6 +17,8 @@ export interface Take {
   wpm: number | null;
   longPausesPerMin: number | null;
   endVolumeDropDb: number | null;
+  numberIssues: { onSlide: string; said: string | null }[]; // slide figures said differently
+  fillerWords: string[]; // the fillers this speaker used, most frequent first
 }
 
 export type Trend = "better" | "worse" | "same" | "info";
@@ -57,6 +59,10 @@ export function takeFrom(attempt: Attempt, report: Report): Take {
     wpm: m.wpm,
     longPausesPerMin: m.long_pauses_per_min,
     endVolumeDropDb: m.end_volume_drop_db,
+    numberIssues: (report.feedback.number_checks ?? [])
+      .filter((n) => n.inconsistent)
+      .map((n) => ({ onSlide: n.on_slide, said: n.said })),
+    fillerWords: [...(report.feedback.fillers?.words ?? [])].sort((a, b) => b.count - a.count).map((w) => w.word),
   };
 }
 
