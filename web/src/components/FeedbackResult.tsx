@@ -54,6 +54,9 @@ export default function FeedbackResult({
   const shown = Math.min(readingFix ?? index, Math.max(total - 1, 0));
   const fix = improvements[shown];
   const openPanel: Panel | null = reading?.startsWith("s") ? "strengths" : panel;
+  // While the coach voice reads, show only the part it's reading (the summary, the strengths, or one
+  // fix); everything comes back when it stops.
+  const focus = reading === "summary" ? "summary" : reading?.startsWith("s") ? "strengths" : reading?.startsWith("i") ? "fix" : null;
 
   const pointsDone = mainPoints ? mainPoints.points.filter((p) => p.verified && p.status === "covered").length : 0;
   const pointsTotal = mainPoints?.points.length ?? 0;
@@ -74,10 +77,11 @@ export default function FeedbackResult({
   const own = fix?.quote ? hearOwn(fix.quote) : null;
 
   return (
-    <div className="fb">
+    <div className={focus ? "fb is-reading" : "fb"}>
+      {(!focus || focus === "summary") && (
       <div className="fb-head">
         <p className={reading === "summary" ? "fb-summary desk-reading" : "fb-summary"}>{summary}</p>
-        {(pointsTotal > 0 || strengths.length > 0 || offTopic.length > 0) && (
+        {!focus && (pointsTotal > 0 || strengths.length > 0 || offTopic.length > 0) && (
           <div className="fb-badges">
             {pointsTotal > 0 && (
               <button type="button" className="fb-badge" aria-expanded={openPanel === "points"} aria-controls={`${id}-points`} onClick={() => toggle("points")}>
@@ -97,13 +101,14 @@ export default function FeedbackResult({
           </div>
         )}
       </div>
+      )}
 
-      {openPanel === "points" && mainPoints && (
+      {!focus && openPanel === "points" && mainPoints && (
         <div id={`${id}-points`} className="fb-panel">
           <PitchPointsResult result={mainPoints} slides={pointSlides} />
         </div>
       )}
-      {openPanel === "strengths" && (
+      {(focus === "strengths" || (!focus && openPanel === "strengths")) && (
         <ul id={`${id}-strengths`} className="fb-panel fb-strengths">
           {strengths.map((s, i) => {
             const mine = s.quote ? hearOwn(s.quote) : null;
@@ -117,7 +122,7 @@ export default function FeedbackResult({
           })}
         </ul>
       )}
-      {openPanel === "offTopic" && (
+      {!focus && openPanel === "offTopic" && (
         <ul id={`${id}-offtopic`} className="fb-panel fb-offtopic">
           {offTopic.map((o) => (
             <li key={o.sentenceId}>
@@ -128,7 +133,7 @@ export default function FeedbackResult({
         </ul>
       )}
 
-      {fix ? (
+      {(!focus || focus === "fix") && (fix ? (
         <section
           className={reading === `i${shown}` ? "fb-card desk-reading" : "fb-card"}
           aria-labelledby={`${id}-title`}
@@ -216,7 +221,7 @@ export default function FeedbackResult({
         <section className="fb-card fb-card-empty">
           <p>{writing ? tr("writingFixes") : tr("noFixes")}</p>
         </section>
-      )}
+      ))}
 
       {!writing && (summary || total > 0) && (
         <div className="fb-listen">
