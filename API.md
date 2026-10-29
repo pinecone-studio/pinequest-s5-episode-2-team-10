@@ -119,9 +119,11 @@ A payment is credited only when QPay reports `PAID` for at least the invoice amo
   "transcript": { "text": "…", "sentences": [{ "text": "…", "start": 0.0, "end": 2.8 }] },
   "script": "…", "slides_filename": "deck.pptx",
   "backend": "claude", "asr_backend": "whisper", "prompt_version": "v2.3-practice-tasks",
-  "notes": [], "created_at": "2026-10-22T03:51:46+00:00"
+  "notes": [], "fallbacks": [], "created_at": "2026-10-22T03:51:46+00:00"
 }
 ```
+
+`fallbacks` lists the parts that couldn't use the GPU PC and what stood in: `{part: "speech_to_text", used: "duudlaga"}` (voice server unreachable, `PITCH_ASR_FALLBACK`) and `{part: "feedback", used: "claude" | "rules", asked: "gemma4-base"}` (Gemma unreachable, `PITCH_FEEDBACK_FALLBACK`). `backend` is the model that actually wrote the feedback. Empty when nothing fell back.
 
 Category scores are `null` when there is no data (for example no slides); `overall` is then reweighted over the categories that exist, and `categories_used` says how many.
 

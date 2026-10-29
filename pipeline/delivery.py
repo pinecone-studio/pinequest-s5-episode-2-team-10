@@ -24,7 +24,7 @@ RUSH_RATIO = 1.3  # a window this much faster than the speaker's usual pace…
 RUSH_MIN_GAIN_WPM = 25  # …and at least this many words/min faster counts as rushed
 END_SHARE = 0.25  # "the end" is the last quarter of the speaking time
 END_SPEEDUP_RATIO = 1.25
-MIN_END_CHECK_S = 60.0
+MIN_END_CHECK_S = 40.0  # short practice pitches (40–60 s) can rush their ending too
 
 LONG_PAUSE_S = 3.0  # a silence this long mid-pitch usually means a lost thread
 
@@ -46,8 +46,9 @@ def clock(seconds: float) -> str:
 
 
 def _rec(problem: str, action: str, start_s: float, impact: str = "medium") -> dict:
+    # "source": measured by code, not written by the model (the page lists these as things to work on).
     return {"area": "delivery", "problem": problem, "start_s": round(start_s, 2), "slide": None, "why": "",
-            "action": action, "example_sentence": "", "impact": impact}
+            "action": action, "example_sentence": "", "impact": impact, "source": "measured"}
 
 
 def _pace(words: list[Word], start: float, end: float) -> float:
