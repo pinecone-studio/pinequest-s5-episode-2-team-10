@@ -7498,10 +7498,6 @@ img.present-slide {
 .admin-status .is-down { --stat-color: #e5636f; }
 .admin-status .is-checking { --stat-color: #8a8a93; }
 
-.admin-status-build {
-  margin: 6px 0 0;
-}
-
 .admin-status-views {
   display: inline-flex;
   justify-self: start;

@@ -263,7 +263,6 @@ export default function AdminStatusPanel() {
         <div>
           <p className="admin-eyebrow">{tr("statusEyebrow")}</p>
           <h2 id="admin-status-heading" className="ui-section">{tr("statusTitle")}</h2>
-          {host && <p className="ui-help admin-status-build">{tr(local ? "statusViewingLocal" : "statusViewingDeployed", { host })}</p>}
         </div>
         <button
           type="button"
