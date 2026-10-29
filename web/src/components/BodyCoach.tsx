@@ -465,30 +465,13 @@ export default function BodyCoach() {
 }
 
 /**
- * The pitch page's body-language card. Mounting it turns the camera on (the preview shows);
- * `speaking` starts measuring when the speaker presses Speak and shows the summary when they stop.
- * Unmounting (the toggle turned off) turns the camera off.
+ * The pitch page's body-language card: live meters while the camera window watches, and the take's
+ * summary after the speaker stops. The camera, its preview and the lines are in the camera window
+ * over the slide (PoseCoach), shared with the slide gestures.
  */
-export function BodyCoachPanel({ speaking }: { speaking: boolean }) {
+export function BodyCoachPanel({ live, summary, speaking }: { live: Live | null; summary: Summary | null; speaking: boolean }) {
   const { lang } = useLang();
   const tx = TEXT[lang];
-  const tracker = useBodyTracker({ denied: tx.denied, loadFail: tx.loadFail });
-  const { phase, error, live, summary, start, record, finish } = tracker;
-
-  // Camera on when the card appears (after mount, so the video element exists).
-  useEffect(() => {
-    const first = window.setTimeout(() => void start(), 0);
-    return () => window.clearTimeout(first);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the card opens
-  }, []);
-
-  // Follow the Speak button: measure while speaking, summarize when the speaker stops.
-  useEffect(() => {
-    if (speaking && (phase === "live" || phase === "done")) queueMicrotask(record);
-    else if (!speaking && phase === "recording") queueMicrotask(finish);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- record/finish only change state
-  }, [speaking, phase]);
-
   return (
     <section className="room-card body-panel" aria-label={tx.panelTitle}>
       <div className="section-head">
@@ -496,13 +479,10 @@ export function BodyCoachPanel({ speaking }: { speaking: boolean }) {
           <h2>{tx.panelTitle}</h2>
           <p className="desk-sub">{tx.panelHint}</p>
         </div>
+        {speaking && <span className="body-panel-rec">● {tx.recording}</span>}
       </div>
-      <div className="body-panel-grid">
-        <Preview tracker={tracker} tx={tx} />
-        <div className="body-panel-side">
-          {live ? <LiveMeters live={live} tx={tx} /> : <p className="text-sm opacity-70">{phase === "loading" ? tx.loading : ""}</p>}
-          {error && <p className="text-sm text-red-400">{error}</p>}
-        </div>
+      <div className="body-panel-live">
+        {live ? <LiveMeters live={live} tx={tx} /> : <p className="text-sm opacity-70">{tx.loading}</p>}
       </div>
       {summary && (
         <div className="body-panel-summary">

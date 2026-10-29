@@ -906,12 +906,46 @@ body {
   pointer-events: none;
 }
 
-.pose-coach-video {
+/* The preview and the lines over it: the same box, both mirrored */
+.pose-coach.is-wide {
+  max-width: min(300px, 45%);
+}
+
+.pose-coach-view {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.pose-coach-view[hidden] {
+  display: none;
+}
+
+.pose-coach-video,
+.pose-coach-lines {
+  display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
-  border-radius: 6px;
   object-fit: cover;
   transform: scaleX(-1); /* a mirror, so moving left looks like moving left */
+}
+
+.pose-coach-lines {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.pose-coach-rec {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.9);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .pose-coach-count,
@@ -8325,4 +8359,17 @@ button.admin-service:focus-visible {
   .body-panel-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Body language card: the live meters, and the take's summary after Stop */
+.body-panel-live {
+  margin-top: 12px;
+  max-width: 420px;
+}
+
+.body-panel-rec {
+  flex: none;
+  color: var(--negative);
+  font-size: 12px;
+  font-weight: 600;
 }

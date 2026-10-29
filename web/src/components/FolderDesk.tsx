@@ -52,7 +52,8 @@ import AnalysisProgress, { type AnalysisStep } from "./AnalysisProgress";
 import SectionToggle, { useHidden } from "./SectionToggle";
 import { PitchPointsEditor, pointsToSend, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
-import PoseCoach, { type CoachState } from "./PoseCoach";
+import PoseCoach, { type BodyLive, type CoachState } from "./PoseCoach";
+import type { Summary } from "@/lib/bodySignals";
 import type { Side } from "@/lib/poseCoach";
 
 // The backend's recommendation categories, as shown on a fix.
@@ -501,6 +502,8 @@ function FolderRoom({
   const [cameraOn, setCameraOn] = useState(false);
   // Body language and eye contact: on shows the camera preview; Speak then measures the take.
   const [bodyOn, setBodyOn] = useState(false);
+  const [bodyLive, setBodyLive] = useState<BodyLive | null>(null);
+  const [bodySummary, setBodySummary] = useState<Summary | null>(null);
   const [coachState, setCoachState] = useState<CoachState | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false); // the full speech text in a dialog
   const transcriptRef = useRef<HTMLParagraphElement | null>(null);
@@ -1203,7 +1206,15 @@ function FolderRoom({
   }
   function bodyButton() {
     return (
-      <button type="button" className="room-glass-btn" aria-pressed={bodyOn} onClick={() => setBodyOn((on) => !on)}>
+      <button
+        type="button"
+        className="room-glass-btn"
+        aria-pressed={bodyOn}
+        onClick={() => {
+          if (!bodyOn) setBodySummary(null); // a fresh start each time it's turned on
+          setBodyOn((on) => !on);
+        }}
+      >
         <BodyGlyph />
         {bodyOn ? tr("bodyClose") : tr("bodyOpen")}
       </button>
@@ -1382,8 +1393,19 @@ function FolderRoom({
                 className={`desk-slide-frame${full && anySlide ? (showFigma ? " desk-full desk-full-figma" : " desk-full") : ""}`}
                 data-coach={coachState ?? undefined}
               >
-                {cameraOn && (
-                  <PoseCoach slide={coach.side} slideId={page} onSwipe={swipeSlide} onState={setCoachState} />
+                {/* One camera window for both: gestures (Camera) and body language, lines drawn over it. */}
+                {(cameraOn || bodyOn) && (
+                  <PoseCoach
+                    slide={coach.side}
+                    slideId={page}
+                    onSwipe={swipeSlide}
+                    onState={setCoachState}
+                    gestures={cameraOn}
+                    body={bodyOn}
+                    speaking={listening}
+                    onBodyLive={setBodyLive}
+                    onBodySummary={setBodySummary}
+                  />
                 )}
                 {showFigma ? (
                   <div className="desk-slide desk-figma">
@@ -1609,7 +1631,7 @@ function FolderRoom({
           </aside>
 
           <div className="desk-below">
-            {bodyOn && <BodyCoachPanel speaking={listening} />}
+            {bodyOn && <BodyCoachPanel live={bodyLive} summary={bodySummary} speaking={listening} />}
             <PitchPointsEditor
               idea={folder.idea ?? ""}
               points={folder.keyPoints ?? []}
