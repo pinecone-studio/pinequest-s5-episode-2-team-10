@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { isLocalHost } from "@/lib/build";
 import { errorMessage, formatDate } from "@/lib/format";
 import { useLang } from "@/lib/i18nClient";
 import type { MessageKey } from "@/lib/i18n";
@@ -35,17 +36,6 @@ interface WebVoice {
 }
 
 const HEALTH_LABEL: Record<Health, MessageKey> = { ok: "statusOk", warn: "statusWarn", down: "statusDown", checking: "statusChecking" };
-
-/** This page runs from a local build: localhost, a LAN address or a .local name. */
-function isLocalHost(host: string): boolean {
-  return (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "[::1]" ||
-    host.endsWith(".local") ||
-    /^(10|192\.168|172\.(1[6-9]|2\d|3[01]))\./.test(host)
-  );
-}
 
 async function webVoice(): Promise<WebVoice | null> {
   try {
@@ -96,7 +86,9 @@ function Summary({ parts, checkedAt, note }: { parts: Part[]; checkedAt: string 
 /** Admin "Status" tab: is every part the app needs up and working, here and on the deployed site. */
 export default function AdminStatusPanel() {
   const { lang, tr } = useLang();
-  const [host, setHost] = useState<string | null>(null); // read after mount, so server and browser render the same
+  // Read after mount, so server and browser render the same. `host` has the port (shown); `hostname` doesn't (checked).
+  const [page, setPage] = useState<{ host: string; hostname: string } | null>(null);
+  const host = page?.host ?? null;
   const [view, setView] = useState<View>("this");
 
   const [status, setStatus] = useState<AdminStatus | null>(null);
@@ -111,7 +103,7 @@ export default function AdminStatusPanel() {
   const [deployedError, setDeployedError] = useState<string | null>(null);
   const [deployedAt, setDeployedAt] = useState<string | null>(null);
 
-  const local = host != null && isLocalHost(host);
+  const local = page != null && isLocalHost(page.hostname);
 
   const load = useCallback(async (testGemma = false) => {
     if (testGemma) setTesting(true);
@@ -151,7 +143,7 @@ export default function AdminStatusPanel() {
   }, [lang]);
 
   useEffect(() => {
-    const first = window.setTimeout(() => setHost(window.location.host), 0);
+    const first = window.setTimeout(() => setPage({ host: window.location.host, hostname: window.location.hostname }), 0);
     return () => window.clearTimeout(first);
   }, []);
 
