@@ -32,6 +32,36 @@ export function nextGoal(take: Take): Goal {
   return { kind: "ready" };
 }
 
+export interface Focus {
+  kind: "point" | "number" | "delivery" | "fillers" | "pauses";
+  key: MessageKey;
+  vars: Record<string, string | number>;
+  hint?: string; // what to do, when the analysis said (delivery problems)
+}
+
+/**
+ * Everything worth working on in a take, most important first: missed main points, partly made
+ * ones, slide figures said differently, delivery problems found by code, then fillers and long
+ * pauses. The general long-pause rule is left out when the delivery checks already ran (they name
+ * the silences themselves).
+ */
+export function workOn(take: Take): Focus[] {
+  const out: Focus[] = [];
+  for (const p of take.points) if (p.status === "missed") out.push({ kind: "point", key: "focusPointMissed", vars: { point: p.text } });
+  for (const p of take.points) if (p.status === "partial") out.push({ kind: "point", key: "focusPointPartial", vars: { point: p.text } });
+  for (const n of take.numberIssues) {
+    out.push({ kind: "number", key: n.said ? "focusNumberSaid" : "focusNumber", vars: { slide: n.onSlide, said: n.said ?? "" } });
+  }
+  for (const d of take.delivery) out.push({ kind: "delivery", key: "focusDelivery", vars: { problem: d.problem }, hint: d.action || undefined });
+  if (take.fillersPer100 != null && take.fillersPer100 > FILLER_GOAL) {
+    out.push({ kind: "fillers", key: "focusFillers", vars: { per100: take.fillersPer100.toFixed(1), limit: FILLER_GOAL } });
+  }
+  if (!take.delivery.length && take.longPausesPerMin != null && take.longPausesPerMin > PAUSE_GOAL) {
+    out.push({ kind: "pauses", key: "focusPauses", vars: { perMin: take.longPausesPerMin.toFixed(1) } });
+  }
+  return out;
+}
+
 /** Goals a short drill can check; the others need a full take. */
 export const canDrill = (goal: Goal): goal is Extract<Goal, { kind: "point" | "fillers" | "pauses" }> =>
   goal.kind === "point" || goal.kind === "pauses" || (goal.kind === "fillers" && goal.words.length > 0);

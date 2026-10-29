@@ -47,6 +47,7 @@ import Modal from "./Modal";
 import type { Improvement, OffTopic, Strength } from "./ImprovementList";
 import FeedbackResult from "./FeedbackResult";
 import TakeHistory from "./TakeHistory";
+import SectionToggle, { useHidden } from "./SectionToggle";
 import { PitchPointsEditor, pointsToSend, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
 import PoseCoach, { type CoachState } from "./PoseCoach";
@@ -502,6 +503,7 @@ function FolderRoom({
   const previewRef = useRef<HTMLParagraphElement | null>(null);
   const [previewCut, setPreviewCut] = useState(false); // the preview is taller than the speech card
   const [probing, setProbing] = useState(false);
+  const [audiosHidden, toggleAudios] = useHidden("pitch-audio");
   const [takesVersion, setTakesVersion] = useState(0); // bumped after each analysis, so the takes card reloads
   const [probeNote, setProbeNote] = useState<string | null>(null);
   const [resultOpen, setResultOpen] = useState(false); // the analysis dialog
@@ -1036,7 +1038,7 @@ function FolderRoom({
   /** The coach voice reads the whole analysis, with the speaker's own words where they fit. */
   function readResult(): Promise<void> {
     if (!probeResult) return Promise.resolve();
-    return readAloud(feedbackSteps(probeResult, lang, ownClip), setReading);
+    return readAloud(feedbackSteps(probeResult, ownClip), setReading);
   }
 
   async function sendToModel() {
@@ -1578,6 +1580,8 @@ function FolderRoom({
             <section className="folder-audios room-card" aria-labelledby={`${folder.id}-audios`}>
               <div className="folder-audios-bar">
                 <h2 id={`${folder.id}-audios`}>{tr("audio")}</h2>
+                <span className="section-head-actions">
+                {!audiosHidden && (
                 <label
                   className="room-glass-btn"
                   onClick={(event) => {
@@ -1598,7 +1602,11 @@ function FolderRoom({
                     }}
                   />
                 </label>
+                )}
+                <SectionToggle hidden={audiosHidden} onToggle={toggleAudios} controls={`${folder.id}-audios-body`} label={tr("audio")} />
+                </span>
               </div>
+              <div id={`${folder.id}-audios-body`} hidden={audiosHidden}>
               {(folder.audios ?? []).length === 0 ? (
                 <p className="folder-audio-empty">{tr("noAudioYet")}</p>
               ) : (
@@ -1614,6 +1622,7 @@ function FolderRoom({
                   ))}
                 </ul>
               )}
+              </div>
             </section>
 
             <TakeHistory folderId={folder.id} version={takesVersion} />

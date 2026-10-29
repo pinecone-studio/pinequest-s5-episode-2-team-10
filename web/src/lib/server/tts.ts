@@ -1,6 +1,6 @@
 // Server only: the coach voice. PITCH_TTS picks the engine:
-//   auto (default): Azure's Mongolian neural voice when AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are
-//     set, otherwise ElevenLabs;
+//   auto (default): ElevenLabs when ELEVENLABS_API_KEY is set, otherwise Azure's Mongolian neural
+//     voice (AZURE_SPEECH_KEY and AZURE_SPEECH_REGION);
 //   azure | elevenlabs: that engine. ElevenLabs uses eleven_v4_turbo (Mongolian, fastest)
 //     unless PITCH_ELEVENLABS_MODEL picks another model.
 // Both are billed services, so reading stops for the day after PITCH_TTS_PAID_DAILY_CHARS
@@ -60,6 +60,7 @@ export const TTS_ENGINES: TtsEngine[] = ["azure", "elevenlabs"];
 export function ttsBackend(): TtsEngine {
   const chosen = setting("PITCH_TTS") as TtsEngine | "auto" | undefined;
   if (chosen && TTS_ENGINES.includes(chosen as TtsEngine)) return chosen as TtsEngine;
+  if (setting("ELEVENLABS_API_KEY")) return "elevenlabs";
   return setting("AZURE_SPEECH_KEY") && setting("AZURE_SPEECH_REGION") ? "azure" : "elevenlabs";
 }
 

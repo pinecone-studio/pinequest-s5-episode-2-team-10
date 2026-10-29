@@ -7,7 +7,7 @@ import type { Take } from "../web/src/lib/takes.ts";
 
 const base: Take = {
   id: "t", createdAt: "2026-10-28T10:00:00Z", audio: null, points: [], covered: 0, total: 0,
-  fillersPer100: 1, wpm: 130, longPausesPerMin: 0.2, endVolumeDropDb: 2, numberIssues: [], fillerWords: ["аан", "ээ"],
+  fillersPer100: 1, wpm: 130, longPausesPerMin: 0.2, endVolumeDropDb: 2, numberIssues: [], fillerWords: ["аан", "ээ"], delivery: [],
 };
 const take = (over: Partial<Take>): Take => ({ ...base, ...over });
 
@@ -62,3 +62,25 @@ assert.equal(paused.verdict, "fail");
 assert.equal(paused.vars.seconds, "4.1");
 
 console.log("practice goal checks passed");
+
+// "Work on" for one take: missed points first, then partial, numbers, delivery, fillers.
+import { workOn } from "../web/src/lib/practiceGoal.ts";
+const busyTake = take({
+  points: [
+    { text: "Хөрөнгө оруулалт", status: "partial" },
+    { text: "Асуудал", status: "missed" },
+    { text: "Шийдэл", status: "covered" },
+  ],
+  numberIssues: [{ onSlide: "40%", said: "30 хувь" }],
+  delivery: [{ problem: "Төгсгөлдөө яарсан", action: "Удаан хэл." }],
+  fillersPer100: 6,
+  longPausesPerMin: 3,
+});
+assert.deepEqual(workOn(busyTake).map((f) => f.kind), ["point", "point", "number", "delivery", "fillers"]);
+assert.equal(workOn(busyTake)[0].vars.point, "Асуудал"); // missed before partial
+assert.equal(workOn(busyTake)[3].hint, "Удаан хэл.");
+// The general long-pause rule only applies when the delivery checks didn't run.
+assert.deepEqual(workOn(take({ longPausesPerMin: 3 })).map((f) => f.kind), ["pauses"]);
+assert.deepEqual(workOn(take({})), []);
+
+console.log("work-on checks passed");

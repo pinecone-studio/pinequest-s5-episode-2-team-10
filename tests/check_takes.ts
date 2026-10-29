@@ -18,6 +18,7 @@ function take(over: Partial<Take> & { id: string }): Take {
     endVolumeDropDb: 3,
     numberIssues: [],
     fillerWords: [],
+    delivery: [],
     ...over,
   };
 }

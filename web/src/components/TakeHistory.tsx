@@ -8,6 +8,8 @@ import type { MessageKey } from "@/lib/i18n";
 import { analysisProjectId } from "@/lib/folderStore";
 import { useAccount } from "@/lib/session";
 import PracticeGoal from "./PracticeGoal";
+import SectionToggle, { useHidden } from "./SectionToggle";
+import { workOn, type Focus } from "@/lib/practiceGoal";
 import { cellTrend, compareTakes, MAX_TAKES, orderTakes, takeFrom, type Take, type Trend } from "@/lib/takes";
 
 type Metric = "points" | "fillers" | "wpm" | "pauses" | "volume";
@@ -79,83 +81,166 @@ export default function TakeHistory({ folderId, version }: { folderId: string; v
   const prev = takes.at(-2);
   const changes = last && prev ? compareTakes(prev, last) : [];
 
+  const [hidden, toggleHidden] = useHidden("pitch-takes");
+  const wins = changes.filter((c) => c.trend === "better");
+  const slips = changes.filter((c) => c.trend === "worse");
+  const notes = changes.filter((c) => c.trend === "info");
+
   return (
     <section className="room-card take-history" aria-labelledby={`${folderId}-takes`} aria-busy={loading}>
-      <div className="folder-audios-bar">
-        <h2 id={`${folderId}-takes`}>{tr("takesTitle")}</h2>
+      <div className="section-head">
+        <div>
+          <h2 id={`${folderId}-takes`}>{tr("takesTitle")}</h2>
+          {takes.length > 0 && <p className="desk-sub">{tr("takesCount", { n: takes.length })}</p>}
+        </div>
+        <SectionToggle hidden={hidden} onToggle={toggleHidden} controls={`${folderId}-takes-body`} label={tr("takesTitle")} />
       </div>
 
-      {loading && <p className="take-note">{tr("takesLoading")}</p>}
-      {!loading && state?.kind === "error" && <p className="take-note">{tr("takesError")}</p>}
-      {!loading && (state?.kind === "idle" || (state?.kind === "ready" && takes.length === 0)) && (
-        <p className="take-note">{tr("takesEmpty")}</p>
-      )}
+      <div id={`${folderId}-takes-body`} hidden={hidden} className="take-body">
+        {loading && takes.length === 0 && <p className="take-note">{tr("takesLoading")}</p>}
+        {!loading && state?.kind === "error" && <p className="take-note">{tr("takesError")}</p>}
+        {!loading && (state?.kind === "idle" || (state?.kind === "ready" && takes.length === 0)) && (
+          <p className="take-note">{tr("takesEmpty")}</p>
+        )}
 
-      {takes.length > 0 && (
-        <div className="take-table-wrap">
-          <table className="take-table">
-            <caption className="sr-only">{tr("takesTitle")}</caption>
-            <thead>
-              <tr>
-                <th scope="col">
-                  <span className="sr-only">{tr("takeRowMeasure")}</span>
-                </th>
-                {takes.map((take, i) => (
-                  <th key={take.id} scope="col" className={i === takes.length - 1 ? "is-latest" : undefined}>
-                    {tr("takeLabel", { n: i + 1 })}
-                    <small>{formatDate(take.createdAt)}</small>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {ROWS.map((row) => (
-                <tr key={row.metric}>
-                  <th scope="row">{tr(row.label)}</th>
-                  {takes.map((take, i) => {
-                    const trend = cellTrend(row.metric, takes[i - 1], take);
-                    return (
-                      <td key={take.id} className={trend ? `is-${trend}` : undefined}>
-                        {row.value(take)}
-                        {trend && trend !== "same" && (
-                          <span className="take-mark" aria-label={tr(TREND_LABEL[trend])}>
-                            {" "}
-                            {MARK[trend]}
-                          </span>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+        {/* 1. What to do next: one goal, with a drill. */}
+        {last && <PracticeGoal take={last} />}
 
-      {takes.length === 1 && <p className="take-note">{tr("takesOne")}</p>}
+        {/* 2. What the last take changed. */}
+        {last && prev && (
+          <div className="take-since">
+            <h3>{tr("takesSince")}</h3>
+            {changes.length === 0 ? (
+              <p className="take-note">{tr("takesNoChange")}</p>
+            ) : (
+              <div className="take-since-cols">
+                {wins.length > 0 && <ChangeList title={tr("takesImproved")} items={wins} />}
+                {slips.length > 0 && <ChangeList title={tr("takesSlipped")} items={slips} />}
+                {notes.length > 0 && <ChangeList title={tr("takesNoted")} items={notes} />}
+              </div>
+            )}
+          </div>
+        )}
+        {takes.length === 1 && <p className="take-note">{tr("takesOne")}</p>}
 
-      {last && prev && (
-        <div className="take-since">
-          <h3>{tr("takesSince")}</h3>
-          {changes.length === 0 ? (
-            <p className="take-note">{tr("takesNoChange")}</p>
-          ) : (
-            <ul>
-              {changes.map((c, i) => (
-                <li key={i} className={`is-${c.trend}`}>
-                  <span className="take-mark" aria-label={tr(TREND_LABEL[c.trend])}>
-                    {c.trend === "better" ? "✓" : c.trend === "worse" ? "✗" : "•"}
-                  </span>
-                  {tr(c.key, c.vars)}
-                </li>
-              ))}
-            </ul>
+        {/* 3. Each take, newest first, with what to work on in it. */}
+        {takes.length > 0 && (
+          <ol className="take-list" aria-label={tr("takesListLabel")}>
+            {[...takes].reverse().map((take, j) => (
+              <TakeRow key={take.id} take={take} n={takes.length - j} latest={j === 0} />
+            ))}
+          </ol>
+        )}
+
+        {/* 4. The raw numbers, for anyone who wants them. */}
+        {takes.length > 0 && (
+          <details className="take-numbers">
+            <summary>{tr("takesShowNumbers")}</summary>
+            <div className="take-table-wrap">
+              <table className="take-table">
+                <caption className="sr-only">{tr("takesTitle")}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">
+                      <span className="sr-only">{tr("takeRowMeasure")}</span>
+                    </th>
+                    {takes.map((take, i) => (
+                      <th key={take.id} scope="col" className={i === takes.length - 1 ? "is-latest" : undefined}>
+                        {tr("takeLabel", { n: i + 1 })}
+                        <small>{formatDate(take.createdAt)}</small>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ROWS.map((row) => (
+                    <tr key={row.metric}>
+                      <th scope="row">{tr(row.label)}</th>
+                      {takes.map((take, i) => {
+                        const trend = cellTrend(row.metric, takes[i - 1], take);
+                        return (
+                          <td key={take.id} className={trend ? `is-${trend}` : undefined}>
+                            {row.value(take)}
+                            {trend && trend !== "same" && (
+                              <span className="take-mark" aria-label={tr(TREND_LABEL[trend])}>
+                                {" "}
+                                {MARK[trend]}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ChangeList({ title, items }: { title: string; items: ReturnType<typeof compareTakes> }) {
+  const { tr } = useLang();
+  return (
+    <div className="take-change-group">
+      <h4>{title}</h4>
+      <ul>
+        {items.map((c, i) => (
+          <li key={i} className={`is-${c.trend}`}>
+            <span className="take-mark" aria-label={tr(TREND_LABEL[c.trend])}>
+              {c.trend === "better" ? "✓" : c.trend === "worse" ? "✗" : "•"}
+            </span>
+            {tr(c.key, c.vars)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const SHOWN_FOCUS = 3;
+
+/** One take: when, two headline numbers, and what to work on in it. */
+function TakeRow({ take, n, latest }: { take: Take; n: number; latest: boolean }) {
+  const { tr } = useLang();
+  const focus = workOn(take);
+  const item = (f: Focus, i: number) => (
+    <li key={i} className={`take-focus is-${f.kind}`}>
+      <span className="take-focus-dot" aria-hidden="true" />
+      <span>
+        {tr(f.key, f.vars)}
+        {f.hint && <small>{f.hint}</small>}
+      </span>
+    </li>
+  );
+  return (
+    <li className={`take-row${latest ? " is-latest" : ""}`}>
+      <div className="take-row-head">
+        <strong>{tr("takeLabel", { n })}</strong>
+        {latest && <span className="take-badge">{tr("takeLatest")}</span>}
+        <span className="take-row-date">{formatDate(take.createdAt)}</span>
+        <span className="take-row-stats">
+          {take.total > 0 && <span>{tr("takeChipPoints", { covered: take.covered, total: take.total })}</span>}
+          {take.fillersPer100 != null && <span>{tr("takeChipFillers", { per100: take.fillersPer100.toFixed(1) })}</span>}
+        </span>
+      </div>
+      {focus.length === 0 ? (
+        <p className="take-row-good">✓ {tr("takeAllGood")}</p>
+      ) : (
+        <div className="take-row-work">
+          <span className="take-row-label">{tr("takeWorkOn")}</span>
+          <ul>{focus.slice(0, SHOWN_FOCUS).map(item)}</ul>
+          {focus.length > SHOWN_FOCUS && (
+            <details className="take-more">
+              <summary>{tr("takeMore", { n: focus.length - SHOWN_FOCUS })}</summary>
+              <ul>{focus.slice(SHOWN_FOCUS).map((f, i) => item(f, i + SHOWN_FOCUS))}</ul>
+            </details>
           )}
         </div>
       )}
-
-      {last && <PracticeGoal take={last} />}
-    </section>
+    </li>
   );
 }

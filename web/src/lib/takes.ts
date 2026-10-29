@@ -19,6 +19,8 @@ export interface Take {
   endVolumeDropDb: number | null;
   numberIssues: { onSlide: string; said: string | null }[]; // slide figures said differently
   fillerWords: string[]; // the fillers this speaker used, most frequent first
+  // Delivery problems the analysis found by code (rushed ending, long silences, fading voice, …).
+  delivery: { problem: string; action: string }[];
 }
 
 export type Trend = "better" | "worse" | "same" | "info";
@@ -63,6 +65,9 @@ export function takeFrom(attempt: Attempt, report: Report): Take {
       .filter((n) => n.inconsistent)
       .map((n) => ({ onSlide: n.on_slide, said: n.said })),
     fillerWords: [...(report.feedback.fillers?.words ?? [])].sort((a, b) => b.count - a.count).map((w) => w.word),
+    delivery: (report.feedback.recommendations ?? [])
+      .filter((r) => r.area === "delivery" && r.problem)
+      .map((r) => ({ problem: r.problem, action: r.action })),
   };
 }
 
