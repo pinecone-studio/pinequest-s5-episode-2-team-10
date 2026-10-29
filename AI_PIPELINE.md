@@ -79,7 +79,9 @@ Built in the FastAPI pipeline (`pipeline/fillers.py`, `pipeline/feedback.py`):
 4. **Counting and scoring in code.** The report's `feedback.fillers` has `total`, `per_100`, and per word the `count`, evidence sentences and timestamps. The Delivery score uses this verified rate (full score under 1 per 100 words, zero at 6). The raw list counts are kept in `wording.list_fillers` for evaluation.
 5. **Limits are shown.** With no model (`rules` backend), `method` is `"list"` and the UI says the words were not checked in context. When nothing is found, the report notes that speech recognition can drop hesitation sounds.
 
-The prompt version is stored with each report (`prompt_version`). Tests: `tests/test_fillers.py`.
+6. **Optional fine-tuned classifier.** `PITCH_FILLER_MODEL` turns on the token classifier trained in `training/fillers` (`pipeline/filler_model.py`). Set it to a model folder to run it in the API process, or to `remote` to call the voice server's `/v1/fillers` (the voice PC sets `FILLER_MODEL_PATH`; Render has too little RAM). When on, its marks replace the LLM's `filler_occurrences` and `method` is `"model"`; they still pass step 3. If it is off or fails, the LLM's (or the list's) fillers stand. It has only been measured on synthetic sentences, so keep it off in production until `training/fillers/evaluate.py` shows it matching the LLM on hand-labelled real transcripts.
+
+The prompt version is stored with each report (`prompt_version`). Tests: `tests/test_fillers.py`, `tests/test_filler_model.py`.
 
 ## Implemented: main points
 

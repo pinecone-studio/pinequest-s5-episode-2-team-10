@@ -18,11 +18,14 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, UploadFile
 import httpx
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
-from pipeline import asr, config as pipeline_config
+from pipeline import asr, config as pipeline_config, filler_model
 from pipeline.audio import AudioError, to_wav16k
 
 TOKEN = os.environ.get("VOICE_SERVER_TOKEN", "").strip()
+# Folder of the fine-tuned filler classifier (training/fillers); unset turns /v1/fillers off.
+FILLER_MODEL_PATH = os.environ.get("FILLER_MODEL_PATH", "").strip()
 PRELOAD = os.environ.get("VOICE_PRELOAD", "1").strip() != "0"
 VOICE_TMP_DIR = Path(
     os.environ.get("VOICE_TMP_DIR", str(Path(__file__).resolve().parents[1] / "data" / "voice" / "tmp"))
@@ -92,6 +95,23 @@ def health():
         "device": device,
         "busy": _gpu_lock.locked(),
     }
+
+
+class FillerRequest(BaseModel):
+    sentences: list[str] = Field(max_length=500)
+
+
+@app.post("/v1/fillers", dependencies=[Depends(require_token)])
+def find_fillers(body: FillerRequest):
+    """Filler token positions per sentence from the classifier at FILLER_MODEL_PATH (training/fillers)."""
+    if not FILLER_MODEL_PATH:
+        raise VoiceError(503, "filler_model_off", "Set FILLER_MODEL_PATH on the voice server.")
+    with _gpu_lock:
+        try:
+            marked = filler_model.mark(body.sentences, FILLER_MODEL_PATH)
+        except Exception as e:
+            raise VoiceError(503, "filler_model_unavailable", "The filler model could not run.") from e
+    return {"marked": marked}
 
 
 @app.post("/v1/transcribe", dependencies=[Depends(require_token)])

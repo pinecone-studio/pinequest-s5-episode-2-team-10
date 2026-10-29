@@ -102,7 +102,7 @@ A payment is credited only when QPay reports `PAID` for at least the invoice amo
     ],
     "filler_occurrences": [{ "sentence_id": 1, "word": "ээ" }],
     "fillers": {
-      "method": "llm", "total": 12, "per_100": 2.91, "model_reported": 13, "note": null,
+      "method": "llm", "total": 12, "per_100": 2.91, "model_reported": 13, "note": null,  // method: llm | model (filler classifier) | list
       "words": [{ "word": "ээ", "count": 7, "evidence": ["…"], "occurrences": [{ "sentence_id": 1, "start_s": 3.1 }] }]
     },
     "point_checks": [{ "point": 0, "status": "covered", "evidence": "exact quote", "note": "" }],

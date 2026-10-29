@@ -22,6 +22,10 @@ VOICE_URL = _env("PITCH_VOICE_URL", "http://localhost:8001").rstrip("/")
 VOICE_TOKEN = _env("PITCH_VOICE_TOKEN", "")
 VOICE_TIMEOUT_S = float(_env("PITCH_VOICE_TIMEOUT_S", "300"))
 
+# Filler classifier (training/fillers): "" = off, a model folder = run here, "remote" = the voice server's
+# /v1/fillers. When on, it decides which words are fillers instead of the feedback model.
+FILLER_MODEL = _env("PITCH_FILLER_MODEL", "")
+
 # Slide alignment: "e5" uses multilingual-e5-small on CPU, "none" uses key-term overlap only.
 EMBEDDINGS = _env("PITCH_EMBEDDINGS", "e5")
 EMBEDDING_MODEL = _env("PITCH_EMBEDDING_MODEL", "intfloat/multilingual-e5-small")
