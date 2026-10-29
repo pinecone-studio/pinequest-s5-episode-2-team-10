@@ -401,6 +401,8 @@ def health():
         "default_backend": config.DEFAULT_BACKEND,
         "backends": list(BACKENDS),
         "queue_length": len(worker._queue),
+        # Whether Gemma is up (no address); checked at most every 30 s.
+        "gemma": service_status.gemma_summary(),
     }
 
 

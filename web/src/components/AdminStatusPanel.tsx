@@ -222,11 +222,26 @@ export default function AdminStatusPanel() {
   }
 
   // ---- The deployed site, checked by the backend this page uses ---------------------------------
+  // Its Gemma as its backend reports it (in its public /health).
+  const deployedGemma = (b: DeployedStatus["backend"]): Part => {
+    const base = { key: "d-gemma", icon: "✦", name: "statusDeployedGemma" as MessageKey };
+    if (!b.ok) return { ...base, health: "warn", lines: [], error: tr("statusNeedsDeployedBackend") };
+    const g = b.gemma;
+    if (!g) return { ...base, health: "warn", lines: [], error: tr("statusGemmaNotReported") };
+    const partOnCpu = g.gpu_share != null && g.gpu_share < 1;
+    return {
+      ...base,
+      health: !g.ok ? "down" : partOnCpu ? "warn" : "ok",
+      lines: lines(g.model, g.ok && (g.loaded ? tr("statusModelLoaded") : tr("statusModelNotLoadedGemma"))),
+      error: !g.ok ? g.error : partOnCpu ? tr("statusGpuShare", { pct: Math.round((g.gpu_share ?? 0) * 100) }) : undefined,
+    };
+  };
   const deployedParts: Part[] = [];
   if (!deployedAt) {
     deployedParts.push(
       { key: "d-web", icon: "◫", name: "statusDeployedWeb", health: "checking", lines: [] },
       { key: "d-voice", icon: "⇄", name: "statusDeployedWebVoice", health: "checking", lines: [] },
+      { key: "d-gemma", icon: "✦", name: "statusDeployedGemma", health: "checking", lines: [] },
       { key: "d-backend", icon: "◎", name: "statusDeployedBackend", health: "checking", lines: [] },
     );
   } else if (!deployed) {
@@ -243,6 +258,7 @@ export default function AdminStatusPanel() {
         lines: lines(wv.ok && wv.device, wv.ok && wv.busy && tr("statusBusy"), ms(wv.ms)),
         error: wv.error,
       },
+      deployedGemma(b),
       {
         key: "d-backend",
         icon: "◎",

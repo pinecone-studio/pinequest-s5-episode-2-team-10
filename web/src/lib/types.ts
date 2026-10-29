@@ -301,5 +301,12 @@ export interface DeployedStatus {
   site_url: string;
   web: ServiceCheck;
   web_voice: ServiceCheck & { reachable?: boolean; model_loaded?: boolean; device?: string | null; busy?: boolean };
-  backend: ServiceCheck & { queue_length?: number | null; asr?: string; default_backend?: string; has_status_check?: boolean };
+  backend: ServiceCheck & {
+    // The deployed backend's Gemma, from its /health; null when that backend is older than this report.
+    gemma?: { ok: boolean; model?: string; installed?: boolean; loaded?: boolean; gpu_share?: number | null; error?: string } | null;
+    queue_length?: number | null;
+    asr?: string;
+    default_backend?: string;
+    has_status_check?: boolean;
+  };
 }

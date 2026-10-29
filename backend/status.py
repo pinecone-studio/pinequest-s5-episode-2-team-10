@@ -4,6 +4,7 @@ Checks run in parallel with short timeouts, so one dead service can't hang the p
 here returns secrets: service addresses are shown only as "this machine" or "remote".
 """
 
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
@@ -101,6 +102,24 @@ def check_ollama() -> dict:
     return out
 
 
+GEMMA_SUMMARY_TTL_S = 30.0
+_gemma_summary: tuple[float, dict] | None = None
+_gemma_lock = threading.Lock()
+
+
+def gemma_summary() -> dict:
+    """Gemma's state for the public /health (so a local build can see the deployed site's Gemma):
+    running, installed, loaded, share on the GPU. No address. Cached, so health checks stay cheap."""
+    global _gemma_summary
+    with _gemma_lock:
+        now = time.monotonic()
+        if _gemma_summary is None or now - _gemma_summary[0] > GEMMA_SUMMARY_TTL_S:
+            full = check_ollama()
+            keep = ("ok", "model", "installed", "loaded", "gpu_share", "error")
+            _gemma_summary = (now, {k: full[k] for k in keep if k in full})
+        return dict(_gemma_summary[1])
+
+
 def test_gemma() -> dict:
     """Asks Gemma for a one-word reply: proof that it answers, not just that Ollama is up."""
     url, model = pipeline_config.OLLAMA_URL, pipeline_config.OLLAMA_MODEL_BASE
@@ -176,8 +195,11 @@ def check_deployed(site_url: str, api_url: str, lang: str = "mn") -> dict:
         h = r.json()
         # Without a login, 401 means the deployed backend has the status check; 404 means it's older.
         has_status = httpx.get(f"{api_url}/api/v1/admin/status", timeout=CHECK_TIMEOUT_S * 3).status_code != 404
+        gemma = h.get("gemma")
         return {
             "ok": h.get("ok") is True,
+            # The deployed backend's own view of its Gemma; None when it's older than this report.
+            "gemma": gemma if isinstance(gemma, dict) else None,
             "queue_length": h.get("queue_length"),
             "asr": h.get("asr"),
             "default_backend": h.get("default_backend"),

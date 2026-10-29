@@ -761,3 +761,49 @@ def test_deployed_status_reports_a_sleeping_or_dead_backend(client: TestClient, 
     body = client.get("/api/v1/admin/status/deployed", headers=headers).json()
     assert body["web"] == {**body["web"], "ok": False, "error": "Not reachable."}
     assert body["backend"] == {**body["backend"], "ok": False, "error": "Timed out."}
+
+
+def test_health_reports_gemma_without_an_address_and_caches_it(client: TestClient, monkeypatch):
+    model = status_module.pipeline_config.OLLAMA_MODEL_BASE
+    calls = []
+
+    def fake_get(url, **_):
+        calls.append(url)
+        replies = {
+            "/api/version": {"version": "0.40.12"},
+            "/api/tags": {"models": [{"name": model}]},
+            "/api/ps": {"models": [{"name": model, "size": 100, "size_vram": 50}]},
+        }
+        return _FakeResponse(next(v for k, v in replies.items() if url.endswith(k)))
+
+    monkeypatch.setattr(status_module.httpx, "get", fake_get)
+    monkeypatch.setattr(status_module, "_gemma_summary", None)
+    first = client.get("/api/v1/health").json()["gemma"]
+    assert first == {"ok": True, "model": model, "installed": True, "loaded": True, "gpu_share": 0.5}
+    assert "where" not in first and "url" not in first
+    n = len(calls)
+    assert client.get("/api/v1/health").json()["gemma"] == first
+    assert len(calls) == n  # the second health check used the cached answer
+
+
+def test_deployed_status_passes_on_the_deployed_gemma(client: TestClient, monkeypatch):
+    gemma = {"ok": False, "model": "gemma4:e4b", "installed": False, "error": "gemma4:e4b isn't installed in Ollama."}
+
+    def fake_get(url, **_):
+        class Reply(_FakeResponse):
+            status_code = 200
+        if url.endswith("/api/v1/health"):
+            return Reply({"ok": True, "queue_length": 0, "gemma": gemma})
+        if url.endswith("/api/transcribe"):
+            return Reply({"ok": True, "modelLoaded": True})
+        return Reply({})
+
+    monkeypatch.setattr(status_module.httpx, "get", fake_get)
+    headers = _admin_headers(client, "deployed-admin3@example.com")
+    body = client.get("/api/v1/admin/status/deployed", headers=headers).json()
+    assert body["backend"]["gemma"] == gemma
+
+    # An older deployed backend doesn't report it.
+    monkeypatch.setattr(status_module.httpx, "get", lambda url, **_: type("R", (_FakeResponse,), {"status_code": 200})(
+        {"ok": True, "queue_length": 0} if url.endswith("/api/v1/health") else {"ok": True, "modelLoaded": True}))
+    assert client.get("/api/v1/admin/status/deployed", headers=headers).json()["backend"]["gemma"] is None
