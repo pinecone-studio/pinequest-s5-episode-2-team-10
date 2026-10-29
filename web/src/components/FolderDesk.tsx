@@ -41,11 +41,12 @@ import { useAccount } from "@/lib/session";
 import { useBillingLocked } from "@/lib/billingClient";
 import { notifySubscriptionRequired } from "@/lib/routeAccess";
 import { api, ApiRequestError, USING_MOCK } from "@/lib/api";
-import { usesRemoteFolderStore } from "@/lib/folderStore";
+import { analysisProjectKey, usesRemoteFolderStore } from "@/lib/folderStore";
 import type { FeedbackBackend, Project } from "@/lib/types";
 import Modal from "./Modal";
 import type { Improvement, OffTopic, Strength } from "./ImprovementList";
 import FeedbackResult from "./FeedbackResult";
+import TakeHistory from "./TakeHistory";
 import { PitchPointsEditor, pointsToSend, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
 import PoseCoach, { type CoachState } from "./PoseCoach";
@@ -501,6 +502,7 @@ function FolderRoom({
   const previewRef = useRef<HTMLParagraphElement | null>(null);
   const [previewCut, setPreviewCut] = useState(false); // the preview is taller than the speech card
   const [probing, setProbing] = useState(false);
+  const [takesVersion, setTakesVersion] = useState(0); // bumped after each analysis, so the takes card reloads
   const [probeNote, setProbeNote] = useState<string | null>(null);
   const [resultOpen, setResultOpen] = useState(false); // the analysis dialog
   const resultShownRef = useRef(false); // opened once per analysis, so closing it while it streams sticks
@@ -1068,7 +1070,7 @@ function FolderRoom({
       if (usesRemoteFolderStore()) {
         project = await api.getProject(folder.id);
       } else {
-        const mapKey = `saylo:analysis-project:${account.id}:${folder.id}`;
+        const mapKey = analysisProjectKey(account.id, folder.id);
         const mappedId = localStorage.getItem(mapKey);
         try {
           project = mappedId ? await api.getProject(mappedId) : await api.createProject({ name: folder.name });
@@ -1134,6 +1136,7 @@ function FolderRoom({
         writing: false,
       });
       showResultOnce();
+      setTakesVersion((v) => v + 1);
     } catch (err) {
       setProbeResult(null);
       setProbeNote(err instanceof Error && err.message ? err.message : tr("sendFail"));
@@ -1612,6 +1615,8 @@ function FolderRoom({
                 </ul>
               )}
             </section>
+
+            <TakeHistory folderId={folder.id} version={takesVersion} />
           </div>
         </div>
 

@@ -319,6 +319,22 @@ export function usesRemoteFolderStore() {
   return remoteMode;
 }
 
+/** Where the backend project a local pitch's analyses go into is remembered (see analysisProjectId). */
+export const analysisProjectKey = (accountId: string, folderId: string) => `saylo:analysis-project:${accountId}:${folderId}`;
+
+/**
+ * The backend project holding this pitch's saved analyses: the pitch itself when pitches live on the
+ * server, else the project created for it on its first analysis. Null when it was never analysed.
+ */
+export function analysisProjectId(accountId: string, folderId: string): string | null {
+  if (remoteMode) return folderId;
+  try {
+    return localStorage.getItem(analysisProjectKey(accountId, folderId));
+  } catch {
+    return null;
+  }
+}
+
 export async function createFolderRecord(folder: Omit<FolderMeta, "id">): Promise<FolderMeta> {
   if (remoteMode) {
     return createServerFolder({ ...folder, script: folder.script ?? "" });
