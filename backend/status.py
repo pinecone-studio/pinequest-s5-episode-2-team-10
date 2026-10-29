@@ -16,6 +16,11 @@ from sqlmodel import Session
 from pipeline import config as pipeline_config
 
 CHECK_TIMEOUT_S = 5.0
+STARTED_AT = time.time()  # when this backend process started, for uptime
+
+
+def _iso(t: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
 GEMMA_TEST_TIMEOUT_S = 120.0  # the first answer may include loading the model into memory
 
 
@@ -65,11 +70,13 @@ def check_voice() -> dict:
             "device": h.get("device"),
             "cuda": h.get("cuda") is True,
             "busy": h.get("busy") is True,
+            "started_at": h.get("started_at"),  # None on a voice server older than this report
             **({} if loaded else {"error": "The speech model isn't loaded yet."}),
         }
 
     out = _timed(run)
     out["where"] = _where(url)
+    out["asr_backend"] = pipeline_config.ASR_BACKEND
     out["used"] = pipeline_config.ASR_BACKEND == "remote"  # the analysis transcribes through it
     return out
 
@@ -94,6 +101,9 @@ def check_ollama() -> dict:
             "loaded": running is not None,
             # Share of the model in graphics memory; below 1 means part of it runs on the CPU (slower).
             "gpu_share": round(running["size_vram"] / running["size"], 2) if running and running.get("size") else None,
+            "size_gb": round(running["size"] / 1e9, 1) if running and running.get("size") else None,
+            "loaded_until": running.get("expires_at") if running else None,  # Ollama unloads it after this
+            "keep_alive": str(pipeline_config.OLLAMA_KEEP_ALIVE),
             **({} if installed else {"error": f"{model} isn't installed in Ollama."}),
         }
 
@@ -115,7 +125,7 @@ def gemma_summary() -> dict:
         now = time.monotonic()
         if _gemma_summary is None or now - _gemma_summary[0] > GEMMA_SUMMARY_TTL_S:
             full = check_ollama()
-            keep = ("ok", "model", "installed", "loaded", "gpu_share", "error")
+            keep = ("ok", "model", "installed", "loaded", "gpu_share", "loaded_until", "error")
             _gemma_summary = (now, {k: full[k] for k in keep if k in full})
         return dict(_gemma_summary[1])
 
@@ -153,7 +163,8 @@ def collect(session: Session, queue_length: int, analysing: bool, with_gemma_tes
         gemma = pool.submit(test_gemma) if with_gemma_test else None
         database = check_database(session)
         return {
-            "backend": {"ok": True, "queue_length": queue_length, "analysing": analysing},
+            "backend": {"ok": True, "queue_length": queue_length, "analysing": analysing, "started_at": _iso(STARTED_AT),
+                        "default_model": pipeline_config.OLLAMA_MODEL_BASE},
             "database": database,
             "voice": voice.result(),
             "ollama": ollama.result(),
@@ -166,7 +177,55 @@ def collect(session: Session, queue_length: int, analysing: bool, with_gemma_tes
 DEPLOYED_TIMEOUT_S = 60.0  # the deployed backend's free host sleeps; waking it takes up to a minute
 
 
-def check_deployed(site_url: str, api_url: str, lang: str = "mn") -> dict:
+def check_tunnel(tunnel_url: str, token: str) -> tuple[dict, dict]:
+    """The GPU PC's voice server and Gemma as the internet sees them: through the Tailscale tunnel
+    (voice/server.py's /health, and its token-protected /v1/ollama route)."""
+
+    def voice():
+        r = httpx.get(f"{tunnel_url}/health", timeout=CHECK_TIMEOUT_S * 3)
+        r.raise_for_status()
+        h = r.json()
+        loaded = h.get("model_loaded") is True
+        return {
+            "ok": h.get("ok") is True and loaded,
+            "model_loaded": loaded,
+            "device": h.get("device"),
+            "cuda": h.get("cuda") is True,
+            "busy": h.get("busy") is True,
+            "started_at": h.get("started_at"),
+            **({} if loaded else {"error": "The speech model isn't loaded yet."}),
+        }
+
+    def gemma():
+        if not token:
+            return {"ok": False, "error": "No voice server token is set here, so the tunnel's Gemma can't be checked."}
+        headers = {"Authorization": f"Bearer {token}"}
+        model = pipeline_config.OLLAMA_MODEL_BASE
+        tags = httpx.get(f"{tunnel_url}/v1/ollama/api/tags", headers=headers, timeout=CHECK_TIMEOUT_S * 3)
+        if tags.status_code == 401:
+            return {"ok": False, "error": "The tunnel refused this backend's token."}
+        tags.raise_for_status()
+        ps = httpx.get(f"{tunnel_url}/v1/ollama/api/ps", headers=headers, timeout=CHECK_TIMEOUT_S * 3).json().get("models", [])
+        names = {m.get("name") for m in tags.json().get("models", [])}
+        installed = model in names or f"{model}:latest" in names
+        running = next((m for m in ps if m.get("name") in (model, f"{model}:latest")), None)
+        return {
+            "ok": installed,
+            "model": model,
+            "installed": installed,
+            "loaded": running is not None,
+            "gpu_share": round(running["size_vram"] / running["size"], 2) if running and running.get("size") else None,
+            "loaded_until": running.get("expires_at") if running else None,
+            **({} if installed else {"error": f"{model} isn't installed in the tunnel's Ollama."}),
+        }
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        v, g = pool.submit(_timed, voice), pool.submit(_timed, gemma)
+        host = httpx.URL(tunnel_url).host
+        return {**v.result(), "host": host}, {**g.result(), "host": host}
+
+
+def check_deployed(site_url: str, api_url: str, lang: str = "mn", tunnel_url: str = "", token: str = "") -> dict:
     """Public checks of the deployed site: is the web app up, does it reach its voice server, is
     its backend up. The deployed backend's database and Gemma need an admin login there."""
 
@@ -206,6 +265,11 @@ def check_deployed(site_url: str, api_url: str, lang: str = "mn") -> dict:
             "has_status_check": has_status,
         }
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         w, v, b = pool.submit(_timed, web), pool.submit(_timed, web_voice), pool.submit(_timed, backend)
-        return {"site_url": site_url, "web": w.result(), "web_voice": v.result(), "backend": b.result()}
+        tunnel = pool.submit(check_tunnel, tunnel_url, token) if tunnel_url else None
+        out = {"site_url": site_url, "web": w.result(), "web_voice": v.result(), "backend": b.result(),
+               "tunnel_voice": None, "tunnel_gemma": None}
+        if tunnel:
+            out["tunnel_voice"], out["tunnel_gemma"] = tunnel.result()
+        return out

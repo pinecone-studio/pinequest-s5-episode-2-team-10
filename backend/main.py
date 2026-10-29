@@ -892,7 +892,9 @@ def admin_status(_: AdminUser, database: DB, test_gemma: Annotated[bool, Query()
 @api.get("/admin/status/deployed")
 def admin_status_deployed(_: AdminUser, lang: Annotated[Literal["mn", "en"], Query()] = "mn"):
     """Public checks of the deployed site (web app, its voice server link, its backend), from this backend."""
-    return service_status.check_deployed(config.DEPLOYED_SITE_URL, config.DEPLOYED_API_URL, lang)
+    return service_status.check_deployed(
+        config.DEPLOYED_SITE_URL, config.DEPLOYED_API_URL, lang, config.TUNNEL_URL, pipeline_config.VOICE_TOKEN
+    )
 
 
 @api.patch("/admin/users/{user_id}", response_model=AdminUserView)

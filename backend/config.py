@@ -14,6 +14,9 @@ DEFAULT_BACKEND = os.environ.get("PITCH_DEFAULT_BACKEND", "claude")
 # The deployed site and its backend, which the admin Status tab checks from a local build.
 DEPLOYED_SITE_URL = os.environ.get("PITCH_DEPLOYED_SITE_URL", "https://saylo-rose.vercel.app").strip().rstrip("/")
 DEPLOYED_API_URL = os.environ.get("PITCH_DEPLOYED_API_URL", "https://saylo-backend-el5e.onrender.com").strip().rstrip("/")
+# The GPU PC's voice server through the Tailscale tunnel (its /health and /v1/ollama), checked with
+# PITCH_VOICE_TOKEN. Empty turns the tunnel cards off.
+TUNNEL_URL = os.environ.get("PITCH_TUNNEL_URL", "https://ddd5.tail9b3d3b.ts.net/voice").strip().rstrip("/")
 # Projects untouched for this many days are deleted; 0 keeps them until the user deletes them.
 RETENTION_DAYS = int(os.environ.get("PITCH_RETENTION_DAYS", "0"))
 

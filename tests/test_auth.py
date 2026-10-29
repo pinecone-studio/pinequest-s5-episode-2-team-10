@@ -779,7 +779,7 @@ def test_health_reports_gemma_without_an_address_and_caches_it(client: TestClien
     monkeypatch.setattr(status_module.httpx, "get", fake_get)
     monkeypatch.setattr(status_module, "_gemma_summary", None)
     first = client.get("/api/v1/health").json()["gemma"]
-    assert first == {"ok": True, "model": model, "installed": True, "loaded": True, "gpu_share": 0.5}
+    assert first == {"ok": True, "model": model, "installed": True, "loaded": True, "gpu_share": 0.5, "loaded_until": None}
     assert "where" not in first and "url" not in first
     n = len(calls)
     assert client.get("/api/v1/health").json()["gemma"] == first
@@ -807,3 +807,35 @@ def test_deployed_status_passes_on_the_deployed_gemma(client: TestClient, monkey
     monkeypatch.setattr(status_module.httpx, "get", lambda url, **_: type("R", (_FakeResponse,), {"status_code": 200})(
         {"ok": True, "queue_length": 0} if url.endswith("/api/v1/health") else {"ok": True, "modelLoaded": True}))
     assert client.get("/api/v1/admin/status/deployed", headers=headers).json()["backend"]["gemma"] is None
+
+
+def test_tunnel_check_reads_voice_and_gemma_through_the_tunnel(monkeypatch):
+    model = status_module.pipeline_config.OLLAMA_MODEL_BASE
+    seen_auth = []
+
+    class Reply(_FakeResponse):
+        def __init__(self, body, code=200):
+            super().__init__(body)
+            self.status_code = code
+
+    def fake_get(url, headers=None, **_):
+        if url.endswith("/health"):
+            return Reply({"ok": True, "model_loaded": True, "device": "GPU", "cuda": True, "started_at": "2026-10-29T06:00:00Z"})
+        seen_auth.append((headers or {}).get("Authorization"))
+        if (headers or {}).get("Authorization") != "Bearer right":
+            return Reply({}, 401)
+        if url.endswith("/api/tags"):
+            return Reply({"models": [{"name": model}]})
+        return Reply({"models": [{"name": model, "size": 10, "size_vram": 10, "expires_at": "2026-10-29T07:00:00Z"}]})
+
+    monkeypatch.setattr(status_module.httpx, "get", fake_get)
+    voice, gemma = status_module.check_tunnel("https://pc.example.ts.net/voice", "right")
+    assert voice["ok"] is True and voice["started_at"] == "2026-10-29T06:00:00Z" and voice["host"] == "pc.example.ts.net"
+    assert gemma == {**gemma, "ok": True, "installed": True, "loaded": True, "gpu_share": 1.0}
+    assert seen_auth == ["Bearer right", "Bearer right"]
+
+    _, refused = status_module.check_tunnel("https://pc.example.ts.net/voice", "wrong")
+    assert refused["ok"] is False and "refused" in refused["error"]
+    _, no_token = status_module.check_tunnel("https://pc.example.ts.net/voice", "")
+    assert no_token["ok"] is False and "token" in no_token["error"]
+    assert "right" not in str(voice) + str(gemma)  # the token is never echoed back

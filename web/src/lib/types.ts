@@ -274,7 +274,7 @@ export interface ServiceCheck {
 }
 
 export interface AdminStatus {
-  backend: { ok: boolean; queue_length: number; analysing: boolean };
+  backend: { ok: boolean; queue_length: number; analysing: boolean; started_at?: string; default_model?: string };
   database: ServiceCheck;
   voice: ServiceCheck & {
     where: "local" | "remote";
@@ -284,6 +284,8 @@ export interface AdminStatus {
     device?: string | null;
     cuda?: boolean;
     busy?: boolean;
+    started_at?: string | null; // null on a voice server older than this report
+    asr_backend?: string;
   };
   ollama: ServiceCheck & {
     where: "local" | "remote";
@@ -292,8 +294,21 @@ export interface AdminStatus {
     installed?: boolean;
     loaded?: boolean;
     gpu_share?: number | null; // below 1: part of the model runs on the CPU
+    size_gb?: number | null;
+    loaded_until?: string | null; // Ollama unloads it after this (far in the future: kept loaded)
+    keep_alive?: string;
   };
   gemma_test: (ServiceCheck & { tokens_per_s?: number | null }) | null; // only with test_gemma=true
+}
+
+export interface TunnelGemma {
+  ok: boolean;
+  model?: string;
+  installed?: boolean;
+  loaded?: boolean;
+  gpu_share?: number | null;
+  loaded_until?: string | null;
+  error?: string;
 }
 
 // GET /admin/status/deployed: public checks of the deployed site, made by the backend the page uses.
@@ -303,10 +318,13 @@ export interface DeployedStatus {
   web_voice: ServiceCheck & { reachable?: boolean; model_loaded?: boolean; device?: string | null; busy?: boolean };
   backend: ServiceCheck & {
     // The deployed backend's Gemma, from its /health; null when that backend is older than this report.
-    gemma?: { ok: boolean; model?: string; installed?: boolean; loaded?: boolean; gpu_share?: number | null; error?: string } | null;
+    gemma?: TunnelGemma | null;
     queue_length?: number | null;
     asr?: string;
     default_backend?: string;
     has_status_check?: boolean;
   };
+  // The GPU PC through the Tailscale tunnel; null when PITCH_TUNNEL_URL is empty.
+  tunnel_voice: (ServiceCheck & { host: string; model_loaded?: boolean; device?: string | null; cuda?: boolean; busy?: boolean; started_at?: string | null }) | null;
+  tunnel_gemma: (ServiceCheck & TunnelGemma & { host: string }) | null;
 }

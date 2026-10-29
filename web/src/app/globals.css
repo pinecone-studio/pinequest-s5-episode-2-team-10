@@ -7635,3 +7635,155 @@ img.present-slide {
 .admin-deployed-note {
   margin: 0 0 12px;
 }
+
+/* Status cards open a dialog: they're buttons */
+button.admin-service {
+  display: block;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+button.admin-service:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--stat-color) 70%, var(--border));
+}
+
+button.admin-service:focus-visible {
+  outline: 2px solid var(--stat-color);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.admin-service { transition: none; }
+  button.admin-service:hover { transform: none; }
+}
+
+.admin-service > strong {
+  display: block;
+}
+
+.admin-service-more {
+  position: relative;
+  z-index: 1;
+  display: block;
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* The dialog */
+.admin-part-dialog {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-part-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.admin-part-state strong {
+  color: var(--stat-color);
+}
+
+.admin-part-dialog > .ui-help {
+  margin: 0;
+}
+
+.admin-part-section {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.admin-part-section h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.admin-part-section p {
+  margin: 0;
+}
+
+.admin-part-error {
+  border-color: color-mix(in srgb, var(--stat-color) 50%, var(--border));
+  background: color-mix(in srgb, var(--stat-color) 8%, transparent);
+}
+
+.admin-part-error > p:first-of-type {
+  color: var(--stat-color);
+  overflow-wrap: anywhere;
+}
+
+.admin-part-facts {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.admin-part-facts > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 38%) 1fr;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.admin-part-facts dt {
+  color: var(--text-secondary);
+}
+
+.admin-part-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-part-changes {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.admin-part-changes li {
+  display: grid;
+  grid-template-columns: 12px auto 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-part-changes .admin-status-light {
+  width: 8px;
+  height: 8px;
+  box-shadow: none;
+}
+
+.admin-part-change-time {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .admin-part-facts > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .admin-part-changes li {
+    grid-template-columns: 12px 1fr;
+  }
+
+  .admin-part-changes li > span:last-child {
+    grid-column: 2;
+  }
+}

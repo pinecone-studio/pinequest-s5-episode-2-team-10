@@ -54,7 +54,7 @@ Then set `VOICE_TUNNEL_NAME=saylo-voice` in `.env.voice`, and `PITCH_VOICE_URL=h
 
 | Method and path | Does |
 | --- | --- |
-| `GET /health` | `{ok, model, model_loaded, cuda, device, busy}`. No token needed |
+| `GET /health` | `{ok, model, model_loaded, cuda, device, busy, started_at}` (`started_at`: when the server started, UTC, for uptime). No token needed |
 | `POST /v1/transcribe` | Multipart `file` (any format ffmpeg reads, 25 MB, 5 min). Header `Authorization: Bearer <token>`. Returns `{words: [{word, start, end}], duration_s, model, elapsed_s}` |
 
 Errors are `{"code", "message"}`: 401 wrong token, 400 bad/empty/too long audio, 413 too large,
