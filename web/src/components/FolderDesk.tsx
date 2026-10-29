@@ -47,6 +47,7 @@ import Modal from "./Modal";
 import type { Improvement, OffTopic, Strength } from "./ImprovementList";
 import FeedbackResult from "./FeedbackResult";
 import TakeHistory from "./TakeHistory";
+import { BodyCoachPanel } from "./BodyCoach";
 import AnalysisProgress, { type AnalysisStep } from "./AnalysisProgress";
 import SectionToggle, { useHidden } from "./SectionToggle";
 import { PitchPointsEditor, pointsToSend, type MainPointsResult } from "./PitchPoints";
@@ -498,6 +499,8 @@ function FolderRoom({
   // The camera coach: counts pointing at the slide and turns slides with a hand swipe.
   const coach = useSyncExternalStore(subscribeCoach, coachSnapshot, () => DEFAULT_COACH);
   const [cameraOn, setCameraOn] = useState(false);
+  // Body language and eye contact: on shows the camera preview; Speak then measures the take.
+  const [bodyOn, setBodyOn] = useState(false);
   const [coachState, setCoachState] = useState<CoachState | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false); // the full speech text in a dialog
   const transcriptRef = useRef<HTMLParagraphElement | null>(null);
@@ -1198,6 +1201,14 @@ function FolderRoom({
       </button>
     );
   }
+  function bodyButton() {
+    return (
+      <button type="button" className="room-glass-btn" aria-pressed={bodyOn} onClick={() => setBodyOn((on) => !on)}>
+        <BodyGlyph />
+        {bodyOn ? tr("bodyClose") : tr("bodyOpen")}
+      </button>
+    );
+  }
   function speakButton() {
     return (
       <button type="button" className={listening ? "room-speak-btn is-recording" : "room-speak-btn"} onClick={toggleSpeak}>
@@ -1404,6 +1415,7 @@ function FolderRoom({
                   <div className="desk-speak">
                     {speakButton()}
                     {cameraButton()}
+                    {bodyButton()}
                   </div>
                 )}
                 {!full && anySlide && (
@@ -1418,6 +1430,7 @@ function FolderRoom({
                   <div className="desk-full-bar">
                     {speakButton()}
                     {cameraButton()}
+                    {bodyButton()}
                     {!showFigma && pageButtons()}
                     <button type="button" className="room-glass-btn room-icon-only" aria-label={tr("close")} onClick={() => setFull(false)}>
                       <CloseGlyph />
@@ -1596,6 +1609,7 @@ function FolderRoom({
           </aside>
 
           <div className="desk-below">
+            {bodyOn && <BodyCoachPanel speaking={listening} />}
             <PitchPointsEditor
               idea={folder.idea ?? ""}
               points={folder.keyPoints ?? []}
@@ -1885,6 +1899,15 @@ function MicGlyph() {
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
       <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
       <path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function BodyGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <circle cx="8" cy="3.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M3 7.5 8 6.5l5 1M8 6.5v4m0 0-2.5 4M8 10.5l2.5 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

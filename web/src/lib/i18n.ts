@@ -764,6 +764,8 @@ const mn = {
   // Camera coach
   cameraOpen: "Камер нээх",
   cameraClose: "Камер хаах",
+  bodyOpen: "Биеийн хэл",
+  bodyClose: "Биеийн хэл хаах",
   coachSide: "Слайд миний",
   coachSideLeft: "зүүн талд",
   coachSideRight: "баруун талд",
@@ -1530,6 +1532,8 @@ const en: Record<MessageKey, string> = {
   confirm: "Confirm",
   cameraOpen: "Open camera",
   cameraClose: "Close camera",
+  bodyOpen: "Body language",
+  bodyClose: "Hide body language",
   coachSide: "The slide is on my",
   coachSideLeft: "left",
   coachSideRight: "right",

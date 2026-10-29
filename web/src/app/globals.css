@@ -8289,3 +8289,40 @@ button.admin-service:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .fb.is-reading > * { animation: none; }
 }
+
+/* Body language card under the slide (BodyCoachPanel), styled like the other pitch-page cards */
+.folder-room .body-panel {
+  margin-top: 14px;
+  padding: 18px 20px 20px;
+}
+
+.body-panel h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.body-panel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 12px;
+}
+
+.body-panel-summary {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--room-line, var(--line));
+}
+
+.body-panel-summary h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .body-panel-grid {
+    grid-template-columns: 1fr;
+  }
+}

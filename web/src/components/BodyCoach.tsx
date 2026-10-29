@@ -30,6 +30,9 @@ const LIVE_MS = 500;
 const TEXT = {
   mn: {
     title: "Биеийн хэл ба харц (туршилт)",
+    panelTitle: "Биеийн хэл ба харц",
+    panelHint: "«Ярих»-ыг дарахад хэмжиж эхэлнэ, зогсоход дүгнэлт гарна. Видео энэ компьютерээс гарахгүй.",
+    panelSummary: "Энэ бичлэгийн биеийн хэл",
     intro:
       "Камер таны нүүр, мөр, гарыг таньж харц, гарын хөдөлгөөн, биеийн байрлалыг хэмжинэ. Видео энэ компьютерээс гарахгүй, хадгалагдахгүй.",
     camera: "Камер асаах",
@@ -68,6 +71,9 @@ const TEXT = {
   },
   en: {
     title: "Body language and eye contact (prototype)",
+    panelTitle: "Body language and eye contact",
+    panelHint: "Measuring starts when you press Speak, and the summary shows when you stop. The video never leaves this computer.",
+    panelSummary: "Body language in this take",
     intro:
       "The camera finds your face, shoulders and hands, and measures eye contact, gestures and posture. The video never leaves this computer and isn't saved.",
     camera: "Turn on camera",
@@ -148,16 +154,18 @@ interface Models {
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
-export default function BodyCoach() {
-  const { lang } = useLang();
-  const tx = TEXT[lang];
+/**
+ * The camera and the face and pose models: preview, live meters, and recording a practice into a
+ * summary. Used by the /dev/body page and by the pitch page's body-language card.
+ */
+function useBodyTracker(errors: { denied: string; loadFail: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const models = useRef<Models | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const raf = useRef(0);
   const frames = useRef<FrameSignals[]>([]); // the practice being recorded
-  const window = useRef<FrameSignals[]>([]); // the last few seconds, for the live meters
+  const recentFrames = useRef<FrameSignals[]>([]); // the last few seconds, for the live meters
   const recording = useRef(false);
   const started = useRef(0);
 
@@ -182,7 +190,8 @@ export default function BodyCoach() {
   async function start() {
     setError(null);
     setPhase("loading");
-    const video = videoRef.current!;
+    const video = videoRef.current;
+    if (!video) return;
     try {
       stream.current = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720, facingMode: "user" },
@@ -192,7 +201,7 @@ export default function BodyCoach() {
       await video.play();
     } catch {
       stopCamera();
-      setError(tx.denied);
+      setError(errors.denied);
       setPhase("idle");
       return;
     }
@@ -224,10 +233,11 @@ export default function BodyCoach() {
       models.current = { pose, face, draw: new vision.DrawingUtils(ctx), connections: vision.PoseLandmarker.POSE_CONNECTIONS };
     } catch {
       stopCamera();
-      setError(tx.loadFail);
+      setError(errors.loadFail);
       setPhase("idle");
       return;
     }
+    if (!stream.current) return; // turned off while the models loaded
     started.current = 0; // set from the first animation frame's timestamp
     setPhase("live");
     let last = 0;
@@ -238,12 +248,12 @@ export default function BodyCoach() {
       if (now - last < FRAME_MS || video.readyState < 2 || !models.current) return;
       last = now;
       const frame = analyse(video, now);
-      window.current.push(frame);
-      window.current = window.current.filter((f) => f.t > frame.t - 6);
+      recentFrames.current.push(frame);
+      recentFrames.current = recentFrames.current.filter((f) => f.t > frame.t - 6);
       if (recording.current) frames.current.push(frame);
       if (now - lastLive > LIVE_MS) {
         lastLive = now;
-        setLive({ ...recent(window.current), face: frame.face, body: frame.body });
+        setLive({ ...recent(recentFrames.current), face: frame.face, body: frame.body });
         if (recording.current && frames.current.length) setElapsed(frame.t - frames.current[0].t);
       }
     };
@@ -312,6 +322,96 @@ export default function BodyCoach() {
     setPhase("idle");
   }
 
+  return { videoRef, canvasRef, phase, error, live, elapsed, summary, start, record, finish, turnOff };
+}
+
+/** The camera preview with the overlay, mirrored like a mirror. */
+function Preview({ tracker, tx }: { tracker: ReturnType<typeof useBodyTracker>; tx: (typeof TEXT)["mn" | "en"] }) {
+  const { videoRef, canvasRef, phase, elapsed } = tracker;
+  const cameraOn = phase === "live" || phase === "recording" || phase === "done";
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-black" style={{ aspectRatio: "16 / 9" }}>
+      <video ref={videoRef} playsInline muted className="absolute inset-0 h-full w-full object-cover" style={{ transform: "scaleX(-1)" }} />
+      <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full object-cover" style={{ transform: "scaleX(-1)" }} />
+      {phase === "recording" && (
+        <span className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-xs font-medium text-white">
+          ● {tx.recording} {Math.floor(elapsed)}s
+        </span>
+      )}
+      {!cameraOn && (
+        <div className="absolute inset-0 flex items-center justify-center text-sm opacity-70">{phase === "loading" ? tx.loading : ""}</div>
+      )}
+    </div>
+  );
+}
+
+function LiveMeters({ live, tx }: { live: Live; tx: (typeof TEXT)["mn" | "en"] }) {
+  return (
+    <div className="space-y-3" aria-live="polite">
+      {!live.face && <p className="text-sm text-amber-400">{tx.noFace}</p>}
+      {!live.body && <p className="text-sm text-amber-400">{tx.noBody}</p>}
+      <Meter label={tx.eyeContact} value={live.eyeContact} good={0.6} />
+      <Meter label={tx.hands} value={live.handsVisible} good={0.4} />
+      <div className="flex justify-between text-sm">
+        <span>{tx.shoulders}</span>
+        <span className="tabular-nums">{live.tilt === null ? "–" : `${Math.round(live.tilt)}°`}</span>
+      </div>
+    </div>
+  );
+}
+
+function SummaryView({ summary, tx, lang }: { summary: Summary; tx: (typeof TEXT)["mn" | "en"]; lang: "mn" | "en" }) {
+  return (
+    <div className="space-y-4">
+      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        <Stat label={tx.seconds} value={`${summary.seconds} s`} />
+        <Stat label={tx.eyeContact} value={pct(summary.eyeContact)} />
+        <Stat label={tx.lookingDown} value={pct(summary.lookingDown)} />
+        <Stat label={tx.hands} value={pct(summary.handsVisible)} />
+        <Stat label={tx.handsActive} value={pct(summary.handsActive)} />
+        <Stat label={tx.handsStill} value={pct(summary.handsStill)} />
+        <Stat label={tx.swaying} value={pct(summary.swaying)} />
+        <Stat label={tx.tilted} value={pct(summary.tilted)} />
+      </dl>
+
+      {summary.timeline.length > 0 && (
+        <div className="space-y-2 text-xs">
+          <Strip label={tx.eyesRow} cells={summary.timeline.map((s) => EYE_COLOR[s.eyes])} />
+          <Strip label={tx.handsRow} cells={summary.timeline.map((s) => HAND_COLOR[s.hands])} />
+          <div className="flex flex-wrap gap-3 opacity-70">
+            {(["contact", "away", "down", "none"] as const).map((k) => (
+              <Legend key={k} color={EYE_COLOR[k]} label={tx[k]} />
+            ))}
+            {(["active", "still", "wild"] as const).map((k) => (
+              <Legend key={k} color={HAND_COLOR[k]} label={`${tx.handsRow}: ${tx[k]}`} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h3 className="mb-2 font-medium">{tx.tipsTitle}</h3>
+        {summary.tips.length ? (
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {summary.tips.map((tip) => (
+              <li key={tip}>{TIPS[lang][tip]}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm">{tx.noTips}</p>
+        )}
+      </div>
+      <p className="text-xs opacity-60">{tx.disclaimer}</p>
+    </div>
+  );
+}
+
+/** The /dev/body prototype page: camera, practice and summary on their own. */
+export default function BodyCoach() {
+  const { lang } = useLang();
+  const tx = TEXT[lang];
+  const tracker = useBodyTracker({ denied: tx.denied, loadFail: tx.loadFail });
+  const { phase, error, live, summary, start, record, finish, turnOff } = tracker;
   const cameraOn = phase === "live" || phase === "recording" || phase === "done";
 
   return (
@@ -321,31 +421,7 @@ export default function BodyCoach() {
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div>
-          <div className="relative overflow-hidden rounded-2xl bg-black" style={{ aspectRatio: "16 / 9" }}>
-            <video
-              ref={videoRef}
-              playsInline
-              muted
-              className="absolute inset-0 h-full w-full object-cover"
-              style={{ transform: "scaleX(-1)" }}
-            />
-            <canvas
-              ref={canvasRef}
-              className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-              style={{ transform: "scaleX(-1)" }}
-            />
-            {phase === "recording" && (
-              <span className="absolute left-3 top-3 rounded-full bg-red-600 px-3 py-1 text-xs font-medium text-white">
-                ● {tx.recording} {Math.floor(elapsed)}s
-              </span>
-            )}
-            {!cameraOn && (
-              <div className="absolute inset-0 flex items-center justify-center text-sm opacity-70">
-                {phase === "loading" ? tx.loading : ""}
-              </div>
-            )}
-          </div>
-
+          <Preview tracker={tracker} tx={tx} />
           <div className="mt-4 flex flex-wrap gap-3">
             {phase === "idle" && (
               <button type="button" className="desk-primary" onClick={start}>
@@ -373,64 +449,68 @@ export default function BodyCoach() {
 
         <aside className="space-y-4">
           {live && (
-            <div className="space-y-3 rounded-2xl border border-white/10 p-4" aria-live="polite">
-              {!live.face && <p className="text-sm text-amber-400">{tx.noFace}</p>}
-              {!live.body && <p className="text-sm text-amber-400">{tx.noBody}</p>}
-              <Meter label={tx.eyeContact} value={live.eyeContact} good={0.6} />
-              <Meter label={tx.hands} value={live.handsVisible} good={0.4} />
-              <div className="flex justify-between text-sm">
-                <span>{tx.shoulders}</span>
-                <span className="tabular-nums">{live.tilt === null ? "–" : `${Math.round(live.tilt)}°`}</span>
-              </div>
+            <div className="rounded-2xl border border-white/10 p-4">
+              <LiveMeters live={live} tx={tx} />
             </div>
           )}
-
           {summary && (
-            <div className="space-y-4 rounded-2xl border border-white/10 p-4">
-              <dl className="grid grid-cols-2 gap-3 text-sm">
-                <Stat label={tx.seconds} value={`${summary.seconds} s`} />
-                <Stat label={tx.eyeContact} value={pct(summary.eyeContact)} />
-                <Stat label={tx.lookingDown} value={pct(summary.lookingDown)} />
-                <Stat label={tx.hands} value={pct(summary.handsVisible)} />
-                <Stat label={tx.handsActive} value={pct(summary.handsActive)} />
-                <Stat label={tx.handsStill} value={pct(summary.handsStill)} />
-                <Stat label={tx.swaying} value={pct(summary.swaying)} />
-                <Stat label={tx.tilted} value={pct(summary.tilted)} />
-              </dl>
-
-              {summary.timeline.length > 0 && (
-                <div className="space-y-2 text-xs">
-                  <Strip label={tx.eyesRow} cells={summary.timeline.map((s) => EYE_COLOR[s.eyes])} />
-                  <Strip label={tx.handsRow} cells={summary.timeline.map((s) => HAND_COLOR[s.hands])} />
-                  <div className="flex flex-wrap gap-3 opacity-70">
-                    {(["contact", "away", "down", "none"] as const).map((k) => (
-                      <Legend key={k} color={EYE_COLOR[k]} label={tx[k]} />
-                    ))}
-                    {(["active", "still", "wild"] as const).map((k) => (
-                      <Legend key={k} color={HAND_COLOR[k]} label={`${tx.handsRow}: ${tx[k]}`} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h2 className="mb-2 font-medium">{tx.tipsTitle}</h2>
-                {summary.tips.length ? (
-                  <ul className="list-disc space-y-1 pl-5 text-sm">
-                    {summary.tips.map((tip) => (
-                      <li key={tip}>{TIPS[lang][tip]}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm">{tx.noTips}</p>
-                )}
-              </div>
-              <p className="text-xs opacity-60">{tx.disclaimer}</p>
+            <div className="rounded-2xl border border-white/10 p-4">
+              <SummaryView summary={summary} tx={tx} lang={lang} />
             </div>
           )}
         </aside>
       </div>
     </div>
+  );
+}
+
+/**
+ * The pitch page's body-language card. Mounting it turns the camera on (the preview shows);
+ * `speaking` starts measuring when the speaker presses Speak and shows the summary when they stop.
+ * Unmounting (the toggle turned off) turns the camera off.
+ */
+export function BodyCoachPanel({ speaking }: { speaking: boolean }) {
+  const { lang } = useLang();
+  const tx = TEXT[lang];
+  const tracker = useBodyTracker({ denied: tx.denied, loadFail: tx.loadFail });
+  const { phase, error, live, summary, start, record, finish } = tracker;
+
+  // Camera on when the card appears (after mount, so the video element exists).
+  useEffect(() => {
+    const first = window.setTimeout(() => void start(), 0);
+    return () => window.clearTimeout(first);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when the card opens
+  }, []);
+
+  // Follow the Speak button: measure while speaking, summarize when the speaker stops.
+  useEffect(() => {
+    if (speaking && (phase === "live" || phase === "done")) queueMicrotask(record);
+    else if (!speaking && phase === "recording") queueMicrotask(finish);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- record/finish only change state
+  }, [speaking, phase]);
+
+  return (
+    <section className="room-card body-panel" aria-label={tx.panelTitle}>
+      <div className="section-head">
+        <div>
+          <h2>{tx.panelTitle}</h2>
+          <p className="desk-sub">{tx.panelHint}</p>
+        </div>
+      </div>
+      <div className="body-panel-grid">
+        <Preview tracker={tracker} tx={tx} />
+        <div className="body-panel-side">
+          {live ? <LiveMeters live={live} tx={tx} /> : <p className="text-sm opacity-70">{phase === "loading" ? tx.loading : ""}</p>}
+          {error && <p className="text-sm text-red-400">{error}</p>}
+        </div>
+      </div>
+      {summary && (
+        <div className="body-panel-summary">
+          <h3>{tx.panelSummary}</h3>
+          <SummaryView summary={summary} tx={tx} lang={lang} />
+        </div>
+      )}
+    </section>
   );
 }
 
