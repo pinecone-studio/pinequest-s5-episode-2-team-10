@@ -320,6 +320,20 @@ def _parse_json(text: str) -> dict:
         raise FeedbackError("The feedback model did not return valid JSON.") from e
 
 
+def number_ranges(numbers: list[int]) -> str:
+    """[1, 3, 4, 5, 6] -> "1, 3–6": runs of three or more consecutive numbers become ranges."""
+    nums = sorted(set(numbers))
+    parts: list[str] = []
+    i = 0
+    while i < len(nums):
+        j = i
+        while j + 1 < len(nums) and nums[j + 1] == nums[j] + 1:
+            j += 1
+        parts.append(f"{nums[i]}–{nums[j]}" if j - i >= 2 else ", ".join(map(str, nums[i : j + 1])))
+        i = j + 1
+    return ", ".join(parts)
+
+
 def _rules(data: dict) -> dict:
     """Measurement-only feedback. No content scores, so Content is left out of the score."""
     m, w = data["metrics"], data["wording"]
@@ -336,7 +350,7 @@ def _rules(data: dict) -> dict:
         recs.append(("content", f"Гол санаа ярианд тод сонсогдсонгүй: «{text}».", "Энэ санааг нэг тодорхой өгүүлбэрээр, баримт эсвэл жишээтэй хэл.", "high"))
     missed = [a["slide"] for a in data["alignment"] if a["status"] == "missed"]
     if missed:
-        recs.append(("slides", f"{', '.join(map(str, missed))}-р слайдын агуулгыг яриандаа хэлээгүй.", "Слайд бүрийн гол санааг нэг өгүүлбэрээр хэл.", "high"))
+        recs.append(("slides", f"{number_ranges(missed)}-р слайдын агуулгыг яриандаа хэлээгүй.", "Слайд бүрийн гол санааг нэг өгүүлбэрээр хэл.", "high"))
 
     recommendations = [
         {"area": area, "problem": problem, "start_s": None, "slide": None, "why": "", "action": action, "example_sentence": "", "impact": impact}
