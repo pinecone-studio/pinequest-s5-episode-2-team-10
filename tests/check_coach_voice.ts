@@ -46,4 +46,21 @@ assert.equal(forSpeech("120 үг/мин хурдтай"), "минутад 120 ү
 assert.equal(forSpeech("(хамгийн их нь 0:14 орчим, 8 дБ)."), "(хамгийн их нь 0:14 орчим, 8 децибел).");
 assert.equal(forSpeech("Сайн байна уу."), "Сайн байна уу."); // ordinary text is untouched
 assert.equal(forSpeech("dBz болон wpmx"), "dBz болон wpmx"); // only whole abbreviations
+
+// Long number lists are merged into ranges and read as "from … to …".
+const { ablativeSuffix, compressNumberLists } = await import("../web/src/lib/server/tts.ts");
+const missed = [1, ...Array.from({ length: 21 }, (_, i) => i + 3)].join(", ");
+assert.equal(compressNumberLists(`${missed}-р слайд`), "1, 3–23-р слайд");
+assert.equal(
+  forSpeech(`${missed}-р слайдын агуулгыг яриандаа хэлээгүй.`),
+  "1, 3-аас 23 хүртэлх слайдын агуулгыг яриандаа хэлээгүй.",
+);
+assert.equal(forSpeech("1, 3–23-р слайдын"), "1, 3-аас 23 хүртэлх слайдын"); // already a range (the backend now writes these)
+assert.equal(forSpeech("1, 2, 3, 4 болон 9"), "1-ээс 4 хүртэл болон 9");
+assert.equal(forSpeech("1, 3, 5-р слайд"), "1, 3, 5-р слайд"); // no run of three: unchanged
+assert.equal(forSpeech("2,5 сая, 3,1 сая"), "2,5 сая, 3,1 сая"); // decimals are not lists
+assert.deepEqual(
+  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 40, 50, 100, 1000].map((n) => `${n}-${ablativeSuffix(n)}`),
+  ["1-ээс", "2-оос", "3-аас", "4-өөс", "5-аас", "6-гаас", "7-гоос", "8-аас", "9-өөс", "10-аас", "20-иос", "40-өөс", "50-иас", "100-гаас", "1000-аас"],
+);
 console.log("speech wording checks passed");

@@ -133,6 +133,44 @@ async function azure(text: string, lang: Lang): Promise<Speech> {
   return { audio: await res.arrayBuffer(), type: "audio/mpeg" };
 }
 
+/**
+ * "1, 3, 4, 5, 6-р слайд" → "1, 3–6-р слайд": in a comma list of whole numbers, every run of three
+ * or more consecutive numbers becomes a range, so a long list isn't read out number by number.
+ * Only ", " with a space separates items, so a decimal like "2,5" is left alone.
+ */
+export function compressNumberLists(text: string): string {
+  return text.replace(/(?<![\d.,])\d+(?:, \d+){2,}(?![\d.,]\d)/g, (list) => {
+    const nums = list.split(", ").map(Number);
+    const parts: string[] = [];
+    for (let i = 0; i < nums.length; ) {
+      let j = i;
+      while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+      parts.push(j - i >= 2 ? `${nums[i]}–${nums[j]}` : nums.slice(i, j + 1).join(", "));
+      i = j + 1;
+    }
+    return parts.join(", ");
+  });
+}
+
+/**
+ * The Mongolian "from" (ablative) ending for a number, which follows how its last word sounds:
+ * 1 нэгээс, 2 хоёроос, 3 гурваас, 6 зургаагаас, 20 хориос, 100 зуугаас…
+ */
+export function ablativeSuffix(n: number): string {
+  const units = n % 10;
+  const tens = Math.floor(n / 10) % 10;
+  if (units) return ["", "ээс", "оос", "аас", "өөс", "аас", "гаас", "гоос", "аас", "өөс"][units];
+  if (tens) return ["", "аас", "иос", "аас", "өөс", "иас", "аас", "аас", "аас", "өөс"][tens];
+  return n % 1000 === 0 ? "аас" : "гаас"; // мянгаас, зуугаас
+}
+
+/** "3–23-р слайд" → "3-аас 23 хүртэлх слайд"; "3–6" → "3-аас 6 хүртэл": a range said as "from … to …". */
+function sayRanges(text: string): string {
+  return text.replace(/(\d+)\s*[–—]\s*(\d+)(-р)?/g, (_m, a: string, b: string, ordinal?: string) =>
+    `${a}-${ablativeSuffix(Number(a))} ${b} ${ordinal ? "хүртэлх" : "хүртэл"}`,
+  );
+}
+
 /** `text` read aloud in Mongolian, by `engine` or the configured one. */
 /**
  * Abbreviations the Mongolian voice would spell out letter by letter, written as Mongolian words.
@@ -141,7 +179,7 @@ async function azure(text: string, lang: Lang): Promise<Speech> {
 export function forSpeech(text: string): string {
   // Whole abbreviations only: not inside a longer word (\p{L} also covers Cyrillic letters).
   const word = (re: string) => new RegExp(String.raw`(?<![\p{L}])(?:${re})(?![\p{L}])`, "giu");
-  return text
+  return sayRanges(compressNumberLists(text))
     .replace(word(String.raw`(\d+(?:[.,]\d+)?)\s*(?:wpm|words?\s*(?:\/|per)\s*min(?:ute)?|үг\s*\/\s*мин)`), "минутад $1 үг")
     .replace(word(String.raw`wpm|үг\s*\/\s*мин`), "минутад хэлэх үгийн тоо")
     .replace(word(String.raw`(\d)\s*(?:dB|дБ)`), "$1 децибел")
