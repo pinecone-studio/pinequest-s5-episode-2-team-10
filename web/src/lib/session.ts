@@ -5,11 +5,38 @@ import type { AccountProfile } from "./types";
 
 const TOKEN_KEY = "pitchcoach:user-token";
 const ACCOUNT_KEY = "pitchcoach:account";
+// The intro tour opens after every sign-in until it is closed; sessionStorage keeps that across a reload.
+const INTRO_KEY = "saylo:intro-pending";
 
 export type Account = AccountProfile;
 
 let account: Account | null | undefined;
+let introWaiting = false;
 const listeners = new Set<() => void>();
+
+function setIntroPending(pending: boolean) {
+  introWaiting = pending;
+  try {
+    if (pending) sessionStorage.setItem(INTRO_KEY, "1");
+    else sessionStorage.removeItem(INTRO_KEY);
+  } catch {
+    /* storage blocked: the flag lives in memory until reload */
+  }
+}
+
+/** Whether this tab signed in and has not closed the intro tour since. */
+export function introPending(): boolean {
+  if (introWaiting) return true;
+  try {
+    return sessionStorage.getItem(INTRO_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markIntroDone() {
+  setIntroPending(false);
+}
 
 function readStored(): Account | null {
   try {
@@ -55,6 +82,7 @@ export function saveSession(session: Account & { access_token: string }) {
   } catch {
     /* private mode: the session lasts until reload */
   }
+  setIntroPending(true);
   publish(next);
 }
 
@@ -77,6 +105,7 @@ export function clearSession() {
   } catch {
     /* already blocked */
   }
+  setIntroPending(false);
   publish(null);
 }
 
