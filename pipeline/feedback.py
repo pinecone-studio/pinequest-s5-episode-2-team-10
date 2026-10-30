@@ -289,6 +289,9 @@ def _ollama(model: str, data: dict) -> dict:
         "model": model,
         "stream": False,
         "format": SCHEMA,
+        # Gemma 4 can think first; then the answer may come back in "thinking" with an empty "content".
+        # The training scripts turn it off too (training/speed/make_data.py).
+        "think": False,
         "keep_alive": config.OLLAMA_KEEP_ALIVE,
         "options": {"temperature": 0, "num_ctx": num_ctx_for(len(PROMPT) + len(user))},
         "messages": [
@@ -314,7 +317,10 @@ def _ollama(model: str, data: dict) -> dict:
             "The feedback model ran out of room: the recording and slides are too long for it. "
             "Try fewer slides or a shorter recording."
         )
-    return _parse_json(body.get("message", {}).get("content", ""))
+    content = body.get("message", {}).get("content", "")
+    if not content.strip():
+        raise FeedbackError("The feedback model returned an empty answer.")
+    return _parse_json(content)
 
 
 def _parse_json(text: str) -> dict:

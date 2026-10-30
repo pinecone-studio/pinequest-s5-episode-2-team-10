@@ -157,6 +157,20 @@ def test_claude_and_rules_never_fall_back():
     assert feedback.fallback_for("gemma4-ft") is not None
 
 
+def test_ollama_asks_without_thinking_and_names_an_empty_answer(monkeypatch):
+    monkeypatch.setattr(config, "OLLAMA_URL", "http://ollama.test")
+    sent = {}
+
+    def post(_url, json, **__):
+        sent.update(json)
+        return httpx.Response(200, json={"message": {"content": "", "thinking": "…"}, "done_reason": "stop"})
+
+    monkeypatch.setattr(feedback.httpx, "post", post)
+    with pytest.raises(feedback.FeedbackError, match="empty answer"):
+        feedback._ollama("gemma4:e4b", {"transcript": [], "session": {}})
+    assert sent["think"] is False
+
+
 def test_ollama_errors_are_classified(monkeypatch):
     monkeypatch.setattr(config, "OLLAMA_URL", "http://ollama.test")
 
