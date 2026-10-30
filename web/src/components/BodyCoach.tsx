@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { DrawingUtils, FaceLandmarker, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { quietMediaPipeInfo } from "@/lib/mediapipeLogs";
 import {
   blendshapeMap,
   faceSignals,
@@ -207,6 +208,7 @@ function useBodyTracker(errors: { denied: string; loadFail: string }) {
     }
     try {
       const vision = await import("@mediapipe/tasks-vision");
+      quietMediaPipeInfo();
       const files = await vision.FilesetResolver.forVisionTasks(WASM);
       const make = (delegate: "GPU" | "CPU") =>
         Promise.all([

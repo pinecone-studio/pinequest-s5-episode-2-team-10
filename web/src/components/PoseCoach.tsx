@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { DrawingUtils, FaceLandmarker, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { quietMediaPipeInfo } from "@/lib/mediapipeLogs";
 import { pointingAt, SwipeTracker, type Side, type Swipe } from "@/lib/poseCoach";
 import { blendshapeMap, faceSignals, poseSignals, recent, summarize, type FrameSignals, type Summary } from "@/lib/bodySignals";
 import { useLang } from "@/lib/i18nClient";
@@ -42,6 +43,7 @@ let faceLoad: Promise<FaceLandmarker> | null = null;
 function loadVision(): Promise<Vision> {
   visionLoad ??= (async () => {
     const { FilesetResolver, PoseLandmarker, DrawingUtils } = await import("@mediapipe/tasks-vision");
+    quietMediaPipeInfo();
     const files = await FilesetResolver.forVisionTasks(WASM_URL);
     const pose = await PoseLandmarker.createFromOptions(files, {
       baseOptions: { modelAssetPath: POSE_MODEL, delegate: "GPU" },
@@ -60,6 +62,7 @@ function loadVision(): Promise<Vision> {
 function loadFace(): Promise<FaceLandmarker> {
   faceLoad ??= (async () => {
     const { FilesetResolver, FaceLandmarker } = await import("@mediapipe/tasks-vision");
+    quietMediaPipeInfo();
     const files = await FilesetResolver.forVisionTasks(WASM_URL);
     const make = (delegate: "GPU" | "CPU") =>
       FaceLandmarker.createFromOptions(files, {

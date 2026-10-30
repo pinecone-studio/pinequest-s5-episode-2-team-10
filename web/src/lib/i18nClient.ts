@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { isLang, LANG_HEADER, t, type Lang, type MessageKey } from "./i18n";
 
 // Browser side: the choice lives in memory and is copied to localStorage when allowed.
@@ -38,7 +38,11 @@ function subscribe(listener: () => void) {
 /** The interface language and a translator bound to it. */
 export function useLang(): { lang: Lang; tr: (key: MessageKey, vars?: Record<string, string | number>) => string } {
   const lang = useSyncExternalStore(subscribe, currentLang, () => "mn" as Lang);
-  return { lang, tr: (key, vars) => t(lang, key, vars) };
+  // The same function until the language changes. A new one on every render made hooks that list
+  // `tr` as a dependency run again on every render: the admin status page re-fetched in a loop and
+  // used up the backend's database connections.
+  const tr = useCallback((key: MessageKey, vars?: Record<string, string | number>) => t(lang, key, vars), [lang]);
+  return { lang, tr };
 }
 
 /** Headers to send with fetches so the API answers in the chosen language. */
