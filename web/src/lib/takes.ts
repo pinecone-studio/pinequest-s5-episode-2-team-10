@@ -21,6 +21,9 @@ export interface Take {
   fillerWords: string[]; // the fillers this speaker used, most frequent first
   // Delivery problems the analysis found by code (rushed ending, long silences, fading voice, …).
   delivery: { problem: string; action: string }[];
+  // The analysis's other fixes (the model's, or the rule-based fallback's), most important first.
+  // Missing on takes saved before this was kept.
+  fixes?: { problem: string; action: string }[];
   example?: boolean; // a bundled example take (demo account), not the speaker's own
   alsoIds?: string[]; // earlier analyses of the same recording, hidden behind this one (deleted with it)
 }
@@ -69,6 +72,8 @@ const sameText = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim();
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** One take from a saved analysis. A point whose quote wasn't in the transcript counts as missed. */
+const MAX_FIXES = 3;
+
 export function takeFrom(attempt: Attempt, report: Report): Take {
   const points = (report.feedback.main_points?.points ?? []).map((p) => ({
     text: p.text,
@@ -92,6 +97,10 @@ export function takeFrom(attempt: Attempt, report: Report): Take {
     fillerWords: [...(report.feedback.fillers?.words ?? [])].sort((a, b) => b.count - a.count).map((w) => w.word),
     delivery: (report.feedback.recommendations ?? [])
       .filter((r) => r.area === "delivery" && r.source === "measured" && r.problem)
+      .map((r) => ({ problem: r.problem, action: r.action })),
+    fixes: (report.feedback.recommendations ?? [])
+      .filter((r) => r.problem && !(r.area === "delivery" && r.source === "measured"))
+      .slice(0, MAX_FIXES)
       .map((r) => ({ problem: r.problem, action: r.action })),
   };
 }
