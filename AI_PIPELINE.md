@@ -34,7 +34,7 @@ The worker runs these steps for each attempt (`pipeline/run.py`):
 
 6a. **Fallbacks when the GPU PC can't be used** (`asr.transcribe_with_fallback`, `feedback.generate_with_fallback`)
    - If the voice server is down, unreachable, too slow or refuses the token, Duudlaga transcribes instead (`PITCH_ASR_FALLBACK`, needs `DUUDLAGA_API_KEY`). Its text is placed over the parts of the audio with sound, like the voice server's, so pauses and the delivery checks still work.
-   - If Gemma (Ollama) can't be reached or lacks the model, Claude writes the feedback when `ANTHROPIC_API_KEY` is set, otherwise the no-model check (`PITCH_FEEDBACK_FALLBACK`). A bad answer from a working Gemma does not fall back.
+   - If Gemma (Ollama) can't be reached or lacks the model, Claude writes the feedback when `ANTHROPIC_API_KEY` is set, otherwise the no-model check (`PITCH_FEEDBACK_FALLBACK`). A reply that isn't JSON (empty, or text around it that can't be read) is asked for once more; if the second one isn't JSON either, the fallback writes the feedback. The warning in the backend log gives the Ollama host, `done_reason`, token counts and the reply's length, never its text. An answer that is JSON but doesn't match the schema does not fall back. Tests: `tests/test_gemma_reply.py`.
    - The report's `backend` is the model actually used, and `fallbacks` lists what stood in; the pitch page says so above the result. Tests: `tests/test_fallbacks.py`.
 
 6b. **Delivery checks** (`delivery.py`, `loudness.py`), by code after the model's advice
