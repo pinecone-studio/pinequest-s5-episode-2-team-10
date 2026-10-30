@@ -22,6 +22,55 @@ log = logging.getLogger("pitchcoach")
 USER_ERRORS = (AsrError, FeedbackError, ValueError, storage.StorageError)
 
 
+
+MAX_PREVIOUS_TAKES = 2
+
+
+def previous_takes(db: Session, s: PitchSession, audio: AudioAsset) -> list[dict]:
+    """The speaker's earlier analysed takes of this pitch, newest first, as a short summary for the model.
+
+    Analysing the same recording again is not an earlier take, so a session with the same file name
+    and length is skipped.
+    """
+    rows = db.exec(
+        select(PitchSession, AnalysisReport, AudioAsset)
+        .join(AnalysisReport, AnalysisReport.session_id == PitchSession.id)
+        .join(AudioAsset, AudioAsset.session_id == PitchSession.id, isouter=True)
+        .where(
+            PitchSession.project_id == s.project_id,
+            PitchSession.id != s.id,
+            PitchSession.status == "completed",
+            PitchSession.created_at < s.created_at,
+        )
+        .order_by(PitchSession.created_at.desc())
+    ).all()
+    out: list[dict] = []
+    for earlier, report, earlier_audio in rows:
+        same_recording = (
+            earlier.audio_filename == s.audio_filename
+            and earlier_audio is not None
+            and abs((earlier_audio.duration_s or 0) - (audio.duration_s or 0)) < 0.05
+        )
+        if same_recording:
+            continue
+        fb = report.feedback or {}
+        metrics = report.metrics or {}
+        points = (fb.get("main_points") or {}).get("points") or []
+        out.append({
+            "date": earlier.created_at.date().isoformat(),
+            "fixes": [r["problem"] for r in (fb.get("recommendations") or [])[:3] if r.get("problem")],
+            "main_points": [
+                {"text": p.get("text", ""), "status": p.get("status") if p.get("verified", True) else "missed"}
+                for p in points
+            ],
+            "wpm": metrics.get("wpm"),
+            "fillers_per_100": metrics.get("fillers_per_100"),
+        })
+        if len(out) == MAX_PREVIOUS_TAKES:
+            break
+    return out
+
+
 class Worker:
     def __init__(self) -> None:
         self._queue: deque[str] = deque()
@@ -103,6 +152,7 @@ class Worker:
                 "script": s.script,
                 "idea": s.idea,
                 "key_points": list(s.key_points or []),
+                "previous_takes": previous_takes(db, s, audio),
             }
             slide_data = [
                 {"number": sl.number, "text": sl.text, "notes": sl.notes, "image_only": sl.image_only,
