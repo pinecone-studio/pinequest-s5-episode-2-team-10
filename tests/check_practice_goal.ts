@@ -26,6 +26,17 @@ assert.equal(nextGoal(take({ ...busy, points: [], numberIssues: [], fillersPer10
 assert.equal(nextGoal(take({})).kind, "ready");
 assert.equal(nextGoal(take({ fillersPer100: null, longPausesPerMin: null })).kind, "ready");
 
+// When points, numbers, fillers and pauses are fine, the goal is what the analysis said to fix:
+// a measured delivery problem first, then its other fixes. "Ready" only when nothing is left.
+const fixes = [{ problem: "Шийдлийн талаарх мэдээлэл хэт ерөнхий байна.", action: "Апп хэрхэн ажилладгийг нэг жишээгээр хэл." }];
+assert.deepEqual(nextGoal(take({ fixes })), { kind: "fix", problem: fixes[0].problem, action: fixes[0].action });
+const rushed = { problem: "Төгсгөлдөө яарсан.", action: "Сүүлийн хэсгийг удаан хэл." };
+assert.equal((nextGoal(take({ fixes, delivery: [rushed] })) as { problem: string }).problem, rushed.problem);
+assert.equal(nextGoal(take({ fixes, fillersPer100: 6 })).kind, "fillers"); // the fixed checks still come first
+assert.equal(nextGoal(take({ fixes: [] })).kind, "ready");
+assert.equal(canDrill(nextGoal(take({ fixes }))), false); // a whole-take fix: no short drill
+assert.deepEqual(workOn(take({ fixes })).map((f) => f.kind), ["fix"]);
+
 // Which goals a drill can check.
 assert.equal(canDrill(nextGoal(busy)), true);
 assert.equal(canDrill({ kind: "number", onSlide: "40%", said: null }), false);

@@ -17,6 +17,7 @@ export type Goal =
   | { kind: "number"; onSlide: string; said: string | null }
   | { kind: "fillers"; per100: number; words: string[] }
   | { kind: "pauses"; perMin: number }
+  | { kind: "fix"; problem: string; action: string }
   | { kind: "ready" };
 
 /** The single most important thing to work on next, from the latest take. */
@@ -29,11 +30,15 @@ export function nextGoal(take: Take): Goal {
     return { kind: "fillers", per100: take.fillersPer100, words: take.fillerWords };
   }
   if (take.longPausesPerMin != null && take.longPausesPerMin > PAUSE_GOAL) return { kind: "pauses", perMin: take.longPausesPerMin };
+  // Then what the analysis itself said to fix: delivery problems found by code, then its other fixes.
+  // "Ready" only when nothing is left at all.
+  const fix = take.delivery[0] ?? take.fixes?.[0];
+  if (fix) return { kind: "fix", problem: fix.problem, action: fix.action };
   return { kind: "ready" };
 }
 
 export interface Focus {
-  kind: "point" | "number" | "delivery" | "fillers" | "pauses";
+  kind: "point" | "number" | "delivery" | "fix" | "fillers" | "pauses";
   key: MessageKey;
   vars: Record<string, string | number>;
   hint?: string; // what to do, when the analysis said (delivery problems)
@@ -53,6 +58,7 @@ export function workOn(take: Take): Focus[] {
     out.push({ kind: "number", key: n.said ? "focusNumberSaid" : "focusNumber", vars: { slide: n.onSlide, said: n.said ?? "" } });
   }
   for (const d of take.delivery) out.push({ kind: "delivery", key: "focusDelivery", vars: { problem: d.problem }, hint: d.action || undefined });
+  for (const f of take.fixes ?? []) out.push({ kind: "fix", key: "focusFix", vars: { problem: f.problem }, hint: f.action || undefined });
   if (take.fillersPer100 != null && take.fillersPer100 > FILLER_GOAL) {
     out.push({ kind: "fillers", key: "focusFillers", vars: { per100: take.fillersPer100.toFixed(1), limit: FILLER_GOAL } });
   }

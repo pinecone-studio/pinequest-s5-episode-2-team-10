@@ -18,7 +18,7 @@ type Drill =
   | { step: "error"; message: string };
 
 /** What to work on next, as one sentence, plus how to practise it. */
-function describe(goal: Goal): { text: MessageKey; vars: Record<string, string | number>; hint: MessageKey } {
+function describe(goal: Goal): { text: MessageKey; vars: Record<string, string | number>; hint: MessageKey; hintText?: string } {
   switch (goal.kind) {
     case "point":
       return { text: goal.status === "missed" ? "goalPointMissed" : "goalPointPartial", vars: { point: goal.point }, hint: "goalPointHint" };
@@ -28,6 +28,9 @@ function describe(goal: Goal): { text: MessageKey; vars: Record<string, string |
       return { text: "goalFillers", vars: { per100: goal.per100.toFixed(1), limit: FILLER_GOAL }, hint: goal.words.length ? "goalFillersHint" : "goalFullTake" };
     case "pauses":
       return { text: "goalPauses", vars: { perMin: goal.perMin.toFixed(1) }, hint: "goalPausesHint" };
+    case "fix":
+      // The analysis's own "what to do", when it gave one.
+      return { text: "goalFix", vars: { problem: goal.problem }, hint: "goalFullTake", hintText: goal.action || undefined };
     case "ready":
       return { text: "goalReady", vars: {}, hint: "goalReadyHint" };
   }
@@ -38,7 +41,7 @@ export default function PracticeGoal({ take }: { take: Take }) {
   const { tr } = useLang();
   const goal = nextGoal(take);
   const goalKey = JSON.stringify(goal);
-  const { text, vars, hint } = describe(goal);
+  const { text, vars, hint, hintText } = describe(goal);
 
   const [drill, setDrill] = useState<{ goal: string; state: Drill }>({ goal: goalKey, state: { step: "idle" } });
   const state: Drill = drill.goal === goalKey ? drill.state : { step: "idle" }; // a new goal starts fresh
@@ -116,7 +119,7 @@ export default function PracticeGoal({ take }: { take: Take }) {
     <div className={`take-goal${goal.kind === "ready" ? " is-ready" : ""}`}>
       <h3>{tr("goalTitle")}</h3>
       <p className="take-goal-text">{tr(text, vars)}</p>
-      <p className="take-note">{tr(hint, { limit: DRILL_FILLERS })}</p>
+      <p className="take-note">{hintText ?? tr(hint, { limit: DRILL_FILLERS })}</p>
 
       {drillable && (
         <div className="take-drill">

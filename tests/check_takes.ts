@@ -108,7 +108,8 @@ assert.ok(examples[0].covered < examples[2].covered, "main points covered go up"
 assert.equal(examples[2].covered, examples[2].total, "the last example makes every main point");
 assert.ok(examples[0].delivery.some((d) => d.problem.startsWith("Төгсгөлдөө яарсан")), "take 1 rushes its ending");
 assert.ok(workOn(examples[0]).length > workOn(examples[2]).length, "less to work on by the last take");
-assert.deepEqual(workOn(examples[2]), [], "nothing big left in the last take");
+// By the last take only the analysis's own fixes remain: no missed points, numbers or measured problems.
+assert.ok(workOn(examples[2]).length > 0 && workOn(examples[2]).every((f) => f.kind === "fix"), "only the analysis's fixes left");
 // Only code-measured delivery findings count (the model's own delivery remarks are not listed).
 assert.ok(examples.every((t) => t.delivery.every((d) => !d.problem.endsWith(" "))));
 console.log("example take checks passed");
