@@ -60,4 +60,4 @@ def test_bad_replies_fall_back_to_the_rules(monkeypatch):
     ))
     fb, used, note = feedback.generate_with_fallback("gemma4-base", _data())
     assert (fb, used) == ({"by": "rules"}, "rules")
-    assert "valid JSON" in note
+    assert "empty answer" in note

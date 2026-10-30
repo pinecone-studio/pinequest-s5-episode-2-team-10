@@ -292,6 +292,9 @@ def _ollama(model: str, data: dict) -> dict:
         "model": model,
         "stream": False,
         "format": SCHEMA,
+        # Gemma 4 can think first; then the answer may come back in "thinking" with an empty "content".
+        # The training scripts turn it off too (training/speed/make_data.py).
+        "think": False,
         "keep_alive": config.OLLAMA_KEEP_ALIVE,
         "options": {"temperature": 0, "num_ctx": num_ctx_for(len(PROMPT) + len(user))},
         "messages": [
@@ -311,6 +314,7 @@ def _ollama(model: str, data: dict) -> dict:
         found = _find_json(content)
         if found is not None:
             return found
+        empty = not content.strip()
         # Sizes and counts only, never the reply itself: it quotes the transcript.
         log.warning(
             "Gemma reply %d/%d was not JSON: model=%s ollama=%s done_reason=%s num_ctx=%s "
@@ -319,6 +323,8 @@ def _ollama(model: str, data: dict) -> dict:
             payload["options"]["num_ctx"], body.get("prompt_eval_count"), body.get("eval_count"), len(content),
         )
     # Unavailable, not a plain error, so the fallback model still writes the feedback.
+    if empty:
+        raise ModelUnavailable(f"it gave an empty answer {OLLAMA_ATTEMPTS} times")
     raise ModelUnavailable(f"its answer wasn't valid JSON {OLLAMA_ATTEMPTS} times")
 
 
