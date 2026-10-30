@@ -197,6 +197,7 @@ export interface Recommendation {
   action: string;
   example_sentence: string;
   impact: "high" | "medium" | "low";
+  source?: "measured"; // found by code (delivery checks), not written by the feedback model
 }
 
 export interface PracticeTask {
@@ -260,6 +261,8 @@ export interface Report {
   slides_filename: string | null;
   backend: FeedbackBackend;
   notes: string[];
+  // Parts that fell back because the GPU PC couldn't be used (see API.md). Missing on older reports.
+  fallbacks?: { part: "speech_to_text" | "feedback"; used: string; asked?: string }[];
   created_at: string;
 }
 

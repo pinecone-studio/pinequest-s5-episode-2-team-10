@@ -136,7 +136,8 @@ class Worker:
             self._set(session_id, status="failed", stage=None, error="Analysis failed on the server.")
             return
 
-        self._save(session_id, backend, result)
+        # The report names the model that actually wrote the feedback (it may have fallen back).
+        self._save(session_id, result.get("feedback_backend", backend), result)
 
     def _save(self, session_id: str, backend: str, r: dict) -> None:
         with Session(engine) as db:
@@ -168,6 +169,7 @@ class Worker:
                     "notes": r["notes"],
                     "asr_backend": r["asr_backend"],
                     "delivery_checks": r.get("delivery", {}),
+                    "fallbacks": r.get("fallbacks", []),
                 },
                 backend=backend,
                 created_at=utcnow(),

@@ -28,7 +28,21 @@ export interface OffTopic {
 }
 
 /** A small "▶ listen" button; while its sound plays it becomes "■ stop". */
-export function ListenButton({ label, play, primary = false }: { label: string; play: () => Promise<void>; primary?: boolean }) {
+/**
+ * Play / Stop for one sound. `active` marks it as playing when it was started elsewhere (the result
+ * read aloud automatically after an analysis), so the button offers Stop then too.
+ */
+export function ListenButton({
+  label,
+  play,
+  primary = false,
+  active = false,
+}: {
+  label: string;
+  play: () => Promise<void>;
+  primary?: boolean;
+  active?: boolean;
+}) {
   const { tr } = useLang();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,8 +55,10 @@ export function ListenButton({ label, play, primary = false }: { label: string; 
     [],
   );
 
+  const playing = busy || active;
+
   async function click() {
-    if (busy) {
+    if (playing) {
       stopListening();
       return;
     }
@@ -61,8 +77,8 @@ export function ListenButton({ label, play, primary = false }: { label: string; 
 
   return (
     <span className="desk-listen-wrap">
-      <button type="button" className={primary ? "desk-listen desk-listen-all" : "desk-listen"} aria-pressed={busy} onClick={click}>
-        {busy ? `■ ${tr("stopListening")}` : `▶ ${label}`}
+      <button type="button" className={primary ? "desk-listen desk-listen-all" : "desk-listen"} aria-pressed={playing} onClick={click}>
+        {playing ? `■ ${tr("stopListening")}` : `▶ ${label}`}
       </button>
       {error && <span className="desk-listen-error">{error}</span>}
     </span>

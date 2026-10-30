@@ -36,3 +36,14 @@ assert.ok(said.includes("Сайн тал") && said.includes("Сайжруула�
 assert.ok(!/Strengths|Things to improve|Try saying/.test(said), said);
 
 console.log("coach voice checks passed");
+
+// Abbreviations are spoken as Mongolian words, not spelled out.
+const { forSpeech } = await import("../web/src/lib/server/tts.ts");
+assert.equal(forSpeech("Хурд 165 WPM байна."), "Хурд минутад 165 үг байна.");
+assert.equal(forSpeech("Таны WPM хэт өндөр."), "Таны минутад хэлэх үгийн тоо хэт өндөр.");
+assert.equal(forSpeech("Pace: 140 wpm"), "Pace: минутад 140 үг");
+assert.equal(forSpeech("120 үг/мин хурдтай"), "минутад 120 үг хурдтай");
+assert.equal(forSpeech("(хамгийн их нь 0:14 орчим, 8 дБ)."), "(хамгийн их нь 0:14 орчим, 8 децибел).");
+assert.equal(forSpeech("Сайн байна уу."), "Сайн байна уу."); // ordinary text is untouched
+assert.equal(forSpeech("dBz болон wpmx"), "dBz болон wpmx"); // only whole abbreviations
+console.log("speech wording checks passed");

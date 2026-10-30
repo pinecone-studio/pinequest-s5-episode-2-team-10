@@ -21,6 +21,31 @@ export interface Take {
   fillerWords: string[]; // the fillers this speaker used, most frequent first
   // Delivery problems the analysis found by code (rushed ending, long silences, fading voice, …).
   delivery: { problem: string; action: string }[];
+  example?: boolean; // a bundled example take (demo account), not the speaker's own
+  alsoIds?: string[]; // earlier analyses of the same recording, hidden behind this one (deleted with it)
+}
+
+/**
+ * Example takes shipped with the demo pitches, so the demo account shows practice over time before
+ * anyone records. Real analyses of recordings made for the demo (scripts/demo_takes); labelled
+ * "Example" on the page. Keyed by demo folder id.
+ */
+export const EXAMPLE_TAKES: Record<string, string> = {
+  "d97bd0e5-9bd0-4c18-abde-debcddd552f7": "/defaults/demo/agaar-takes.json", // Агаар
+};
+
+/** The example takes for a demo folder ([] when it has none or they can't be loaded). */
+export async function loadExampleTakes(folderId: string): Promise<Take[]> {
+  const url = EXAMPLE_TAKES[folderId];
+  if (!url) return [];
+  try {
+    const res = await fetch(url, { cache: "force-cache" });
+    if (!res.ok) return [];
+    const rows = (await res.json()) as { attempt: Attempt; report: Report }[];
+    return rows.map((r) => ({ ...takeFrom(r.attempt, r.report), example: true }));
+  } catch {
+    return [];
+  }
 }
 
 export type Trend = "better" | "worse" | "same" | "info";
@@ -66,7 +91,7 @@ export function takeFrom(attempt: Attempt, report: Report): Take {
       .map((n) => ({ onSlide: n.on_slide, said: n.said })),
     fillerWords: [...(report.feedback.fillers?.words ?? [])].sort((a, b) => b.count - a.count).map((w) => w.word),
     delivery: (report.feedback.recommendations ?? [])
-      .filter((r) => r.area === "delivery" && r.problem)
+      .filter((r) => r.area === "delivery" && r.source === "measured" && r.problem)
       .map((r) => ({ problem: r.problem, action: r.action })),
   };
 }
@@ -78,7 +103,9 @@ export function takeFrom(attempt: Attempt, report: Report): Take {
 export function orderTakes(takes: Take[]): Take[] {
   const latest = new Map<string, Take>();
   for (const take of [...takes].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
-    latest.set(take.audio ?? take.id, take);
+    const key = take.audio ?? take.id;
+    const before = latest.get(key);
+    latest.set(key, before ? { ...take, alsoIds: [...(before.alsoIds ?? []), before.id] } : take);
   }
   return [...latest.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-MAX_TAKES);
 }

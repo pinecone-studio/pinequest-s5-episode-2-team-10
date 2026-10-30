@@ -16,6 +16,11 @@ ASR_MODEL = _env("PITCH_ASR_MODEL", "BuzzASR/mongolian")
 DUUDLAGA_API_KEY = _env("DUUDLAGA_API_KEY", "")
 DUUDLAGA_BASE_URL = _env("DUUDLAGA_BASE_URL", "https://api.duudlaga.dev").rstrip("/")
 DUUDLAGA_LANGUAGES = _env("DUUDLAGA_LANGUAGES", "mn-MN,en-US")
+# When the voice server (PITCH_ASR=remote) can't be reached: "duudlaga" (needs DUUDLAGA_API_KEY) or "none".
+ASR_FALLBACK = _env("PITCH_ASR_FALLBACK", "duudlaga")
+# When Gemma (Ollama) can't be reached: "auto" (Claude if ANTHROPIC_API_KEY is set, else the no-model
+# check), "claude", "rules", or "none".
+FEEDBACK_FALLBACK = _env("PITCH_FEEDBACK_FALLBACK", "auto")
 
 # Voice server (PITCH_ASR=remote). The token must match VOICE_SERVER_TOKEN on the voice machine.
 VOICE_URL = _env("PITCH_VOICE_URL", "http://localhost:8001").rstrip("/")

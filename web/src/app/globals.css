@@ -906,12 +906,46 @@ body {
   pointer-events: none;
 }
 
-.pose-coach-video {
+/* The preview and the lines over it: the same box, both mirrored */
+.pose-coach.is-wide {
+  max-width: min(300px, 45%);
+}
+
+.pose-coach-view {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+}
+
+.pose-coach-view[hidden] {
+  display: none;
+}
+
+.pose-coach-video,
+.pose-coach-lines {
+  display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
-  border-radius: 6px;
   object-fit: cover;
   transform: scaleX(-1); /* a mirror, so moving left looks like moving left */
+}
+
+.pose-coach-lines {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.pose-coach-rec {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.9);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .pose-coach-count,
@@ -8183,4 +8217,159 @@ button.admin-service:focus-visible {
   .folder-room .take-history {
     padding: 16px;
   }
+}
+
+/* Analysis progress in the sticky Analyze footer (AnalysisProgress): one fixed-height line */
+.analysis-progress {
+  display: grid;
+}
+
+.analysis-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.analysis-progress-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-progress-time {
+  flex: none;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A ring that fills as the analysis goes (starts at the top, fills clockwise) */
+.analysis-ring {
+  flex: none;
+  transform: rotate(-90deg);
+}
+
+.analysis-ring circle {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.analysis-ring-track {
+  stroke: color-mix(in srgb, var(--brand) 22%, transparent);
+}
+
+.analysis-ring-fill {
+  stroke: var(--brand);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analysis-ring-fill { transition: none; }
+}
+
+/* A part of the analysis fell back (the GPU PC couldn't be used) */
+.desk-fallback-note {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  color: var(--warning);
+  font-size: 13px;
+}
+
+.take-badge.is-example {
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+}
+
+/* Delete a take (TakeHistory) */
+.take-delete {
+  flex: none;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--room-line, var(--line));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.take-delete:hover {
+  border-color: color-mix(in srgb, var(--negative) 60%, transparent);
+  color: var(--negative);
+}
+
+.take-delete:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Feedback dialog while the coach voice reads: only the part being read is shown; ease it in */
+.fb.is-reading > * {
+  animation: fb-focus-in 0.25s ease-out;
+}
+
+@keyframes fb-focus-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fb.is-reading > * { animation: none; }
+}
+
+/* Body language card under the slide (BodyCoachPanel), styled like the other pitch-page cards */
+.folder-room .body-panel {
+  margin-top: 14px;
+  padding: 18px 20px 20px;
+}
+
+.body-panel h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.body-panel-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 12px;
+}
+
+.body-panel-summary {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--room-line, var(--line));
+}
+
+.body-panel-summary h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .body-panel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Body language card: the live meters, and the take's summary after Stop */
+.body-panel-live {
+  margin-top: 12px;
+  max-width: 420px;
+}
+
+.body-panel-rec {
+  flex: none;
+  color: var(--negative);
+  font-size: 12px;
+  font-weight: 600;
 }

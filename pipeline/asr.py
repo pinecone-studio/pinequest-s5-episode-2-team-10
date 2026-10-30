@@ -47,6 +47,24 @@ class AsrError(Exception):
     pass
 
 
+class VoiceUnavailable(AsrError):
+    """The voice server can't be used right now (down, unreachable, too slow, or the token was refused)."""
+
+
+def transcribe_with_fallback(wav: Path) -> tuple[list[Word], str, str | None]:
+    """Like transcribe(), but if the voice server can't be used, Duudlaga transcribes instead
+    (PITCH_ASR_FALLBACK, with DUUDLAGA_API_KEY). Returns (words, backend, note); the note says why
+    the fallback was used and is shown with the report."""
+    try:
+        words, used = transcribe(wav)
+        return words, used, None
+    except VoiceUnavailable as e:
+        if config.ASR_FALLBACK != "duudlaga" or not config.DUUDLAGA_API_KEY:
+            raise
+        words = _duudlaga_words(wav)
+        return words, "duudlaga", f"The voice server couldn't be used ({e}), so Duudlaga transcribed this recording."
+
+
 def transcribe(wav: Path) -> tuple[list[Word], str]:
     """Returns (words, backend_name)."""
     if config.ASR_BACKEND == "stub":
@@ -150,19 +168,21 @@ def _remote_words(wav: Path) -> list[Word]:
             with wav.open("rb") as f, httpx.Client(timeout=timeout) as client:
                 resp = client.post(url, headers=headers, files={"file": (wav.name, f, "audio/wav")})
         except httpx.TimeoutException as e:
-            raise AsrError("The voice server took too long to transcribe. Try again.") from e
+            raise VoiceUnavailable("The voice server took too long to transcribe. Try again.") from e
         except httpx.RequestError as e:
             if attempt == 0:
                 continue
-            raise AsrError("Could not reach the voice server. Check that it and the tunnel are running.") from e
+            raise VoiceUnavailable("Could not reach the voice server. Check that it and the tunnel are running.") from e
         if resp.status_code in (502, 503, 504) and attempt == 0:
             continue
         break
 
     if resp is None:
-        raise AsrError("Could not reach the voice server.")
+        raise VoiceUnavailable("Could not reach the voice server.")
+    if resp.status_code in (502, 503, 504):
+        raise VoiceUnavailable(f"The voice server isn't answering (HTTP {resp.status_code}).")
     if resp.status_code == 401:
-        raise AsrError("The voice server rejected PITCH_VOICE_TOKEN.")
+        raise VoiceUnavailable("The voice server rejected PITCH_VOICE_TOKEN.")
     if resp.status_code >= 400:
         message = None
         try:
@@ -229,6 +249,14 @@ def _duudlaga_words(wav: Path) -> list[Word]:
     text = (body.get("text") or "").strip()
     if not text:
         return []
+
+    try:
+        samples, sr = _read_wav(wav)
+        placed = word_timing.spread_words(text.split(), word_timing.voiced_spans(samples, sr))
+    except (AsrError, OSError, wave.Error):
+        placed = []
+    if placed:
+        return placed
 
     duration = body.get("duration_seconds")
     if not isinstance(duration, (int, float)) or duration <= 0:

@@ -2,15 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { api, ApiRequestError, USING_MOCK } from "@/lib/api";
-import { formatDate } from "@/lib/format";
+import { errorMessage, formatDate } from "@/lib/format";
 import { useLang } from "@/lib/i18nClient";
 import type { MessageKey } from "@/lib/i18n";
 import { analysisProjectId } from "@/lib/folderStore";
 import { useAccount } from "@/lib/session";
+import Modal from "./Modal";
 import PracticeGoal from "./PracticeGoal";
 import SectionToggle, { useHidden } from "./SectionToggle";
 import { workOn, type Focus } from "@/lib/practiceGoal";
-import { cellTrend, compareTakes, MAX_TAKES, orderTakes, takeFrom, type Take, type Trend } from "@/lib/takes";
+import { cellTrend, compareTakes, loadExampleTakes, MAX_TAKES, orderTakes, takeFrom, type Take, type Trend } from "@/lib/takes";
+
+const DEMO_EMAIL = "demo@pitchcoach.local";
 
 type Metric = "points" | "fillers" | "wpm" | "pauses" | "volume";
 
@@ -41,7 +44,26 @@ export default function TakeHistory({ folderId, version }: { folderId: string; v
   const account = useAccount();
   // Each result remembers the request it answers; until the current one is in, show "loading"
   // (with the previous table, if any, still on screen).
-  const request = `${account?.id ?? ""}|${folderId}|${version}`;
+  const [reload, setReload] = useState(0); // bumped after a take is deleted
+  const request = `${account?.id ?? ""}|${folderId}|${version}|${reload}`;
+  const [confirm, setConfirm] = useState<{ take: Take; n: number } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function deleteTake(take: Take) {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      // Every analysis of this recording, so an older one doesn't take its place.
+      await Promise.all([take.id, ...(take.alsoIds ?? [])].map((id) => api.deleteAttempt(id)));
+      setConfirm(null);
+      setReload((r) => r + 1);
+    } catch (err) {
+      setDeleteError(errorMessage(err));
+    } finally {
+      setDeleting(false);
+    }
+  }
   const [result, setResult] = useState<{ request: string; value: Result } | null>(null);
   const loading = result?.request !== request;
 
@@ -51,25 +73,29 @@ export default function TakeHistory({ folderId, version }: { folderId: string; v
       if (!cancelled) setResult({ request, value });
     };
     const projectId = account && !USING_MOCK ? analysisProjectId(account.id, folderId) : null;
-    if (!projectId) {
-      queueMicrotask(() => finish({ kind: "idle" }));
-    } else {
-      (async () => {
-        try {
-          const project = await api.getProject(projectId);
-          // Re-analysing a recording adds an attempt, so look at a few more than are shown.
-          const done = project.attempts
-            .filter((a) => a.status === "completed" && a.has_audio !== false)
-            .sort((a, b) => a.created_at.localeCompare(b.created_at))
-            .slice(-MAX_TAKES * 2);
-          const takes = await Promise.all(done.map(async (a) => takeFrom(a, await api.report(a.id))));
-          finish({ kind: "ready", takes: orderTakes(takes) });
-        } catch (err) {
-          // The project is gone (deleted, or remembered from another database): nothing to show yet.
-          finish(err instanceof ApiRequestError && err.status === 404 ? { kind: "idle" } : { kind: "error" });
-        }
-      })();
-    }
+    (async () => {
+      // The demo account's demo pitches start with example takes; the visitor's own come after them.
+      const examples = account?.email === DEMO_EMAIL ? await loadExampleTakes(folderId) : [];
+      const withExamples = (own: Take[]): Result =>
+        own.length || examples.length ? { kind: "ready", takes: orderTakes([...examples, ...own]) } : { kind: "idle" };
+      if (!projectId) {
+        finish(withExamples([]));
+        return;
+      }
+      try {
+        const project = await api.getProject(projectId);
+        // Re-analysing a recording adds an attempt, so look at a few more than are shown.
+        const done = project.attempts
+          .filter((a) => a.status === "completed" && a.has_audio !== false)
+          .sort((a, b) => a.created_at.localeCompare(b.created_at))
+          .slice(-MAX_TAKES * 2);
+        const takes = await Promise.all(done.map(async (a) => takeFrom(a, await api.report(a.id))));
+        finish(withExamples(takes));
+      } catch (err) {
+        // The project is gone (deleted, or remembered from another database): nothing of their own yet.
+        finish(err instanceof ApiRequestError && err.status === 404 ? withExamples([]) : { kind: "error" });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -124,10 +150,17 @@ export default function TakeHistory({ folderId, version }: { folderId: string; v
         {takes.length === 1 && <p className="take-note">{tr("takesOne")}</p>}
 
         {/* 3. Each take, newest first, with what to work on in it. */}
+        {takes.some((t) => t.example) && <p className="take-note">{tr("takesExampleNote")}</p>}
         {takes.length > 0 && (
           <ol className="take-list" aria-label={tr("takesListLabel")}>
             {[...takes].reverse().map((take, j) => (
-              <TakeRow key={take.id} take={take} n={takes.length - j} latest={j === 0} />
+              <TakeRow
+                key={take.id}
+                take={take}
+                n={takes.length - j}
+                latest={j === 0}
+                onDelete={take.example ? undefined : () => setConfirm({ take, n: takes.length - j })}
+              />
             ))}
           </ol>
         )}
@@ -178,6 +211,25 @@ export default function TakeHistory({ folderId, version }: { folderId: string; v
           </details>
         )}
       </div>
+
+      {confirm && (
+        <Modal title={tr("takeDeleteTitle", { n: confirm.n })} onClose={() => !deleting && setConfirm(null)}>
+          <p className="folder-delete-text">{tr("takeDeleteText", { date: formatDate(confirm.take.createdAt) })}</p>
+          {deleteError && (
+            <p className="desk-note" role="alert">
+              {deleteError}
+            </p>
+          )}
+          <div className="app-modal-actions folder-delete-actions">
+            <button type="button" className="ui-btn" disabled={deleting} onClick={() => setConfirm(null)}>
+              {tr("cancel")}
+            </button>
+            <button type="button" className="folder-delete-btn is-confirm" autoFocus disabled={deleting} onClick={() => void deleteTake(confirm.take)}>
+              {deleting ? tr("takeDeleting") : tr("takeDelete")}
+            </button>
+          </div>
+        </Modal>
+      )}
     </section>
   );
 }
@@ -204,7 +256,7 @@ function ChangeList({ title, items }: { title: string; items: ReturnType<typeof 
 const SHOWN_FOCUS = 3;
 
 /** One take: when, two headline numbers, and what to work on in it. */
-function TakeRow({ take, n, latest }: { take: Take; n: number; latest: boolean }) {
+function TakeRow({ take, n, latest, onDelete }: { take: Take; n: number; latest: boolean; onDelete?: () => void }) {
   const { tr } = useLang();
   const focus = workOn(take);
   const item = (f: Focus, i: number) => (
@@ -221,11 +273,17 @@ function TakeRow({ take, n, latest }: { take: Take; n: number; latest: boolean }
       <div className="take-row-head">
         <strong>{tr("takeLabel", { n })}</strong>
         {latest && <span className="take-badge">{tr("takeLatest")}</span>}
+        {take.example && <span className="take-badge is-example">{tr("takeExample")}</span>}
         <span className="take-row-date">{formatDate(take.createdAt)}</span>
         <span className="take-row-stats">
           {take.total > 0 && <span>{tr("takeChipPoints", { covered: take.covered, total: take.total })}</span>}
           {take.fillersPer100 != null && <span>{tr("takeChipFillers", { per100: take.fillersPer100.toFixed(1) })}</span>}
         </span>
+        {onDelete && (
+          <button type="button" className="take-delete" onClick={onDelete} aria-label={tr("takeDeleteLabel", { n })}>
+            {tr("takeDelete")}
+          </button>
+        )}
       </div>
       {focus.length === 0 ? (
         <p className="take-row-good">✓ {tr("takeAllGood")}</p>

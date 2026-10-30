@@ -47,10 +47,13 @@ import Modal from "./Modal";
 import type { Improvement, OffTopic, Strength } from "./ImprovementList";
 import FeedbackResult from "./FeedbackResult";
 import TakeHistory from "./TakeHistory";
+import { BodyCoachPanel } from "./BodyCoach";
+import AnalysisProgress, { type AnalysisStep } from "./AnalysisProgress";
 import SectionToggle, { useHidden } from "./SectionToggle";
 import { PitchPointsEditor, pointsToSend, type MainPointsResult } from "./PitchPoints";
 import FeedbackModelSelect, { useFeedbackModel } from "./FeedbackModelSelect";
-import PoseCoach, { type CoachState } from "./PoseCoach";
+import PoseCoach, { type BodyLive, type CoachState } from "./PoseCoach";
+import type { Summary } from "@/lib/bodySignals";
 import type { Side } from "@/lib/poseCoach";
 
 // The backend's recommendation categories, as shown on a fix.
@@ -497,6 +500,10 @@ function FolderRoom({
   // The camera coach: counts pointing at the slide and turns slides with a hand swipe.
   const coach = useSyncExternalStore(subscribeCoach, coachSnapshot, () => DEFAULT_COACH);
   const [cameraOn, setCameraOn] = useState(false);
+  // Body language and eye contact: on shows the camera preview; Speak then measures the take.
+  const [bodyOn, setBodyOn] = useState(false);
+  const [bodyLive, setBodyLive] = useState<BodyLive | null>(null);
+  const [bodySummary, setBodySummary] = useState<Summary | null>(null);
   const [coachState, setCoachState] = useState<CoachState | null>(null);
   const [transcriptOpen, setTranscriptOpen] = useState(false); // the full speech text in a dialog
   const transcriptRef = useRef<HTMLParagraphElement | null>(null);
@@ -518,7 +525,12 @@ function FolderRoom({
     pointSlides: (number | null)[]; // the slide of each point sent, in the reply's order
     received: { text: boolean; audio: string | null; slide: string | null } | null;
     writing: boolean; // true while the model is still writing (shown as it arrives, not checked yet)
+    fallbacks?: { part: "speech_to_text" | "feedback"; used: string }[]; // what stood in for the GPU PC
   } | null>(null);
+  // Where a running analysis is, for the step list under the Analyze button.
+  const [analysisStep, setAnalysisStep] = useState<AnalysisStep | null>(null);
+  // Set when an analysis finishes, so the coach voice starts reading the result once it's on screen.
+  const autoReadRef = useRef(false);
 
   function rememberUrl(next: string | null) {
     if (slideUrlRef.current) URL.revokeObjectURL(slideUrlRef.current);
@@ -1041,6 +1053,14 @@ function FolderRoom({
     return readAloud(feedbackSteps(probeResult, ownClip), setReading);
   }
 
+  // A finished analysis is read aloud straight away (the Analyze click allows sound to play).
+  useEffect(() => {
+    if (!autoReadRef.current || !probeResult || probeResult.writing) return;
+    autoReadRef.current = false;
+    readResult().catch(() => {}); // no voice available (not set up, daily limit): the text is on screen
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per finished analysis, not when readResult changes
+  }, [probeResult]);
+
   async function sendToModel() {
     if (locked) return notifySubscriptionRequired();
     const saved = selectedAudio(folder);
@@ -1057,6 +1077,7 @@ function FolderRoom({
       return;
     }
     setProbing(true);
+    setAnalysisStep("upload");
     setProbeNote(null);
     setProbeResult(null);
     setResultOpen(false);
@@ -1100,8 +1121,10 @@ function FolderRoom({
       const deadline = Date.now() + 10 * 60_000;
       let status = await api.status(attempt.id);
       while (status.status === "processing" || status.status === "created" || status.status === "uploaded") {
+        // No stage yet (still in line): keep showing the upload step.
+        setAnalysisStep(status.stage ?? "upload");
         if (Date.now() > deadline) throw new Error(lang === "mn" ? "Шинжилгээ удаж байна. Дараа нь үр дүнгээ дахин нээнэ үү." : "Analysis is taking longer than expected. Check the result again shortly.");
-        await new Promise((resolve) => window.setTimeout(resolve, 2000));
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
         status = await api.status(attempt.id);
       }
       if (status.status !== "completed") throw new Error(status.error || (lang === "mn" ? "Backend шинжилгээ хийж чадсангүй." : "The backend could not analyze this recording."));
@@ -1136,7 +1159,9 @@ function FolderRoom({
         pointSlides: pointsToSend(folder.keyPoints, folder.pointSlides).slides,
         received: { text: !!report.transcript.text, audio: saved.filename, slide: slide && folder.slide ? folder.slide.filename : null },
         writing: false,
+        fallbacks: report.fallbacks ?? [],
       });
+      autoReadRef.current = true;
       showResultOnce();
       setTakesVersion((v) => v + 1);
     } catch (err) {
@@ -1144,6 +1169,7 @@ function FolderRoom({
       setProbeNote(err instanceof Error && err.message ? err.message : tr("sendFail"));
     } finally {
       setProbing(false);
+      setAnalysisStep(null);
     }
   }
 
@@ -1175,6 +1201,22 @@ function FolderRoom({
       <button type="button" className="room-glass-btn" aria-pressed={cameraOn} onClick={() => setCameraOn((on) => !on)}>
         <CameraGlyph />
         {cameraOn ? tr("cameraClose") : tr("cameraOpen")}
+      </button>
+    );
+  }
+  function bodyButton() {
+    return (
+      <button
+        type="button"
+        className="room-glass-btn"
+        aria-pressed={bodyOn}
+        onClick={() => {
+          if (!bodyOn) setBodySummary(null); // a fresh start each time it's turned on
+          setBodyOn((on) => !on);
+        }}
+      >
+        <BodyGlyph />
+        {bodyOn ? tr("bodyClose") : tr("bodyOpen")}
       </button>
     );
   }
@@ -1351,8 +1393,19 @@ function FolderRoom({
                 className={`desk-slide-frame${full && anySlide ? (showFigma ? " desk-full desk-full-figma" : " desk-full") : ""}`}
                 data-coach={coachState ?? undefined}
               >
-                {cameraOn && (
-                  <PoseCoach slide={coach.side} slideId={page} onSwipe={swipeSlide} onState={setCoachState} />
+                {/* One camera window for both: gestures (Camera) and body language, lines drawn over it. */}
+                {(cameraOn || bodyOn) && (
+                  <PoseCoach
+                    slide={coach.side}
+                    slideId={page}
+                    onSwipe={swipeSlide}
+                    onState={setCoachState}
+                    gestures={cameraOn}
+                    body={bodyOn}
+                    speaking={listening}
+                    onBodyLive={setBodyLive}
+                    onBodySummary={setBodySummary}
+                  />
                 )}
                 {showFigma ? (
                   <div className="desk-slide desk-figma">
@@ -1384,6 +1437,7 @@ function FolderRoom({
                   <div className="desk-speak">
                     {speakButton()}
                     {cameraButton()}
+                    {bodyButton()}
                   </div>
                 )}
                 {!full && anySlide && (
@@ -1398,6 +1452,7 @@ function FolderRoom({
                   <div className="desk-full-bar">
                     {speakButton()}
                     {cameraButton()}
+                    {bodyButton()}
                     {!showFigma && pageButtons()}
                     <button type="button" className="room-glass-btn room-icon-only" aria-label={tr("close")} onClick={() => setFull(false)}>
                       <CloseGlyph />
@@ -1522,6 +1577,7 @@ function FolderRoom({
                 {locked ? <LockGlyph /> : <SparkGlyph />}
                 {probing ? tr("sending") : tr("sendToModel")}
               </button>
+              {probing && analysisStep && <AnalysisProgress step={analysisStep} />}
               {probeNote && <p className="desk-note">{probeNote}</p>}
               {probeResult && !resultOpen && (
                 <button type="button" className="room-result-btn" onClick={() => setResultOpen(true)}>
@@ -1547,6 +1603,14 @@ function FolderRoom({
                         </>
                       )}
                     </p>
+                    {/* The GPU PC couldn't be used for part of this analysis: say what stood in. */}
+                    {(probeResult.fallbacks ?? []).map((f) => (
+                      <p key={f.part} className="desk-fallback-note" role="note">
+                        {f.part === "speech_to_text"
+                          ? tr("fallbackSpeech", { used: f.used === "duudlaga" ? "Duudlaga" : f.used })
+                          : tr("fallbackFeedback", { used: modelLabel(f.used) })}
+                      </p>
+                    ))}
                     <FeedbackResult
                       summary={probeResult.summary}
                       strengths={probeResult.strengths}
@@ -1567,6 +1631,7 @@ function FolderRoom({
           </aside>
 
           <div className="desk-below">
+            {bodyOn && <BodyCoachPanel live={bodyLive} summary={bodySummary} speaking={listening} />}
             <PitchPointsEditor
               idea={folder.idea ?? ""}
               points={folder.keyPoints ?? []}
@@ -1856,6 +1921,15 @@ function MicGlyph() {
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
       <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
       <path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function BodyGlyph() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
+      <circle cx="8" cy="3.5" r="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M3 7.5 8 6.5l5 1M8 6.5v4m0 0-2.5 4M8 10.5l2.5 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

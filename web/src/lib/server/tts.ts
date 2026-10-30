@@ -134,8 +134,22 @@ async function azure(text: string, lang: Lang): Promise<Speech> {
 }
 
 /** `text` read aloud in Mongolian, by `engine` or the configured one. */
+/**
+ * Abbreviations the Mongolian voice would spell out letter by letter, written as Mongolian words.
+ * The feedback model sometimes writes "WPM" (its input calls pace "wpm"), and delivery findings use "дБ".
+ */
+export function forSpeech(text: string): string {
+  // Whole abbreviations only: not inside a longer word (\p{L} also covers Cyrillic letters).
+  const word = (re: string) => new RegExp(String.raw`(?<![\p{L}])(?:${re})(?![\p{L}])`, "giu");
+  return text
+    .replace(word(String.raw`(\d+(?:[.,]\d+)?)\s*(?:wpm|words?\s*(?:\/|per)\s*min(?:ute)?|үг\s*\/\s*мин)`), "минутад $1 үг")
+    .replace(word(String.raw`wpm|үг\s*\/\s*мин`), "минутад хэлэх үгийн тоо")
+    .replace(word(String.raw`(\d)\s*(?:dB|дБ)`), "$1 децибел")
+    .replace(word(String.raw`dB|дБ`), "децибел");
+}
+
 export async function speak(text: string, lang: Lang, engine: TtsEngine = ttsBackend()): Promise<Speech> {
-  const clean = text.replace(/\s+/g, " ").trim();
+  const clean = forSpeech(text.replace(/\s+/g, " ").trim());
   if (!clean) throw new VoiceError(t(lang, "ttsEmpty"), 400);
   if (clean.length > MAX_SPEAK_CHARS) throw new VoiceError(t(lang, "ttsTooLong"), 413);
   const key = `${engine}:${clean}`;
