@@ -292,6 +292,9 @@ def _ollama(model: str, data: dict) -> dict:
         "model": model,
         "stream": False,
         "format": SCHEMA,
+        # Gemma 4 can think first, and then the answer may come back in "thinking" with an empty
+        # "content" (the retry below would get the same). The training scripts turn it off too.
+        "think": False,
         "keep_alive": config.OLLAMA_KEEP_ALIVE,
         "options": {"temperature": 0, "num_ctx": num_ctx_for(len(PROMPT) + len(user))},
         "messages": [

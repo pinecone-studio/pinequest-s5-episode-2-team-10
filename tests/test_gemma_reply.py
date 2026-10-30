@@ -21,6 +21,20 @@ def _data():
     return {"pitch": {}, "transcript": [], "metrics": {}, "wording": {}, "slides": []}
 
 
+def test_gemma_is_asked_not_to_think(monkeypatch):
+    # With thinking on, the answer can land in "thinking" and leave "content" empty.
+    sent = []
+    post = _replies('{"summary": "ok"}')
+
+    def recording(url, json, headers, timeout):
+        sent.append(json)
+        return post(url, json, headers, timeout)
+
+    monkeypatch.setattr(feedback.httpx, "post", recording)
+    feedback._ollama("gemma4:e4b", _data())
+    assert sent[0]["think"] is False
+
+
 def test_empty_reply_is_asked_again(monkeypatch):
     post = _replies("", '{"summary": "ok"}')
     monkeypatch.setattr(feedback.httpx, "post", post)
