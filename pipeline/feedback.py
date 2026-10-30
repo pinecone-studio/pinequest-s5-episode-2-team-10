@@ -12,6 +12,7 @@ set to null, and scores are clamped to 0..100.
 """
 
 import json
+import re
 import os
 from pathlib import Path
 from typing import Literal, Optional
@@ -25,7 +26,7 @@ Backend = Literal["claude", "gemma4-ft", "gemma4-base", "rules"]
 BACKENDS: tuple[str, ...] = ("claude", "gemma4-ft", "gemma4-base", "rules")
 
 PROMPT = (Path(__file__).parent / "prompts" / "feedback_v2.md").read_text(encoding="utf-8")
-PROMPT_VERSION = "v2.3-practice-tasks"  # stored with each report; bump when the prompt or schema changes
+PROMPT_VERSION = "v2.4-short-previous-takes"  # stored with each report; bump when the prompt or schema changes
 MAX_RECOMMENDATIONS = 5
 SLIDE_WORDS = 60  # trim slide text so a 3-minute pitch plus 10 slides fits in 6144 tokens
 SCRIPT_WORDS = 600  # about 4 minutes of speech
@@ -142,11 +143,14 @@ SCHEMA = _inline_refs(Feedback.model_json_schema())
 
 
 def build_input(session: dict, sentences: list[dict], metrics: dict, wording: dict, slides: list[dict], alignment: dict) -> dict:
-    info = {k: v for k, v in session.items() if k not in ("script", "idea", "key_points")}
+    info = {k: v for k, v in session.items() if k not in ("script", "idea", "key_points", "previous_takes")}
     script = " ".join((session.get("script") or "").split()[:SCRIPT_WORDS])
     key_points = points.clean_points(session.get("key_points"))
     return {
         "session": info,
+        # Earlier analysed takes of this pitch (newest first): their fixes, main points, pace and fillers.
+        # Near the top, so the model weighs them when it writes the summary.
+        "previous_takes": session.get("previous_takes") or [],
         "script": script or None,
         # The speaker's own pitch idea and main points; the model checks each against the transcript.
         "pitch": {
@@ -434,6 +438,30 @@ def _rules_practice_tasks(recommendations: list[dict]) -> list[dict]:
 # ---- Checks on model output ------------------------------------------------
 
 
+STILL_OPEN = "Өмнөх бичлэгээс хойш хэвээр:"
+
+
+def _stems(text: str) -> set[str]:
+    """Word beginnings: Mongolian adds suffixes, so "хэрэглэгч" and "хэрэглэгчийг" share "хэрэг"."""
+    return {w[:5] for w in re.findall(r"[\w-]+", text.lower()) if len(w) >= 4}
+
+
+def same_problem(a: str, b: str) -> bool:
+    """Whether two fixes describe the same problem: most of the shorter one's word stems are shared."""
+    sa, sb = _stems(a), _stems(b)
+    shared = sa & sb
+    return len(shared) >= 2 and len(shared) >= 0.6 * min(len(sa), len(sb))
+
+
+def mark_still_open(recommendations: list[dict], previous_takes: list[dict]) -> None:
+    """Start a fix that the newest earlier take was also given with STILL_OPEN (unless it already does)."""
+    earlier = previous_takes[0]["fixes"] if previous_takes else []
+    for r in recommendations:
+        problem = r.get("problem") or ""
+        if problem and not problem.startswith(STILL_OPEN) and any(same_problem(problem, e) for e in earlier):
+            r["problem"] = f"{STILL_OPEN} {problem}"
+
+
 def _sanitize(fb: dict, data: dict, filler_method: str = "llm", points_method: str = "llm") -> dict:
     starts = [s["start"] for s in data["transcript"]]
     slide_numbers = {s["number"] for s in data["slides"]}
@@ -458,9 +486,20 @@ def _sanitize(fb: dict, data: dict, filler_method: str = "llm", points_method: s
     comments = {s["slide"]: s["comment"] for s in fb["slide_feedback"]}
     fb["slide_feedback"] = [{"slide": n, "status": st, "comment": comments.get(n, "")} for n, st in alignment.items()]
 
-    fb["number_checks"] = [n for n in fb["number_checks"] if (n["slide"], n["on_slide"]) in candidates]
+    # The model lists only the figures the speaker mentioned; every other candidate is added here as
+    # never said, so the report still has one entry per candidate, in the candidates' order.
+    given = {(n["slide"], n["on_slide"]): n for n in fb["number_checks"] if (n["slide"], n["on_slide"]) in candidates}
+    checks, seen = [], set()
+    for c in data["number_candidates"]:
+        key = (c["slide"], c["on_slide"])
+        if key in seen:
+            continue
+        seen.add(key)
+        checks.append(given.get(key) or {"slide": key[0], "on_slide": key[1], "said": None, "inconsistent": False})
+    fb["number_checks"] = checks
 
     recs = fb["recommendations"][:MAX_RECOMMENDATIONS]
+    mark_still_open(recs, data.get("previous_takes") or [])
     for r in recs:
         r["start_s"] = snap_start(r["start_s"])
         if r["slide"] not in slide_numbers:

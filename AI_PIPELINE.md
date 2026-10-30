@@ -74,6 +74,18 @@ Feedback now includes two or three `practice_tasks` (`title`, `instruction`, `go
 - Keep feedback concise, specific, and constructive.
 - When the transcript is too short or unreliable, return a limited-result state instead of a confident score.
 
+**Short answers.** Writing the answer is what makes analysis slow on the GPU PC, so the model only writes what needs judgement (prompt `v2.4`):
+- at most 3 recommendations with short fields
+- two practice tasks
+- comments for at most 3 slides
+- only the slide figures the speaker actually mentioned
+
+Code fills in the rest. Every slide gets its alignment status, and every unmentioned figure is added as never said, so the report keeps one entry per slide and per figure. On a 23-slide Mongolian pitch this cut the answer from about 5,600 to 3,100 tokens (about 65 s to 35 s of writing on the RTX 4060).
+
+**Earlier takes.** The worker passes `previous_takes` with each analysis: up to the 2 newest finished takes of the same project, each with its top 3 fixes, main-point statuses, pace and fillers. A re-analysis of the same recording (same file name and length) doesn't count.
+- **Summary:** the model opens it by comparing with the newest earlier take.
+- **Still-open fixes:** code (`mark_still_open`) starts a fix that the newest earlier take was also given with "Өмнөх бичлэгээс хойш хэвээр:", matching by shared word stems.
+
 ## Mongolian evaluation plan
 
 Create a consented test set that includes different speakers, recording environments, speaking speeds, and presentation topics. Have humans correct reference transcripts. Compare ASR output with the reference using Word Error Rate (WER), while also reviewing meaningful errors manually because tokenization and Mongolian morphology can affect WER interpretation.
