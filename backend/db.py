@@ -306,12 +306,14 @@ def delete_session(db: Session, session_id: str) -> None:
             if (key := storage.key_from_uri(value))
         )
     pitch_session = db.get(PitchSession, session_id)
-    if pitch_session and pitch_session.slides_filename:
-        from . import storage
-
+    # Slides are in Supabase Storage only when shared storage is on; otherwise they are a file in the
+    # session folder, removed below. Asking Storage to delete them locally fails ("not configured").
+    if pitch_session and pitch_session.slides_filename and shared_storage_enabled():
         suffix = Path(pitch_session.slides_filename).suffix.lower()
         storage_keys.append(f"sessions/{session_id}/slides{suffix}")
     if storage_keys:
+        from . import storage
+
         storage.delete_objects(storage_keys)
 
     clear_results(db, session_id)
