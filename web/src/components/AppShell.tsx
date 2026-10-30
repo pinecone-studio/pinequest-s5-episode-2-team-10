@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useReducer, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useLang } from "@/lib/i18nClient";
-import { clearSession, useAccount } from "@/lib/session";
+import { clearSession, introPending, markIntroDone, useAccount } from "@/lib/session";
 import { BillingBanner, RenewDialog } from "./BillingNotices";
 import IntroTour from "./IntroTour";
 import LangToggle from "./LangToggle";
@@ -16,27 +16,6 @@ import AccountAvatar from "./AccountAvatar";
 import Modal from "./Modal";
 
 const PANEL_WIDTH = 260;
-const INTRO_KEY = "saylo:intro:";
-// Accounts that closed the tour this session, for when storage is blocked.
-const introClosed = new Set<string>();
-
-function introSeen(accountId: string): boolean {
-  if (introClosed.has(accountId)) return true;
-  try {
-    return localStorage.getItem(INTRO_KEY + accountId) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function markIntroSeen(accountId: string) {
-  introClosed.add(accountId);
-  try {
-    localStorage.setItem(INTRO_KEY + accountId, "1");
-  } catch {
-    /* storage blocked; the tour stays closed until reload */
-  }
-}
 
 /** Shared signed-in frame: pitches on the left, the account in the top bar, one content area. */
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -60,16 +39,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isAdmin = account?.role === "admin" || account?.email === "demo@pitchcoach.local";
   // The ring plays behind the pitch list only. The shell stays mounted while signed out, so wait for an account.
   const showScene = account !== null && pathname === "/" && !openFolder;
-  // Each account sees the tour once on its first sign-in; the account panel opens it again.
+  // The tour opens after every sign-in; the account panel opens it again.
   const [introAsked, setIntroAsked] = useState(false);
-  const [introDismissed, setIntroDismissed] = useState<string | null>(null);
-  const accountId = account?.id ?? null;
-  const showIntro = introAsked || (accountId !== null && introDismissed !== accountId && !introSeen(accountId));
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
+  const showIntro = introAsked || (account !== null && introPending());
 
   function closeIntro() {
-    if (accountId) markIntroSeen(accountId);
-    setIntroDismissed(accountId);
+    markIntroDone();
     setIntroAsked(false);
+    rerender();
   }
 
   useEffect(() => {
