@@ -4,6 +4,9 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  /* Self-hosted fonts (Fontsource packages imported in layout.tsx). */
+  --font-landing: "Manrope Variable";
+  --font-inter: "Inter Variable";
   --bg: #0b0b0c;
   --sidebar: #070707;
   --card: #141416;
