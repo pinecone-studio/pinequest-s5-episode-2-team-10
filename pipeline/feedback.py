@@ -12,6 +12,7 @@ set to null, and scores are clamped to 0..100.
 """
 
 import json
+import logging
 import re
 import os
 from pathlib import Path
@@ -21,6 +22,8 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import config, filler_model, fillers, points
+
+log = logging.getLogger(__name__)
 
 Backend = Literal["claude", "gemma4-ft", "gemma4-base", "rules"]
 BACKENDS: tuple[str, ...] = ("claude", "gemma4-ft", "gemma4-base", "rules")
@@ -299,6 +302,37 @@ def _ollama(model: str, data: dict) -> dict:
             {"role": "user", "content": user},
         ],
     }
+    for attempt in range(1, OLLAMA_ATTEMPTS + 1):
+        body = _ollama_once(model, payload)
+        if body.get("done_reason") == "length":
+            # The prompt and answer didn't fit the context window, so the JSON was cut off.
+            raise FeedbackError(
+                "The feedback model ran out of room: the recording and slides are too long for it. "
+                "Try fewer slides or a shorter recording."
+            )
+        content = body.get("message", {}).get("content", "")
+        found = _find_json(content)
+        if found is not None:
+            return found
+        empty = not content.strip()
+        # Sizes and counts only, never the reply itself: it quotes the transcript.
+        log.warning(
+            "Gemma reply %d/%d was not JSON: model=%s ollama=%s done_reason=%s num_ctx=%s "
+            "prompt_tokens=%s answer_tokens=%s reply_chars=%d",
+            attempt, OLLAMA_ATTEMPTS, model, httpx.URL(config.OLLAMA_URL).host, body.get("done_reason"),
+            payload["options"]["num_ctx"], body.get("prompt_eval_count"), body.get("eval_count"), len(content),
+        )
+    # Unavailable, not a plain error, so the fallback model still writes the feedback.
+    if empty:
+        raise ModelUnavailable(f"it gave an empty answer {OLLAMA_ATTEMPTS} times")
+    raise ModelUnavailable(f"its answer wasn't valid JSON {OLLAMA_ATTEMPTS} times")
+
+
+# An occasional reply comes back empty or unreadable; asking again usually works.
+OLLAMA_ATTEMPTS = 2
+
+
+def _ollama_once(model: str, payload: dict) -> dict:
     try:
         headers = {"Authorization": f"Bearer {config.OLLAMA_TOKEN}"} if config.OLLAMA_TOKEN else None
         r = httpx.post(f"{config.OLLAMA_URL}/api/chat", json=payload, headers=headers, timeout=config.OLLAMA_TIMEOUT_S)
@@ -310,24 +344,32 @@ def _ollama(model: str, data: dict) -> dict:
         raise ModelUnavailable(f"Ollama isn't reachable through the voice server (HTTP {r.status_code}).")
     if r.status_code != 200:
         raise FeedbackError(f"Ollama error ({r.status_code}).")
-    body = r.json()
-    if body.get("done_reason") == "length":
-        # The prompt and answer didn't fit the context window, so the JSON was cut off.
-        raise FeedbackError(
-            "The feedback model ran out of room: the recording and slides are too long for it. "
-            "Try fewer slides or a shorter recording."
-        )
-    content = body.get("message", {}).get("content", "")
-    if not content.strip():
-        raise FeedbackError("The feedback model returned an empty answer.")
-    return _parse_json(content)
+    try:
+        return r.json()
+    except ValueError as e:
+        raise ModelUnavailable("Ollama sent a reply that isn't JSON. Is OLLAMA_URL the right server?") from e
+
+
+def _find_json(text: str) -> dict | None:
+    """The JSON object in a model reply, also when it's wrapped in a ```json fence or a sentence; None if there is none."""
+    try:
+        found = json.loads(text)
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            found = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+    return found if isinstance(found, dict) else None
 
 
 def _parse_json(text: str) -> dict:
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError as e:
-        raise FeedbackError("The feedback model did not return valid JSON.") from e
+    found = _find_json(text)
+    if found is None:
+        raise FeedbackError("The feedback model did not return valid JSON.")
+    return found
 
 
 def number_ranges(numbers: list[int]) -> str:

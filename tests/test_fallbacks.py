@@ -166,7 +166,7 @@ def test_ollama_asks_without_thinking_and_names_an_empty_answer(monkeypatch):
         return httpx.Response(200, json={"message": {"content": "", "thinking": "…"}, "done_reason": "stop"})
 
     monkeypatch.setattr(feedback.httpx, "post", post)
-    with pytest.raises(feedback.FeedbackError, match="empty answer"):
+    with pytest.raises(feedback.ModelUnavailable, match="empty answer"):
         feedback._ollama("gemma4:e4b", {"transcript": [], "session": {}})
     assert sent["think"] is False
 
